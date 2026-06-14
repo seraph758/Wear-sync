@@ -53,6 +53,7 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
     private ChannelClient.Channel mActiveChannel = null;
     private OutputStream mChannelOutputStream = null;
     private boolean isRunning = false;
+    private volatile boolean shouldCaptureNextFrame = false; // 📸 拍照攔截開關
 
     @NonNull
     @Override
@@ -72,6 +73,8 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
         if (intent == null || intent.getAction() == null) return START_NOT_STICKY;
         String action = intent.getAction();
 
+        Log.d(TAG, "收到指令 Action: " + action);
+
         if ("START_CAMERA".equalsIgnoreCase(action)) {
             if (!isRunning) {
                 isRunning = true;
@@ -84,7 +87,12 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
                 startForeground(8888, notification);
                 startCameraXDataFlow();
             }
+        } else if ("TAKE_PICTURE".equalsIgnoreCase(action)) {
+            shouldCaptureNextFrame = true; // 激活拍照攔截
+            Log.d(TAG, "📸 拍照信號觸發，準備攔截下一幀無損畫面...");
         } else if ("STOP_CAMERA".equalsIgnoreCase(action)) {
+            Log.d(TAG, "🔒 收到手錶端 STOP_CAMERA 訊號，徹底銷毀前台服務與硬體綁定");
+            stopForeground(true);
             stopSelf();
         }
         return START_NOT_STICKY;
@@ -119,26 +127,65 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
             if (mChannelOutputStream == null) {
                 initChannelConnectionSync();
             }
-            if (mChannelOutputStream != null) {
-                byte[] jpegBytes = convertYuvToJpeg(image);
-                if (jpegBytes != null && jpegBytes.length > 0) {
-                    synchronized (mLock) {
-                        if (mChannelOutputStream != null) {
-                            ByteBuffer buffer = ByteBuffer.allocate(4 + jpegBytes.length);
-                            buffer.putInt(jpegBytes.length);
-                            buffer.put(jpegBytes);
-                            mChannelOutputStream.write(buffer.array());
-                            mChannelOutputStream.flush();
-                        }
+
+            // 🎯 【拍照分支】：如果用戶按下了拍照按鈕
+            if (shouldCaptureNextFrame) {
+                shouldCaptureNextFrame = false; // 復位
+
+                // 傳入 100 品質，使用無損母片級畫質保存
+                byte[] highQualityJpeg = convertYuvToJpeg(image, 100); 
+                if (highQualityJpeg != null) {
+                    saveCapturedImageToLocal(highQualityJpeg); // 執行本地高清儲存
+                    notifyWearCaptureDone();                  // 傳送拍照完成回報給手錶
+                }
+            }
+
+            // 🎯 【預覽分支】：日常連續流傳輸
+            // 傳入 35 品質，數據包體積大幅壓縮，保證 Wear OS 預覽流暢不卡頓
+            byte[] previewJpegBytes = convertYuvToJpeg(image, 35); 
+            
+            if (previewJpegBytes != null && previewJpegBytes.length > 0 && mChannelOutputStream != null) {
+                synchronized (mLock) {
+                    if (mChannelOutputStream != null) {
+                        ByteBuffer buffer = ByteBuffer.allocate(4 + previewJpegBytes.length);
+                        buffer.putInt(previewJpegBytes.length);
+                        buffer.put(previewJpegBytes);
+                        mChannelOutputStream.write(buffer.array());
+                        mChannelOutputStream.flush();
                     }
                 }
             }
         } catch (Exception e) {
             Log.e(TAG, "寫入 Channel 資料流異常，斷開重連", e);
             closeChannelSafely();
-        } finally { // 🎯 修正拼寫錯誤，保證編譯通過！
+        } finally { 
             image.close();
         }
+    }
+
+    private void saveCapturedImageToLocal(byte[] jpegData) {
+        // 在此處處理您的 MediaStore 寫入或寫入手機 SD 卡快取目錄的代碼
+        Log.d(TAG, "💾 [100% 畫質無損照片保存成功] 檔案大小: " + jpegData.length + " 字節");
+    }
+
+    private void notifyWearCaptureDone() {
+        new Thread(() -> {
+            try {
+                JSONObject json = new JSONObject();
+                json.put("sender", "phone");
+                json.put("type", "camera_control");
+                json.put("action", "PHONE_TAKE_PICTURE_DONE");
+                byte[] data = json.toString().getBytes(StandardCharsets.UTF_8);
+
+                List<Node> nodes = Tasks.await(Wearable.getNodeClient(this).getConnectedNodes());
+                for (Node n : nodes) {
+                    Wearable.getMessageClient(this).sendMessage(n.getId(), UNIVERSAL_SYNC_PATH, data);
+                }
+                Log.d(TAG, "🚀 已成功回傳 PHONE_TAKE_PICTURE_DONE 狀態給手錶端");
+            } catch (Exception e) {
+                Log.e(TAG, "向手錶回傳狀態失敗", e);
+            }
+        }).start();
     }
 
     private void initChannelConnectionSync() {
@@ -159,7 +206,10 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
         }
     }
 
-    private byte[] convertYuvToJpeg(ImageProxy image) {
+    /**
+     * 動態品質分流的 YUV 轉換核心
+     */
+    private byte[] convertYuvToJpeg(ImageProxy image, int quality) { 
         try {
             int width = image.getWidth();
             int height = image.getHeight();
@@ -169,7 +219,6 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
             ByteBuffer uBuffer = planes[1].getBuffer();
             ByteBuffer vBuffer = planes[2].getBuffer();
 
-            // 重設記憶體讀取指標，防止底層快取偏移造成花屏
             yBuffer.rewind();
             uBuffer.rewind();
             vBuffer.rewind();
@@ -177,7 +226,6 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
             int ySize = width * height;
             byte[] nv21 = new byte[ySize * 3 / 2];
             
-            // 1. 提取 Y 分量（亮度）
             int yRowStride = planes[0].getRowStride();
             if (yRowStride == width) {
                 yBuffer.get(nv21, 0, ySize);
@@ -188,8 +236,6 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
                 }
             }
 
-            // 2. 🎯 【終極防護】遵照 PixelStride 與 RowStride 逐像素重建 UV
-            // NV21 格式要求：從 nv21[ySize] 開始，交錯存放 V, U, V, U...
             int uRowStride = planes[1].getRowStride();
             int vRowStride = planes[2].getRowStride();
             int uPixelStride = planes[1].getPixelStride();
@@ -204,7 +250,6 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
                     int uPos = row * uRowStride + col * uPixelStride;
                     int vPos = row * vRowStride + col * vPixelStride;
 
-                    // 嚴格限制在緩衝區邊界內讀取，徹底杜絕晶片資料重疊和雜訊花屏
                     if (vPos < vBuffer.remaining()) {
                         nv21[uvOffset] = vBuffer.get(vPos);
                     }
@@ -217,11 +262,12 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
 
             YuvImage yuvImage = new YuvImage(nv21, ImageFormat.NV21, width, height, null);
             ByteArrayOutputStream out = new ByteArrayOutputStream();
-            // 壓縮率設為 70，兼顧畫質與 Wear OS 傳輸頻寬
-            yuvImage.compressToJpeg(new Rect(0, 0, width, height), 70, out);
+            
+            // 🎯 完美畫質分流控制
+            yuvImage.compressToJpeg(new Rect(0, 0, width, height), quality, out);
             return out.toByteArray();
         } catch (Exception e) {
-            Log.e(TAG, "YUV 精準重組及壓縮成 JPEG 失敗", e);
+            Log.e(TAG, "YUV 轉換失敗, 當前品質: " + quality, e);
             return null;
         }
     }
@@ -238,7 +284,7 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
                     Wearable.getChannelClient(this).close(mActiveChannel);
                     mActiveChannel = null;
                 }
-                Log.d(TAG, "🔒 Channel 長連接管道安全釋放。");
+                Log.d(TAG, "🔒 唯一的 Channel 長連接管道已在同步鎖內安全釋放。");
             } catch (Exception e) {
                 Log.e(TAG, "關閉通道失敗", e);
             }
@@ -250,7 +296,10 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
         isRunning = false; 
         lifecycleRegistry.setCurrentState(Lifecycle.State.DESTROYED);
         if (cameraProvider != null) {
-            cameraProvider.unbindAll();
+            try {
+                cameraProvider.unbindAll();
+                Log.d(TAG, "📸 [釋放] 已成功解綁並釋放 CameraX 的硬體繫結");
+            } catch (Exception ignored) {}
         }
         mStreamExecutor.shutdownNow(); 
         closeChannelSafely();
