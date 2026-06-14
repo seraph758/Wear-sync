@@ -28,7 +28,7 @@ public class WearAlarmActivity extends Activity {
     private final BroadcastReceiver stopReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            if ("de.rhaeus.dndsync.FORCE_STOP_ALARM_UI".equals(intent.getAction())) {
+            if ("de.rhaeus.wearsync.FORCE_STOP_ALARM_UI".equals(intent.getAction())) {
                 cleanUpAndDestroy();
             }
         }
@@ -60,7 +60,7 @@ public class WearAlarmActivity extends Activity {
         setContentView(getResources().getIdentifier("activity_wear_alarm", "layout", getPackageName()));
 
         vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
-        
+
         Button btnDismiss = findViewById(getResources().getIdentifier("btn_dismiss", "id", getPackageName()));
         Button btnSnooze = findViewById(getResources().getIdentifier("btn_snooze", "id", getPackageName()));
 
@@ -68,11 +68,11 @@ public class WearAlarmActivity extends Activity {
         if (btnSnooze != null) btnSnooze.setOnClickListener(v -> sendActionToPhone("SNOOZE"));
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(stopReceiver, new IntentFilter("de.rhaeus.dndsync.FORCE_STOP_ALARM_UI"), Context.RECEIVER_EXPORTED);
+            registerReceiver(stopReceiver, new IntentFilter("de.rhaeus.wearsync.FORCE_STOP_ALARM_UI"), Context.RECEIVER_EXPORTED);
         } else {
-            registerReceiver(stopReceiver, new IntentFilter("de.rhaeus.dndsync.FORCE_STOP_ALARM_UI"));
+            registerReceiver(stopReceiver, new IntentFilter("de.rhaeus.wearsync.FORCE_STOP_ALARM_UI"));
         }
-        
+
         isVibrating = true;
         handler.post(vibrateRunnable);
     }
