@@ -33,12 +33,13 @@ public class WearCameraActivity extends Activity implements MessageClient.OnMess
     private ImageView frameView;
     private TextView tvCountdown;
     private Button btnCapture;
+    private Button btnClose; // 🎯 關閉按鈕
     private int countdown = 3;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     private ChannelClient.ChannelCallback mChannelCallback;
     private ChannelClient.Channel mActiveChannel = null;
-    private volatile boolean isListening = false;
+    private volatile boolean isListening = false; // 控制 Camera Active
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -49,12 +50,62 @@ public class WearCameraActivity extends Activity implements MessageClient.OnMess
         frameView = findViewById(R.id.frameView);
         tvCountdown = findViewById(R.id.tvCountdown);
         btnCapture = findViewById(R.id.btnCapture);
+        btnClose = findViewById(R.id.btnClose); // 🎯 請確保布局 XML 中有這個 ID
 
         btnCapture.setOnClickListener(v -> startCountdownFlow());
+        
+        // 🎯 點擊關閉按鈕，觸發嚴格的三步驟退出機制
+        btnClose.setOnClickListener(v -> executeThreeStepCloseFlow());
 
         Wearable.getMessageClient(this).addListener(this);
         setupChannelStreamListener();
         notifyPhoneCameraService("START_CAMERA");
+    }
+
+    /**
+     * 🎯 核心精髓：您提出的完美三步驟關閉邏輯
+     */
+    private void executeThreeStepCloseFlow() {
+        Log.d(TAG, "🔒 觸發完美三步驟關閉機制...");
+
+        new Thread(() -> {
+            // 【第一步】主動中斷 Channel Client 通道，並向手機發送停止訊號
+            try {
+                // 先通知手機端前台服務關閉硬體
+                JSONObject json = new JSONObject();
+                json.put("sender", "wear");
+                json.put("type", "camera_control");
+                json.put("action", "STOP_CAMERA");
+                byte[] data = json.toString().getBytes(StandardCharsets.UTF_8);
+                List<Node> nodes = Tasks.await(Wearable.getNodeClient(this).getConnectedNodes());
+                for (Node n : nodes) {
+                    Wearable.getMessageClient(this).sendMessage(n.getId(), UNIVERSAL_SYNC_PATH, data);
+                }
+                Log.d(TAG, "步聚 1.1：已向手機發送 STOP_CAMERA 關閉命令");
+            } catch (Exception e) {
+                Log.e(TAG, "發送關閉訊號失敗", e);
+            }
+
+            // 主動關閉本地的 Channel 管道
+            if (mActiveChannel != null) {
+                try {
+                    Wearable.getChannelClient(this).close(mActiveChannel);
+                    Log.d(TAG, "步驟 1.2：Channel 管道已主動從手錶端斷開中斷");
+                } catch (Exception ignored) {}
+                mActiveChannel = null;
+            }
+
+            // 【第二步】退出 Camera Active 狀態（阻斷非同步線程與 UI 渲染）
+            isListening = false;
+            mainHandler.removeCallbacksAndMessages(null);
+            Log.d(TAG, "步驟 2：Camera Active 狀態已徹底停用，取消所有排隊影格");
+
+            // 【第三步】整體退出手錶端頁面
+            mainHandler.post(() -> {
+                Log.d(TAG, "步驟 3：整體關閉手錶端 UI 頁面 (finish)");
+                finish();
+            });
+        }).start();
     }
 
     private void setupChannelStreamListener() {
@@ -64,7 +115,7 @@ public class WearCameraActivity extends Activity implements MessageClient.OnMess
                 if (channel.getPath().equals("/wear-camera-frame-stream")) {
                     mActiveChannel = channel;
                     if (!isListening) {
-                        isListening = true;
+                        isListening = true; // 開啟 Camera Active
                         readStreamDataLoop(channel);
                     }
                 }
@@ -115,7 +166,6 @@ public class WearCameraActivity extends Activity implements MessageClient.OnMess
                         imgBytesRead += r;
                     }
 
-                    // 🎯 核心防護：中途若遇斷開或數據包不完整，直接拋棄，不進行強制解碼，阻斷殘缺幀花屏
                     if (streamError || !isListening) break;
 
                     Bitmap bitmap = BitmapFactory.decodeByteArray(imgBuffer, 0, imgLength);
@@ -128,7 +178,7 @@ public class WearCameraActivity extends Activity implements MessageClient.OnMess
                     }
                 }
             } catch (Exception e) {
-                Log.e(TAG, "手錶端 Channel 資料流讀取中斷", e);
+                Log.d(TAG, "手錶端長連接連線已如預期斷開跳出: " + e.getMessage());
                 isListening = false;
             }
         }).start();
@@ -155,7 +205,7 @@ public class WearCameraActivity extends Activity implements MessageClient.OnMess
                 });
             }
         } catch (Exception e) {
-            Log.e(TAG, "解析手機端發送的拍照完成狀態失敗", e);
+            Log.e(TAG, "解析手機端發送的狀態失敗", e);
         }
     }
 
@@ -199,23 +249,20 @@ public class WearCameraActivity extends Activity implements MessageClient.OnMess
                     Wearable.getMessageClient(this).sendMessage(n.getId(), UNIVERSAL_SYNC_PATH, data);
                 }
             } catch (Exception e) {
-                Log.e(TAG, "手錶向手機發送相機指令失敗: " + action, e);
+                Log.e(TAG, "發送指令失敗: " + action, e);
             }
         }).start();
     }
 
     @Override
     protected void onDestroy() {
-        isListening = false;
+        // 兜底防禦：如果用戶直接側滑手勢退出，同樣強制執行完美釋放
+        if (isListening || mActiveChannel != null) {
+            executeThreeStepCloseFlow();
+        }
         Wearable.getMessageClient(this).removeListener(this);
         if (mChannelCallback != null) {
             Wearable.getChannelClient(this).unregisterChannelCallback(mChannelCallback);
-        }
-        mainHandler.removeCallbacksAndMessages(null);
-        notifyPhoneCameraService("STOP_CAMERA");
-        if (mActiveChannel != null) {
-            try { Wearable.getChannelClient(this).close(mActiveChannel); } catch (Exception ignored) {}
-            mActiveChannel = null;
         }
         super.onDestroy();
     }
