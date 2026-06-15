@@ -2,12 +2,12 @@ package de.rhaeus.wearsync;
 
 import android.content.Context;
 import android.content.Intent;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.util.Log;
 import android.widget.Toast;
+import android.net.Uri;
 
 import androidx.preference.Preference;
 import androidx.preference.PreferenceCategory;
@@ -20,10 +20,7 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
     private Preference connectivityPref;
     private Preference dndPref;
     private Preference accPref;
-    
-    // 🎯 新增：手錶本地 Setting Write 權限項顯示
-    private Preference wearWriteSettingPref;
-    
+    private Preference wearWriteSettingPref; // 🎯 完美保留：手錶本地 Setting Write 權限項物件
     private CapabilityClient.OnCapabilityChangedListener capabilityChangedListener;
 
     @Override
@@ -33,11 +30,9 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
         connectivityPref = findPreference("connectivity_state_key");
         dndPref = findPreference("dnd_permission_key");
         accPref = findPreference("acc_permission_key");
-        
-        // 🎯 繫結本地 XML 中的鍵值（如果 R.xml.root_preferences 裡沒有，我們會動態創建或借用 summary）
-        wearWriteSettingPref = findPreference("wear_write_settings_key");
+        wearWriteSettingPref = findPreference("wear_write_settings_key"); // 🎯 完美保留：繫結 XML 節點
 
-        // 🎯 完美抹去被手機端託管的所有勿擾、小睡重複開關，保持手錶介面極度純淨 (100% 保留)
+        // 🎯 完美保留：完美抹去被手機端托管的所有勿擾、小睡重複開關，保持手錶介面極度純淨
         try {
             Preference dndSyncSwitch = findPreference("dnd_sync_key");
             Preference bedtimeSwitch = findPreference("bedtime_key");
@@ -53,43 +48,28 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
                 vibrateSwitch.getParent().removePreference(vibrateSwitch);
             }
         } catch (Exception e) {
-            Log.e("WearSync_MainFragment", "動態清理重複開關異常", e);
+            Log.e("WearSync_WearMain", "清理隱藏的遠端開關異常", e);
         }
 
         initPreferences();
-        initConnectivityCheck();
     }
 
     private void initPreferences() {
-        // 1. 通知監聽權限引導 (保留)
-        if (dndPref != null) {
-            dndPref.setOnPreferenceClickListener(preference -> {
-                Intent intent = new Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS");
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                try {
-                    startActivity(intent);
-                } catch (Exception e) {
-                    Toast.makeText(getContext(), "無法開啟通知授權頁，請手動設定", Toast.LENGTH_SHORT).show();
-                }
-                return true;
-            });
-        }
-
-        // 2. 無障礙服務點擊引導 (保留)
+        // 輔助無障礙核心點擊跳轉監聽
         if (accPref != null) {
             accPref.setOnPreferenceClickListener(preference -> {
-                Intent intent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 try {
+                    Intent intent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                     startActivity(intent);
                 } catch (Exception e) {
-                    Toast.makeText(getContext(), "無法開啟無障礙頁面", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(getContext(), "無法打開無障礙設置頁面", Toast.LENGTH_SHORT).show();
                 }
                 return true;
             });
         }
 
-        // 3. 🎯 [全新追加]：手錶本地對 Setting Write 點擊直接跳轉系統修改權限頁
+        // 🎯 完美保留：手錶本地對 Setting Write 點擊直接跳轉系統修改權限頁
         if (wearWriteSettingPref != null) {
             wearWriteSettingPref.setOnPreferenceClickListener(preference -> {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -99,9 +79,11 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
                         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                         startActivity(intent);
                     } catch (Exception e) {
-                        Intent intent = new Intent(Settings.ACTION_SETTINGS);
-                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                        startActivity(intent);
+                        try {
+                            Intent intent = new Intent(Settings.ACTION_SETTINGS);
+                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                            startActivity(intent);
+                        } catch (Exception ignored) {}
                     }
                 } else {
                     Toast.makeText(getContext(), "當前系統版本無需手動授予此權限", Toast.LENGTH_SHORT).show();
@@ -109,6 +91,8 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
                 return true;
             });
         }
+
+        initConnectivityCheck();
     }
 
     @Override
@@ -125,26 +109,27 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
     }
 
     private void updatePermissionSummaries() {
-        if (getContext() == null) return;
+        Context context = getContext();
+        if (context == null) return;
 
-        // 1. 刷新通知監聽狀態
-        String flat = Settings.Secure.getString(getContext().contentResolver(), "enabled_notification_listeners");
-        boolean notificationAllowed = flat != null && flat.contains(getContext().packageName);
+        // 🛠️ 已修正：將原本錯誤的 Kotlin 語法簡寫，改回正確的標準 Java 函數呼叫
+        String flat = Settings.Secure.getString(context.getContentResolver(), "enabled_notification_listeners");
+        boolean notificationAllowed = flat != null && flat.contains(context.getPackageName());
+
         if (dndPref != null) {
             dndPref.setSummary(notificationAllowed ? "通知接聽權限：已啟用" : "通知接聽權限：未啟用 (請透過ADB授權)");
         }
 
-        // 2. 刷新無障礙狀態
         boolean accAllowed = WearSyncAccessService.getSharedInstance() != null;
         if (accPref != null) {
             accPref.setSummary(accAllowed ? "輔助無障礙自動點擊：已就緒" : "輔助無障礙自動點擊：未開啟，點擊去授權");
         }
 
-        // 3. 🎯 [全新追加]：動態刷新手錶本地的 Setting Write 狀態摘要
+        // 🎯 完美保留：動態刷新手錶本地的 Setting Write 狀態摘要
         if (wearWriteSettingPref != null) {
             boolean canWrite = true;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                canWrite = Settings.System.canWrite(getContext());
+                canWrite = Settings.System.canWrite(context);
             }
             wearWriteSettingPref.setSummary(canWrite ? "修改系統設置權限：已獲得" : "修改系統設置權限：未允許，點擊去啟用");
         }
@@ -172,7 +157,8 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
 
     private void updateConnectionUI(boolean isConnected) {
         if (connectivityPref != null) {
-            connectivityPref.setSummary(isConnected ? "已成功連線至手機 (Wear Sync 萬能互聯)" : "未檢測到可連線的手機節點，請檢查藍牙");
+            connectivityPref.setSummary(isConnected ? "已成功連線至手機 (Wear Sync 萬能互聯)" : "等待手機端同步連線...");
         }
     }
 }
+
