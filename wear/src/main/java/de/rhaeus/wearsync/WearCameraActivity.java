@@ -169,9 +169,16 @@ public class WearCameraActivity extends Activity implements MessageClient.OnMess
 
                     Bitmap bitmap = BitmapFactory.decodeByteArray(imgBuffer, 0, imgLength);
                     if (bitmap != null && isListening) {
+                        // 🎯 核心修正：利用 Matrix 將手錶預覽畫面逆時針旋轉 90 度，校正錯位
+                        android.graphics.Matrix matrix = new android.graphics.Matrix();
+                        matrix.postRotate(-90f);
+                        Bitmap rotatedBitmap = Bitmap.createBitmap(
+                            bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true
+                        );
+
                         mainHandler.post(() -> {
                             if (isListening) {
-                                frameView.setImageBitmap(bitmap);
+                                frameView.setImageBitmap(rotatedBitmap);
                             }
                         });
                     }
@@ -182,6 +189,7 @@ public class WearCameraActivity extends Activity implements MessageClient.OnMess
             }
         }).start();
     }
+
 
     @Override
     public void onMessageReceived(@NonNull MessageEvent messageEvent) {
