@@ -18,7 +18,7 @@ import java.util.List;
 
 /**
  * 🌙 独立解耦的勿扰处理服务（手机主控发送端）
- * 核心：严格遵循原生 1, 2, 4 位权协议。当手机状态改变时，
+ * 核心职责：严格遵循原生 1, 2, 4 位权协议。当手机状态改变时，
  * 读取 3 个子开关组合状态，计算复合 Mask 值并跨端同步给手表。
  */
 public class PhoneDndService extends Service {
@@ -39,7 +39,7 @@ public class PhoneDndService extends Service {
             return START_NOT_STICKY;
         }
 
-        Log.d(TAG, "☯️ 独立勿扰复合服务启动，准备依据 [1, 2, 4] 协议计算 Mask 并推送至手表...");
+        Log.d(TAG, "☯️ 独立勿扰服务启动，准备依据 [1, 2, 4] 协议计算 Mask 并推送至手表...");
 
         new Thread(() -> {
             try {
