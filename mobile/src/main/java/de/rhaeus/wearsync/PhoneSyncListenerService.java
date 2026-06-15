@@ -30,7 +30,7 @@ public class PhoneSyncListenerService extends WearableListenerService {
 
             if ("phone".equalsIgnoreCase(sender)) return; // 過濾本地回環
 
-            // ================= 1️⃣ 勿擾同步模塊（嚴格保留，絕不改動） =================
+            // ================= 1️⃣ 勿擾同步模塊 =================
             if ("dnd".equalsIgnoreCase(type)) {
                 int dndVal = json.optInt("dnd_profile_value", -1);
                 if (dndVal != -1) {
@@ -45,7 +45,7 @@ public class PhoneSyncListenerService extends WearableListenerService {
                 return;
             }
 
-            // ================= 2️⃣ 鬧鐘延後點擊模塊（嚴格保留，絕不改動） =================
+            // ================= 2️⃣ 鬧鐘延後點擊模塊 =================
             if ("alarm_action".equalsIgnoreCase(type)) {
                 if ("SNOOZE_ALARM".equalsIgnoreCase(action)) {
                     Log.d(TAG, "⏰ [收到指令] 手錶觸發了「延後手機鬧鐘」");
@@ -59,14 +59,45 @@ public class PhoneSyncListenerService extends WearableListenerService {
                 return;
             }
 
-            // ================= 3️⃣ 相機模塊：完美融入能亮屏的舊版純淨數據傳輸流協議 =================
+            // ================= 🎯 3️⃣ 核心新增：精準對接手錶端 WearAlarmActivity 的按鈕事件 =================
+            if ("alarm_control".equalsIgnoreCase(type)) {
+                Log.d(TAG, "⏰ [鬧鐘控制] 收到手錶端 WearAlarmActivity 點擊事件 Action: " + action);
+                
+                if ("DISMISS".equalsIgnoreCase(action)) {
+                    Log.d(TAG, "⏰ 檢測到手錶端點擊了【關閉鬧鐘】，正在向手機本地發送關閉廣播...");
+                    try {
+                        // 投遞結束廣播給手機本地鬧鐘
+                        Intent stopPhoneAlarmIntent = new Intent("de.rhaeus.wearsync.FORCE_STOP_ALARM_UI");
+                        sendBroadcast(stopPhoneAlarmIntent);
+                        Log.d(TAG, "✅ 已成功在手機本地投遞 FORCE_STOP_ALARM_UI 廣播");
+                    } catch (Exception e) {
+                        Log.e(TAG, "手機本地發送鬧鐘終止廣播失敗", e);
+                    }
+                } 
+                else if ("SNOOZE".equalsIgnoreCase(action)) {
+                    Log.d(TAG, "⏰ 檢測到手錶端點擊了【延後鬧鐘】，正在調用通知欄 PendingIntent...");
+                    try {
+                        if (PhoneSyncNotificationService.snoozePendingIntent != null) {
+                            PhoneSyncNotificationService.snoozePendingIntent.send();
+                            Log.d(TAG, "🎯 [自動化成功] 已成功代點手機端的延後 PendingIntent");
+                        } else {
+                            Log.w(TAG, "⚠️ 延後失敗：手機端未捕獲到合法的 PendingIntent，發射保底廣播");
+                            sendBroadcast(new Intent("de.rhaeus.wearsync.FORCE_SNOOZE_ALARM"));
+                        }
+                    } catch (Exception e) {
+                        Log.e(TAG, "執行延後動作失敗", e);
+                    }
+                }
+                return;
+            }
+
+            // ================= 4️⃣ 相機模塊 =================
             if ("camera_control".equalsIgnoreCase(type)) {
                 Log.d(TAG, "📸 [中轉接收] 收到相機動作 Action: " + action);
 
                 if ("START_CAMERA".equalsIgnoreCase(action)) {
-                    Log.d(TAG, "🚀 [穿透啟動] 正在喚醒手機前台 Activity 以獲取 OxygenOS 前台啟動豁免權...");
+                    Log.d(TAG, "🚀 [穿透啟動] 正在喚醒手機前台 Activity 以獲取前台啟動豁免權...");
 
-                    // 1. 先把手機端 Activity 提權到最前台，幫相機前台服務拿到系統豁免准入資格
                     Intent intent = new Intent(this, PhoneSyncMainActivity.class);
                     intent.setAction("ACTION_START_CAMERA_FLOW");
                     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK 
@@ -74,7 +105,6 @@ public class PhoneSyncListenerService extends WearableListenerService {
                                   | Intent.FLAG_ACTIVITY_SINGLE_TOP);
                     startActivity(intent);
 
-                    // 2. 隨後緊接著調用 startForegroundService 啟動相機背景 FGS 服務，掛上通知欄防止被強殺
                     Intent svc = new Intent(this, PhoneSyncCameraService.class);
                     svc.setAction("START_CAMERA");
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
@@ -83,9 +113,6 @@ public class PhoneSyncListenerService extends WearableListenerService {
                         startService(svc);
                     }
                 } else {
-                    // 🎯 核心控制：手錶發來的後續指令（TAKE_PICTURE / STOP_CAMERA）只是狀態控制，
-                    // 必須使用最普通的 startService 投遞，絕對不能調用 startForegroundService，
-                    // 這樣既能精準傳達拍照/停止動作，又完美繞過 Android 14 系統的前台超時斷頭台強殺！
                     Intent svc = new Intent(this, PhoneSyncCameraService.class);
                     svc.setAction(action);
                     startService(svc); 
