@@ -39,7 +39,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
     private val isAccessibilityAllowedState = mutableStateOf(false)
     private val isCameraAllowedState = mutableStateOf(false) 
     
-    // 🎯 新增：手錶端 Setting Write 權限狀態（預設 false）
+    // 手錶端 Setting Write 權限狀態（預設 false）
     private val isWearSettingWriteAllowedState = mutableStateOf(false)
     
     private val isConnectedState = mutableStateOf(false)
@@ -145,13 +145,12 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                 }
                             )
 
-                            // 🎯 核心模塊四：新增全新「手錶端修改系統設置權限 (Setting Write)」檢測卡片
+                            // 核心模塊四：手錶端系統設置修改授權檢測卡片
                             PermissionCard(
                                 title = "手錶端系統設置修改授權",
                                 description = "用於同步更改手錶端的深度設置項目。若顯示未啟用，請點擊右下角向手錶發送引導開關請求。",
                                 isAllowed = isWearSettingWriteAllowed,
                                 onClick = {
-                                    // 點擊後，發送遠端指令讓手錶跳轉到修改系統設置的授權頁面
                                     sendRemoteControlAction("REQUEST_WEAR_WRITE_SETTINGS_UI")
                                 }
                             )
@@ -273,7 +272,8 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
 
     // 🎯 監聽手錶端發送過來的權限狀態數據包
     override fun onMessageReceived(messageEvent: MessageEvent) {
-        if (!UNIVERSAL_SYNC_PATH.equalsIgnoreCase(messageEvent.path)) return
+        // 🛠️ 已修正：將 .equalsIgnoreCase() 替換為 Kotlin 的 .equals(..., ignoreCase = true)
+        if (!UNIVERSAL_SYNC_PATH.equals(messageEvent.path, ignoreCase = true)) return
         try {
             val jsonStr = String(messageEvent.data, StandardCharsets.UTF_8)
             val json = JSONObject(jsonStr)
@@ -300,7 +300,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
         isCameraAllowedState.value = requireContext().checkSelfPermission(android.Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
         registerConnectivityListener()
         
-        // 🎯 每次回到手機介面時，主動發送請求向手錶查詢其 Setting Write 權限狀態
+        // 每次回到手機介面時，主動發送請求向手錶查詢其 Setting Write 權限狀態
         sendRemoteControlAction("QUERY_WEAR_WRITE_SETTINGS_PERMISSION")
     }
 
@@ -351,7 +351,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
         isAccessibilityAllowedState.value = false
     }
 
-    // 🎯 封裝一個通用的向手錶節點發送指令的輔助函數
+    // 向手錶節點發送指令的輔助函數
     private fun sendRemoteControlAction(action: String) {
         Thread {
             try {
