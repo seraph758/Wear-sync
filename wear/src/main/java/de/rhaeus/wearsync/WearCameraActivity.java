@@ -33,13 +33,12 @@ public class WearCameraActivity extends Activity implements MessageClient.OnMess
     private ImageView frameView;
     private TextView tvCountdown;
     private Button btnCapture;
-    private Button btnClose; // 🎯 關閉按鈕
     private int countdown = 3;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     private ChannelClient.ChannelCallback mChannelCallback;
     private ChannelClient.Channel mActiveChannel = null;
-    private volatile boolean isListening = false; // 控制 Camera Active
+    private volatile boolean isListening = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -50,12 +49,10 @@ public class WearCameraActivity extends Activity implements MessageClient.OnMess
         frameView = findViewById(R.id.frameView);
         tvCountdown = findViewById(R.id.tvCountdown);
         btnCapture = findViewById(R.id.btnCapture);
-        btnClose = findViewById(R.id.btnClose); // 🎯 請確保布局 XML 中有這個 ID
 
         btnCapture.setOnClickListener(v -> startCountdownFlow());
         
-        // 🎯 點擊關閉按鈕，觸發嚴格的三步驟退出機制
-        btnClose.setOnClickListener(v -> executeThreeStepCloseFlow());
+        // 🎯 拿掉 btnClose 的綁定。依靠下面重寫的 onBackPressed() 攔截物理侧滑/返回鍵
 
         Wearable.getMessageClient(this).addListener(this);
         setupChannelStreamListener();
@@ -63,15 +60,18 @@ public class WearCameraActivity extends Activity implements MessageClient.OnMess
     }
 
     /**
-     * 🎯 核心精髓：您提出的完美三步驟關閉邏輯
+     * 🎯 完美三步驟關閉邏輯：當用戶側滑返回、或按下實體返回鍵時精準觸發
      */
-    private void executeThreeStepCloseFlow() {
-        Log.d(TAG, "🔒 觸發完美三步驟關閉機制...");
+    @Override
+    public void onBackPressed() {
+        Log.d(TAG, "🔒 檢測到返回動作，觸發完美三步驟關閉機制...");
+        executeThreeStepCloseFlow();
+    }
 
+    private void executeThreeStepCloseFlow() {
         new Thread(() -> {
             // 【第一步】主動中斷 Channel Client 通道，並向手機發送停止訊號
             try {
-                // 先通知手機端前台服務關閉硬體
                 JSONObject json = new JSONObject();
                 json.put("sender", "wear");
                 json.put("type", "camera_control");
@@ -81,16 +81,15 @@ public class WearCameraActivity extends Activity implements MessageClient.OnMess
                 for (Node n : nodes) {
                     Wearable.getMessageClient(this).sendMessage(n.getId(), UNIVERSAL_SYNC_PATH, data);
                 }
-                Log.d(TAG, "步聚 1.1：已向手機發送 STOP_CAMERA 關閉命令");
+                Log.d(TAG, "步驟 1.1：已向手機發送 STOP_CAMERA 關閉命令");
             } catch (Exception e) {
                 Log.e(TAG, "發送關閉訊號失敗", e);
             }
 
-            // 主動關閉本地的 Channel 管道
             if (mActiveChannel != null) {
                 try {
                     Wearable.getChannelClient(this).close(mActiveChannel);
-                    Log.d(TAG, "步驟 1.2：Channel 管道已主動從手錶端斷開中斷");
+                    Log.d(TAG, "步驟 1.2：Channel 管道已從手錶端安全中斷");
                 } catch (Exception ignored) {}
                 mActiveChannel = null;
             }
@@ -98,12 +97,12 @@ public class WearCameraActivity extends Activity implements MessageClient.OnMess
             // 【第二步】退出 Camera Active 狀態（阻斷非同步線程與 UI 渲染）
             isListening = false;
             mainHandler.removeCallbacksAndMessages(null);
-            Log.d(TAG, "步驟 2：Camera Active 狀態已徹底停用，取消所有排隊影格");
+            Log.d(TAG, "步驟 2：Camera Active 狀態已徹底停用，阻斷所有異步渲染");
 
             // 【第三步】整體退出手錶端頁面
             mainHandler.post(() -> {
                 Log.d(TAG, "步驟 3：整體關閉手錶端 UI 頁面 (finish)");
-                finish();
+                finishAndRemoveTask();
             });
         }).start();
     }
@@ -115,7 +114,7 @@ public class WearCameraActivity extends Activity implements MessageClient.OnMess
                 if (channel.getPath().equals("/wear-camera-frame-stream")) {
                     mActiveChannel = channel;
                     if (!isListening) {
-                        isListening = true; // 開啟 Camera Active
+                        isListening = true;
                         readStreamDataLoop(channel);
                     }
                 }
@@ -256,7 +255,6 @@ public class WearCameraActivity extends Activity implements MessageClient.OnMess
 
     @Override
     protected void onDestroy() {
-        // 兜底防禦：如果用戶直接側滑手勢退出，同樣強制執行完美釋放
         if (isListening || mActiveChannel != null) {
             executeThreeStepCloseFlow();
         }
