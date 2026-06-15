@@ -34,11 +34,11 @@
 
         <activity
             android:name=".WearCameraActivity"
-            android:exported="true"
+            android:exported="false"
             android:launchMode="singleTask"
             android:taskAffinity="de.rhaeus.wearsync.camera"
+            android:screenOrientation="portrait" 
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
-
         <service
             android:name=".WearSyncAccessService"
             android:description="@string/access_desc"
