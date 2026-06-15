@@ -14,10 +14,21 @@ public class PhoneSyncMainActivity extends AppCompatActivity {
     private static final String TAG = "WearSync_PhoneMain";
     private ImageView ivLocalPreview;
 
+    // 🎯 [全新追加]：靜態持有單例實例，為 PhoneSyncCameraService 提供 getInstance() 的應答鏈條
+    private static PhoneSyncMainActivity instance;
+
+    // 🎯 [全新追加]：向全域暴露當前運行的實例，完美相容 CameraService 既有呼叫
+    public static PhoneSyncMainActivity getInstance() {
+        return instance;
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         com.google.android.material.color.DynamicColors.applyToActivityIfAvailable(this);
         super.onCreate(savedInstanceState);
+
+        // 🎯 綁定當前實例
+        instance = this;
 
         if (getSupportActionBar() != null) {
             getSupportActionBar().hide();
@@ -70,7 +81,6 @@ public class PhoneSyncMainActivity extends AppCompatActivity {
      */
     public void updateLocalPreview(Bitmap bitmap) {
         runOnUiThread(() -> {
-            // 🛠️ 已修正：將原本錯誤的 View.copyValueOf 移除了，改回標準、高效、不崩潰的 View.VISIBLE 狀態直接比對
             if (ivLocalPreview != null && ivLocalPreview.getVisibility() == View.VISIBLE && bitmap != null) {
                 ivLocalPreview.setImageBitmap(bitmap);
             }
@@ -100,5 +110,14 @@ public class PhoneSyncMainActivity extends AppCompatActivity {
                 Log.d(TAG, "🔒 本地相機小窗預覽已安全隱藏 (GONE) 並清空殘留緩衝");
             }
         });
+    }
+
+    @Override
+    protected void onDestroy() {
+        // 🎯 [核心防禦保險]：防止銷毀時產生的記憶體洩漏，將單例引用安全歸零
+        if (instance == this) {
+            instance = null;
+        }
+        super.onDestroy();
     }
 }
