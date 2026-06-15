@@ -6,13 +6,18 @@ import android.app.NotificationManager;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.ImageFormat;
+import android.graphics.Matrix;
 import android.graphics.Rect;
 import android.graphics.YuvImage;
 import android.os.Build;
 import android.os.IBinder;
 import android.util.Log;
 import android.util.Size;
+import android.view.Surface;
+import android.view.WindowManager;
 import androidx.annotation.NonNull;
 import androidx.camera.core.CameraSelector;
 import androidx.camera.core.ImageAnalysis;
@@ -163,6 +168,10 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
         try {
             int width = image.getWidth();
             int height = image.getHeight();
+            
+            // 🎯 核心新增：直接從 CameraX 的 image 中動態拿到相機傳感器相對於當前屏幕的物理旋轉角
+            int sensorRotationDegrees = image.getImageInfo().getRotationDegrees();
+            
             ImageProxy.PlaneProxy[] planes = image.getPlanes();
             
             ByteBuffer yBuffer = planes[0].getBuffer();
@@ -170,13 +179,10 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
             ByteBuffer vBuffer = planes[2].getBuffer();
 
             int ySize = yBuffer.remaining();
-            // 精準分配 NV21 的記憶體大小：Y = w*h, UV = w*h/2
             byte[] nv21 = new byte[width * height * 3 / 2];
             
-            // 複製 Y 分量
             yBuffer.get(nv21, 0, ySize);
 
-            // 🎯 【關鍵修正】安全交錯提取 U/V 分量，完美防止溢出與交叉污染導致的花屏
             int vRowStride = planes[2].getRowStride();
             int vPixelStride = planes[2].getPixelStride();
             
@@ -187,12 +193,10 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
             for (int row = 0; row < height / 2; row++) {
                 for (int col = 0; col < width / 2; col++) {
                     int vIdx = row * vRowStride + col * vPixelStride;
-                    // 安全邊界檢查，防止不同硬體上的緩衝區越界造成雜訊花屏
                     if (vIdx < vRemaining) {
                         nv21[uvOffset] = vBuffer.get(vIdx);
                     }
                     if (vIdx + 1 < uRemaining) {
-                        // 在標準 NV21 中，V 檔案後面緊跟著 U 檔案
                         nv21[uvOffset + 1] = uBuffer.get(vIdx); 
                     }
                     uvOffset += 2;
@@ -201,11 +205,68 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
 
             YuvImage yuvImage = new YuvImage(nv21, ImageFormat.NV21, width, height, null);
             ByteArrayOutputStream out = new ByteArrayOutputStream();
+            // 壓縮成 JPEG 緩衝數據
             yuvImage.compressToJpeg(new Rect(0, 0, width, height), 65, out);
-            return out.toByteArray();
+            byte[] rawJpeg = out.toByteArray();
+
+            // 🎯 核心旋轉操控區：根據手機物理擺放動態計算並旋轉
+            return rotateImagePayloadIfNeed(rawJpeg, sensorRotationDegrees);
+
         } catch (Exception e) {
-            Log.e(TAG, "YUV 轉換 JPEG 失敗", e);
+            Log.e(TAG, "YUV 轉換 JPEG 並旋轉失敗", e);
             return null;
+        }
+    }
+
+    /**
+     * 🎯 核心新增方法：由手機端代勞完成所有的畫面倒置、旋轉補償，減輕手錶端負擔。
+     */
+    private byte[] rotateImagePayloadIfNeed(byte[] originalData, int cameraSensorRotation) {
+        try {
+            // 1. 獲取手機屏幕當前的抗鋸齒物理旋轉狀態（用戶是橫拿還是豎拿）
+            WindowManager windowManager = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
+            if (windowManager == null) return originalData;
+            int displayRotation = windowManager.getDefaultDisplay().getRotation();
+            
+            int deviceDegrees = 0;
+            switch (displayRotation) {
+                case Surface.ROTATION_0: deviceDegrees = 0; break;
+                case Surface.ROTATION_90: deviceDegrees = 90; break;
+                case Surface.ROTATION_180: deviceDegrees = 180; break;
+                case Surface.ROTATION_270: deviceDegrees = 270; break;
+            }
+
+            // 2. 結合 CameraX 的 sensor 夾角動態算出應旋轉的最終絕對角度
+            int finalRotateDegree = (cameraSensorRotation - deviceDegrees + 360) % 360;
+
+            // 如果剛好是 0 度（正向），則不需要消耗 CPU 重新矩陣繪製，直接投遞
+            if (finalRotateDegree == 0) {
+                return originalData;
+            }
+
+            // 3. 利用 Matrix 在手機後台內存中將畫面代勞旋轉好
+            Bitmap srcBitmap = BitmapFactory.decodeByteArray(originalData, 0, originalData.length);
+            if (srcBitmap == null) return originalData;
+
+            Matrix matrix = new Matrix();
+            matrix.postRotate(finalRotateDegree);
+            
+            Bitmap rotatedBitmap = Bitmap.createBitmap(
+                    srcBitmap, 0, 0, srcBitmap.getWidth(), srcBitmap.getHeight(), matrix, true
+            );
+            
+            // 4. 將旋轉正向後的 Bitmap 重新壓回 JPEG 流
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            rotatedBitmap.compress(Bitmap.CompressFormat.JPEG, 65, baos);
+            
+            // 5. 垃圾回收，防止內存溢出 (OOM)
+            srcBitmap.recycle();
+            rotatedBitmap.recycle();
+            
+            return baos.toByteArray();
+        } catch (Exception e) {
+            Log.e(TAG, "手機端後台代勞圖像矩陣旋轉失敗，採用原圖降位發送", e);
+            return originalData;
         }
     }
 
