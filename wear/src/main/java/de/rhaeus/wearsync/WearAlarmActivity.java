@@ -13,8 +13,8 @@ import java.util.List;
 
 /**
  * 手表全屏响铃 Activity。
- * 完美修正：将以前硬编码错位的 "DISMISS" 协议升级对齐为规范的 "DISMISS_ALARM"，
- * 并完美补齐“延后”按钮，投递 "SNOOZE_ALARM" 协议。
+ * 完美修正：对齐手錶端原版现有的 activity_main 布局资源（原项目没有 activity_alarm），
+ * 并精准绑定原版自带的 bt_dismiss 按钮！
  */
 public class WearAlarmActivity extends Activity {
     private static final String TAG = "WearSync_WearAlarm";
@@ -22,22 +22,24 @@ public class WearAlarmActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_alarm); // 绑定手表全屏响铃布局
+        
+        // 🎯 核心修复：直接绑定手錶端原本自带的 activity_main 布局
+        setContentView(R.layout.activity_main); 
 
-        // 1. 绑定并对齐：关闭/停止闹钟按钮
-        Button btnDismiss = findViewById(R.id.btn_dismiss_alarm);
+        // 🎯 核心修复：对齐绑定你原本 XML 里现成的关闭闹钟按钮 ID (bt_dismiss)
+        Button btnDismiss = findViewById(R.id.bt_dismiss);
         if (btnDismiss != null) {
             btnDismiss.setOnClickListener(v -> {
-                sendAlarmActionToPhone("DISMISS_ALARM"); // 协议完美对齐
+                sendAlarmActionToPhone("DISMISS_ALARM"); // 协议完美对齐手机端关键字
                 finish();
             });
         }
 
-        // 2. 绑定并对齐：稍后提醒/延后按钮
-        Button btnSnooze = findViewById(R.id.btn_snooze_alarm);
+        // 🎯 核心修复：对齐绑定你原本 XML 里现成的延后/稍后提醒按钮 ID (bt_snooze)
+        Button btnSnooze = findViewById(R.id.bt_snooze);
         if (btnSnooze != null) {
             btnSnooze.setOnClickListener(v -> {
-                sendAlarmActionToPhone("SNOOZE_ALARM"); // 协议完美对齐
+                sendAlarmActionToPhone("SNOOZE_ALARM"); // 协议完美对齐手机端关键字
                 finish();
             });
         }
@@ -49,7 +51,7 @@ public class WearAlarmActivity extends Activity {
                 JSONObject json = new JSONObject();
                 json.put("sender", "wear");
                 json.put("type", "alarm");
-                json.put("action", actionValue); // 发送精准匹配信令
+                json.put("action", actionValue);
                 json.put("timestamp", System.currentTimeMillis());
 
                 byte[] data = json.toString().getBytes(StandardCharsets.UTF_8);
