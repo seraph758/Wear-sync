@@ -26,6 +26,12 @@
             android:title="輔助功能防吞權限"
             android:summary="防吞劇本自動模擬點擊需要此權限"
             app:iconSpaceReserved="false" />
+
+        <Preference
+            android:key="wear_write_settings_key"
+            android:title="修改系統設置權限"
+            android:summary="檢測中..."
+            app:iconSpaceReserved="false" />
     </PreferenceCategory>
 
     <PreferenceCategory
@@ -53,7 +59,5 @@
             android:title="同步震動"
             android:visible="false"
             app:iconSpaceReserved="false" />
-            
     </PreferenceCategory>
-
 </PreferenceScreen>
