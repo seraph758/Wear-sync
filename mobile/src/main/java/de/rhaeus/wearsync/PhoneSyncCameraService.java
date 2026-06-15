@@ -21,6 +21,7 @@ import androidx.camera.core.CameraSelector;
 import androidx.camera.core.ImageAnalysis;
 import androidx.camera.core.ImageCapture;
 import androidx.camera.core.ImageProxy;
+import androidx.camera.core.ImageCaptureException;
 import androidx.camera.lifecycle.ProcessCameraProvider;
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
@@ -136,7 +137,6 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
 
     private void processCameraFrame(@NonNull ImageProxy image) {
         long now = System.currentTimeMillis();
-        // 🎯 降頻策略：嚴格限制每秒不超過 15 幀，杜絕緩衝區溢出
         if (now - mLastFrameTime < 65 || !isRunning) {
             image.close();
             return;
@@ -149,12 +149,12 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
 
             if (jpegBytes == null) return;
 
-            // 🎯 【同步大提權接力】：動態將相機幀 Bitmap 投遞回主 Activity 預覽小窗顯示
+            // 🎯 【同步大提權接力】：將解碼出來的相機幀傳遞回主 Activity 預覽小窗即時呈現
             PhoneSyncMainActivity mainActivity = PhoneSyncMainActivity.getInstance();
             if (mainActivity != null) {
                 Bitmap previewBitmap = BitmapFactory.decodeByteArray(jpegBytes, 0, jpegBytes.length);
                 if (previewBitmap != null) {
-                    // 本地小窗需要修正旋轉角度（通常後置鏡頭順時針旋轉90度）
+                    // 本地小窗通常需要順時針旋轉 90 度以適應直屏方向
                     Matrix matrix = new Matrix();
                     matrix.postRotate(90f);
                     Bitmap rotatedPreview = Bitmap.createBitmap(previewBitmap, 0, 0, previewBitmap.getWidth(), previewBitmap.getHeight(), matrix, true);
@@ -201,7 +201,7 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
 
             YuvImage yuvImage = new YuvImage(nv21, ImageFormat.NV21, image.getWidth(), image.getHeight(), null);
             ByteArrayOutputStream os = new ByteArrayOutputStream();
-            // 🎯 採用完美的 35 畫質進行高動態分流，節約手錶端藍牙頻寬
+            // 用 35 畫質壓縮發送給手錶，極大緩解藍牙同步帶寬壓力
             yuvImage.compressToJpeg(new Rect(0, 0, image.getWidth(), image.getHeight()), 35, os);
             return os.toByteArray();
         } catch (Exception e) {
@@ -262,7 +262,7 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
                 synchronized (mChannelLock) {
                     mChannelOutputStream = Tasks.await(Wearable.getChannelClient(this).getOutputStream(mActiveChannel));
                 }
-                Log.d(TAG, "🚀 [Channel] 長連接管道已成功握手建立！");
+                Log.d(TAG, "🚀 [Channel] 長連接管道已成功建立！");
             } catch (Exception e) {
                 Log.e(TAG, "開啟長連接管道失敗", e);
             }
@@ -281,7 +281,7 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
                     Wearable.getChannelClient(this).close(mActiveChannel);
                     mActiveChannel = null;
                 }
-                Log.d(TAG, "🔒 唯一的 Channel 長連接管道已在同步鎖內安全釋放。");
+                Log.d(TAG, "🔒 Channel 長連接管道已安全釋放。");
             } catch (Exception e) {
                 Log.e(TAG, "關閉通道失敗", e);
             }
@@ -296,17 +296,17 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
         if (cameraProvider != null) {
             try {
                 cameraProvider.unbindAll();
-                Log.d(TAG, "📸 [釋放] 已成功解綁並釋放 CameraX 的硬體繫結");
+                Log.d(TAG, "📸 [釋放] 已解綁 CameraX 的硬體繫結");
             } catch (Exception ignored) {}
         }
 
-        // 🎯 關閉本地主界面上的預覽小窗口
+        // 🎯 隱藏本地主界面上的預覽小視窗
         PhoneSyncMainActivity mainActivity = PhoneSyncMainActivity.getInstance();
         if (mainActivity != null) {
             mainActivity.hideLocalPreview();
         }
 
-        // 🎯 【反向通知核心】：當手機端關閉時，必須反向發送訊號通知手錶端也同步關閉，告別手錶端空轉
+        // 🎯 【反向鏈條補償】：通知手錶同步完全關閉
         new Thread(() -> {
             try {
                 JSONObject json = new JSONObject();
