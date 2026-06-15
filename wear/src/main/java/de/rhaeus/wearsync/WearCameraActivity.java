@@ -3,6 +3,7 @@ package de.rhaeus.wearsync;
 import android.app.Activity;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -43,6 +44,10 @@ public class WearCameraActivity extends Activity implements MessageClient.OnMess
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        
+        // 🔒 強制鎖定手錶端相機介面為標準豎屏（或者不隨重力旋轉），防止它污染系統設置
+        setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+        
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         setContentView(R.layout.activity_wear_camera);
 
@@ -52,8 +57,7 @@ public class WearCameraActivity extends Activity implements MessageClient.OnMess
 
         btnCapture.setOnClickListener(v -> startCountdownFlow());
         
-        // 🎯 拿掉 btnClose 的綁定。依靠下面重寫的 onBackPressed() 攔截物理侧滑/返回鍵
-
+        // 🎯 依靠重寫的 onBackPressed() 攔截物理側滑/返回鍵，完美釋放
         Wearable.getMessageClient(this).addListener(this);
         setupChannelStreamListener();
         notifyPhoneCameraService("START_CAMERA");
@@ -102,7 +106,11 @@ public class WearCameraActivity extends Activity implements MessageClient.OnMess
             // 【第三步】整體退出手錶端頁面
             mainHandler.post(() -> {
                 Log.d(TAG, "步驟 3：整體關閉手錶端 UI 頁面 (finish)");
-                finishAndRemoveTask();
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    finishAndRemoveTask();
+                } else {
+                    finish();
+                }
             });
         }).start();
     }
@@ -169,7 +177,7 @@ public class WearCameraActivity extends Activity implements MessageClient.OnMess
 
                     Bitmap bitmap = BitmapFactory.decodeByteArray(imgBuffer, 0, imgLength);
                     if (bitmap != null && isListening) {
-                        // 🎯 核心修正：利用 Matrix 將手錶預覽畫面逆時針旋轉 90 度，校正錯位
+                        // 🎯 核心修正：利用 Matrix 將手錶預覽畫面逆時針旋轉 90 度，校正方向
                         android.graphics.Matrix matrix = new android.graphics.Matrix();
                         matrix.postRotate(-90f);
                         Bitmap rotatedBitmap = Bitmap.createBitmap(
@@ -190,7 +198,6 @@ public class WearCameraActivity extends Activity implements MessageClient.OnMess
         }).start();
     }
 
-
     @Override
     public void onMessageReceived(@NonNull MessageEvent messageEvent) {
         if (!UNIVERSAL_SYNC_PATH.equalsIgnoreCase(messageEvent.getPath())) return;
@@ -200,23 +207,38 @@ public class WearCameraActivity extends Activity implements MessageClient.OnMess
             String type = json.optString("type", "");
             String action = json.optString("action", "");
 
-            if ("camera_control".equalsIgnoreCase(type) && "PHONE_TAKE_PICTURE_DONE".equalsIgnoreCase(action)) {
-                mainHandler.post(() -> {
-                    if (tvCountdown != null) {
-                        tvCountdown.setVisibility(View.VISIBLE);
-                        tvCountdown.setText("📸 拍照成功！");
-                    }
-                    mainHandler.postDelayed(() -> {
-                        if (tvCountdown != null) tvCountdown.setVisibility(View.GONE);
-                    }, 1500);
-                });
+            if ("camera_control".equalsIgnoreCase(type)) {
+                if ("PHONE_TAKE_PICTURE_DONE".equalsIgnoreCase(action)) {
+                    mainHandler.post(() -> {
+                        if (tvCountdown != null) {
+                            tvCountdown.setVisibility(View.VISIBLE);
+                            tvCountdown.setText("📸 拍照成功！");
+                        }
+                        mainHandler.postDelayed(() -> {
+                            if (tvCountdown != null) tvCountdown.setVisibility(View.GONE);
+                        }, 1500);
+                    });
+                } 
+                // 🎯 完美補正：當收到手機端主動關閉的訊號時，清除任務棧，乾淨退出
+                else if ("PHONE_CAMERA_CLOSED".equalsIgnoreCase(action)) {
+                    Log.d(TAG, "🚨 收到手機端關閉訊號，手錶端開始退出任務棧...");
+                    isListening = false;
+                    
+                    mainHandler.post(() -> {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                            finishAndRemoveTask(); 
+                        } else {
+                            finish();
+                        }
+                    });
+                }
             }
         } catch (Exception e) {
             Log.e(TAG, "解析手機端發送的狀態失敗", e);
         }
     }
 
-    private void startCountdownFlow() {
+  private void startCountdownFlow() {
         countdown = 3;
         btnCapture.setEnabled(false);
         tvCountdown.setVisibility(View.VISIBLE);
@@ -263,13 +285,33 @@ public class WearCameraActivity extends Activity implements MessageClient.OnMess
 
     @Override
     protected void onDestroy() {
-        if (isListening || mActiveChannel != null) {
-            executeThreeStepCloseFlow();
+        Log.d(TAG, "🔒 WearCameraActivity 正在回呼 onDestroy，開始執行最高規格安全釋放...");
+        
+        // 1. 確保切斷監聽與通道
+        isListening = false;
+        if (mActiveChannel != null) {
+            try {
+                Wearable.getChannelClient(this).close(mActiveChannel);
+            } catch (Exception ignored) {}
+            mActiveChannel = null;
         }
+        
+        // 2. 註銷各種 Wear 監聽器，防止記憶體洩漏
         Wearable.getMessageClient(this).removeListener(this);
         if (mChannelCallback != null) {
             Wearable.getChannelClient(this).unregisterChannelCallback(mChannelCallback);
         }
+        
+        // 3. 清空主線程排隊的繪製任務，防止銷毀時還在非同步繪製圖像
+        if (mainHandler != null) {
+            mainHandler.removeCallbacksAndMessages(null);
+        }
+
+        // 4. 調用父類銷毀
         super.onDestroy();
+
+        // 5. 🎯【終極根治旋轉 Bug】強行讓當前進程自殘歸位，確保 Wear OS 系統完全回收重力感應器與全域旋轉鎖
+        Log.d(TAG, "🚀 進程即將自殘退出，乾淨歸還全域窗口旋轉鎖...");
+        android.os.Process.killProcess(android.os.Process.myPid());
     }
 }
