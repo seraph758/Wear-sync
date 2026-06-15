@@ -22,6 +22,13 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
+/**
+ * ⌚ 手表端中央接收服务（全新方案对齐版）
+ * 核心逻辑：
+ * 1. 严格对齐 1-睡眠、2-震动、4-省电 协议。
+ * 2. 无论开关数值是否为 0，优先无条件对齐双端系统硬勿扰状态（全局校对）。
+ * 3. 根据数值独立控制：省电、单向短震动、就寝手势宏。
+ */
 public class WearSyncListenerService extends WearableListenerService {
     private static final String TAG = "WearSync_WearListener";
     private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
@@ -38,115 +45,128 @@ public class WearSyncListenerService extends WearableListenerService {
         try {
             String jsonStr = new String(data, StandardCharsets.UTF_8);
             JSONObject json = new JSONObject(jsonStr);
+            String sender = json.optString("sender", "");
             String type = json.optString("type", "");
             String action = json.optString("action", "");
 
-            // 1️⃣ 勿擾/就寢/省電 同步區
+            // 过滤本地，确保只处理手机端发来的主控命令
+            if ("wear".equalsIgnoreCase(sender)) return;
+
+            // ================= 🌙 1️⃣ 勿擾/就寢/省電 全局校對與精細分撥區 =================
             if ("dnd".equalsIgnoreCase(type)) {
+                // 手机端真实的硬勿扰系统状态值 (INTERRUPTION_FILTER_PRIORITY=2, INTERRUPTION_FILTER_ALL=1)
                 int dndStatePhone = json.optInt("dnd_profile_value", -1);
-                int score = json.optInt("switches_mask", 0); // 🎯 完美保留：手機發來的同步配置掩碼
+                // 纯净的开关组合结果掩码
+                int score = json.optInt("switches_mask", 0); 
 
                 if (dndStatePhone == -1) return;
 
                 NotificationManager mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
                 if (mNotificationManager == null) return;
 
-                // 🎯 完美保留：精準拆解用戶在手機 UI 上到底啟用了哪些「同步選項」
-                boolean isSleepSyncEnabled   = (score & 1) != 0; // 第一位：是否勾選了「就寢同步」
-                boolean isPowerSyncEnabled   = (score & 2) != 0; // 第二位：是否勾選了「省電同步」
-                boolean isVibrateEnabled     = (score & 4) != 0; // 第三位：是否勾選了「震動提示」
+                Log.d(TAG, "🌙 [手表接收] 收到手机同步：开关掩码=" + score + " | 手机硬勿扰状态=" + dndStatePhone);
 
                 // ---------------------------------------------------------------------
-                // 🔋 【完美保留：省電同步選項的真實動作】
+                // 🎯 核心一：全局硬勿扰状态校对环节（哪怕数值 score 是 0，手表的勿扰也要强制跟变）
                 // ---------------------------------------------------------------------
-                if (isPowerSyncEnabled) {
-                    try {
-                        boolean phoneExpectsDndOn = (dndStatePhone == NotificationManager.INTERRUPTION_FILTER_PRIORITY || 
-                                                     dndStatePhone == NotificationManager.INTERRUPTION_FILTER_NONE ||
-                                                     dndStatePhone == NotificationManager.INTERRUPTION_FILTER_ALARMS);
-                        
-                        if (phoneExpectsDndOn) {
-                            Log.d(TAG, "🔋 [省電同步激活] 手機開啟了就寢，手錶跟隨底層強制開啟省電模式");
-                            Settings.Global.putInt(getContentResolver(), "low_power", 1);
-                        } else {
-                            Log.d(TAG, "🔌 [省電同步激活] 手機關閉了就寢，手錶跟隨底層強制關閉省電模式");
-                            Settings.Global.putInt(getContentResolver(), "low_power", 0);
-                        }
-                    } catch (Exception e) {
-                        Log.e(TAG, "🚨 省電模式底層寫入失敗", e);
-                    }
-                } else {
-                    Log.d(TAG, "🛡️ [省電同步關閉] 檢測到未開啟省電同步選項，手錶不對省電模式做任何操作。");
-                }
-
-                // ---------------------------------------------------------------------
-                // 🛌 【完美保留：原本跑得很完美的勿擾/就寢手勢宏區域】
-                // ---------------------------------------------------------------------
-                int currentDndState = mNotificationManager.getCurrentInterruptionFilter();
                 boolean phoneExpectsDndOn = (dndStatePhone == NotificationManager.INTERRUPTION_FILTER_PRIORITY || 
                                              dndStatePhone == NotificationManager.INTERRUPTION_FILTER_NONE ||
                                              dndStatePhone == NotificationManager.INTERRUPTION_FILTER_ALARMS);
-                boolean wearLocalDndIsOn = (currentDndState == NotificationManager.INTERRUPTION_FILTER_PRIORITY || 
-                                            currentDndState == NotificationManager.INTERRUPTION_FILTER_NONE ||
-                                            currentDndState == NotificationManager.INTERRUPTION_FILTER_ALARMS);
 
-                // 狀態感知防火牆
-                if (phoneExpectsDndOn != wearLocalDndIsOn) {
-                    Log.d(TAG, "🔄 勿擾狀態不一致！執行物理手勢校準。");
+                // 强制对齐手表底层系统的硬勿扰 Filter
+                if (mNotificationManager.isNotificationPolicyAccessGranted()) {
+                    mNotificationManager.setInterruptionFilter(dndStatePhone);
+                    Log.d(TAG, "☯️ [硬勿扰对齐] 手表底层系统勿扰已无条件同步为: " + dndStatePhone);
+                }
 
-                    if (isVibrateEnabled) {
-                        vibrateShort(); // 如果勾選了震動選項，觸發短震動
-                    }
+                // ---------------------------------------------------------------------
+                // 🎯 核心二：严格遵照 [1-睡眠, 2-震动, 4-省电] 二进制协议精准拆解
+                // ---------------------------------------------------------------------
+                boolean isSleepSyncEnabled   = (score & 1) != 0; // 第一位：睡眠模式手势宏
+                boolean isVibrateEnabled     = (score & 2) != 0; // 第二位：手机向手表单向同步状态时候的震动开关
+                boolean isPowerSyncEnabled   = (score & 4) != 0; // 第三位：省电模式同步
 
-                    if (isSleepSyncEnabled) {
-                        executePhysicalBedtimeMacro(); // 如果勾選了就寢同步選項，執行下拉手勢
-                    }
+                // ---------------------------------------------------------------------
+                // 📳 动作 A：单向短震动控制（手机控制手表专享，且只有开启勿扰时提醒）
+                // ---------------------------------------------------------------------
+                if (isVibrateEnabled && phoneExpectsDndOn) {
+                    Log.d(TAG, "📳 [单向震动激活] 触发手表短震动提醒用户");
+                    vibrateShort();
+                }
 
-                    // 保底強制同步手錶底層的勿擾 Filter
-                    if (mNotificationManager.isNotificationPolicyAccessGranted()) {
-                        mNotificationManager.setInterruptionFilter(dndStatePhone);
+                // ---------------------------------------------------------------------
+                // 🔋 动作 B：省电同步选项的真实动作
+                // ---------------------------------------------------------------------
+                if (isPowerSyncEnabled) {
+                    try {
+                        if (phoneExpectsDndOn) {
+                            Log.d(TAG, "🔋 [省电同步] 强开手表底层省电模式");
+                            Settings.Global.putInt(getContentResolver(), "low_power", 1);
+                        } else {
+                            Log.d(TAG, "🔌 [省电同步] 强关手表底层省电模式");
+                            Settings.Global.putInt(getContentResolver(), "low_power", 0);
+                        }
+                    } catch (Exception e) {
+                        Log.e(TAG, "🚨 手表省电模式底层写入失败", e);
                     }
                 } else {
-                    Log.d(TAG, "🛡️ [防錯位攔截] 勿擾狀態已對齊，攔截物理下拉手勢，防止反向翻轉錯位。");
+                    Log.d(TAG, "🛡️ [省电同步关闭] 保持手表本地省电模式现状，不做任何操作。");
                 }
-                return; // 🎯 乾淨返回，結束 dnd 分支
+
+                // ---------------------------------------------------------------------
+                // 🛌 动作 C：物理就寝/睡眠手势宏区域（配合状态感知，防止二次翻转）
+                // ---------------------------------------------------------------------
+                if (isSleepSyncEnabled) {
+                    // 获取设置前的手表本地状态，用于状态感知
+                    int currentDndState = mNotificationManager.getCurrentInterruptionFilter();
+                    boolean wearLocalDndIsOn = (currentDndState == NotificationManager.INTERRUPTION_FILTER_PRIORITY || 
+                                                currentDndState == NotificationManager.INTERRUPTION_FILTER_NONE ||
+                                                currentDndState == NotificationManager.INTERRUPTION_FILTER_ALARMS);
+
+                    // 只有当期望的就寝状态与手表当前物理开关不一致时，才触发手势宏校准，防止无限循环
+                    if (phoneExpectsDndOn != wearLocalDndIsOn) {
+                        Log.d(TAG, "🔄 [状态错位] 触发无障碍下拉手势宏去物理点亮/关闭就寝模式。");
+                        executePhysicalBedtimeMacro();
+                    } else {
+                        Log.d(TAG, "🛡️ [物理手势拦截] 手表物理就寝状态与手机一致，拦截手势宏。");
+                    }
+                } else {
+                    Log.d(TAG, "🛡️ [睡眠宏同步关闭] 手机未选择同步睡眠动作，略过手势宏。");
+                }
+
+                return; // 乾净返回
             } 
             
             // 2️⃣ 相機模組控制分支
-else if ("camera_control".equalsIgnoreCase(type)) {
-    if ("START_CAMERA".equalsIgnoreCase(action)) {
-        Log.d(TAG, "📸 [手錶監聽] 收到手機端拉起相機指令，執行強行物理亮屏保護...");
+            else if ("camera_control".equalsIgnoreCase(type)) {
+                if ("START_CAMERA".equalsIgnoreCase(action)) {
+                    Log.d(TAG, "📸 [手錶監聽] 收到手機端拉起相機指令，執行強行物理亮屏保護...");
+                    try {
+                        PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+                        if (pm != null) {
+                            PowerManager.WakeLock wl = pm.newWakeLock(
+                                PowerManager.SCREEN_BRIGHT_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP, 
+                                "WearSync:CameraWakeLock"
+                            );
+                            wl.acquire(3000L); 
+                        }
+                    } catch (Exception e) {
+                        Log.e(TAG, "🚨 后台物理亮屏唤醒失败", e);
+                    }
 
-        // 🎯 核心修正二：后台收到拉起命令时，先申请 3 秒 WakeLock 点亮硬件屏幕
-        try {
-            PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
-            if (pm != null) {
-                PowerManager.WakeLock wl = pm.newWakeLock(
-                    PowerManager.SCREEN_BRIGHT_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP, 
-                    "WearSync:CameraWakeLock"
-                );
-                wl.acquire(3000L); // 唤醒 3 秒，足够给 Activity 完成转场和接管
+                    Intent startCamIntent = new Intent(this, WearCameraActivity.class);
+                    startCamIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                    try {
+                        startActivity(startCamIntent);
+                    } catch (Exception e) {
+                        Log.e(TAG, "🚨 手錶端拉起 WearCameraActivity 失敗", e);
+                    }
+                }
+                return; 
             }
-        } catch (Exception e) {
-            Log.e(TAG, "🚨 后台物理亮屏唤醒失败", e);
-        }
-
-        // 唤醒后拉起唯一的 Activity
-        Intent startCamIntent = new Intent(this, WearCameraActivity.class);
-        startCamIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-        try {
-            startActivity(startCamIntent);
-        } catch (Exception e) {
-            Log.e(TAG, "🚨 手錶端拉起 WearCameraActivity 失敗", e);
-        }
-    }
-    return; 
-}
-
 
             // ===================================================================================
             // === [🔥 LOCKED_FIREWALL: ALARM_MODULE_WEAR_UI_LAUNCH_FIREWALL - START] ===
-            // 🚨 完美保留：鬧鐘核心代碼嚴密保護，包名修復後依然完好如初，絕不允許被污染或改動！
             if ("alarm".equalsIgnoreCase(type)) {
                 if ("START_ALARM_UI".equalsIgnoreCase(action)) {
                     Intent uiIntent = new Intent(this, WearAlarmActivity.class);
@@ -185,29 +205,17 @@ else if ("camera_control".equalsIgnoreCase(type)) {
             try {
                 isGestureMacroRunning = true;
 
-                // 1. 物理強制點亮螢幕
                 PowerManager pm = (PowerManager) getApplicationContext().getSystemService(Context.POWER_SERVICE);
                 if (pm != null) {
                     wakeLock = pm.newWakeLock(PowerManager.FULL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP | PowerManager.ON_AFTER_RELEASE, "wearsync:WakeLock");
-                    wakeLock.acquire(8000L); // 鎖定 7 秒完成整套動作
+                    wakeLock.acquire(8000L); 
                 }
 
-                // 2. 核心時序緩衝：留出2000ms 讓螢幕硬體完全亮起，防止螢幕沒亮完導致下滑無效
                 Thread.sleep(2000);
-
-                // 3. 呼叫舊代碼純淨下滑
                 serv.swipeDown();
-
-                // 4. 時序緩衝：留出 1000ms 給下拉選單動畫展開，防止面板還沒拉下來就去盲點
                 Thread.sleep(1000);
-
-                // 5. 點擊第一排中間圖標
                 serv.clickIcon1_2();
-
-                // 6. 時序緩衝：留出 1000ms 給系統響應就寢/睡眠狀態變更
                 Thread.sleep(800);
-
-                // 7. 收起快捷面板
                 serv.goBack();
                 Log.d(TAG, "🏁 [手勢宏] 物理控制校準鏈條圓滿結束");
 
