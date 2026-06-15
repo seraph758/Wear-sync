@@ -1,5 +1,6 @@
 package de.rhaeus.wearsync;
 
+import android.app.NotificationManager;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
@@ -17,13 +18,21 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 /**
- * 🌙 独立解耦的勿扰处理服务（手机主控发送端）
- * 核心职责：严格遵循原生 1, 2, 4 位权协议。当手机状态改变时，
- * 读取 3 个子开关组合状态，计算复合 Mask 值并跨端同步给手表。
+ * 🌙 独立解耦的勿扰处理服务（手机端主控发送源）
+ * 核心设计：
+ * 1. 动态接收手机 UI 变动时即时锁定并缓存在静态变量中的 maskValue。
+ * 2. 剥离数字对系统勿扰常量的污染，将【纯净开关掩码】与【手机当前硬勿扰状态】打包并推。
  */
 public class PhoneDndService extends Service {
     private static final String TAG = "WearSync_PhoneDnd";
     private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
+
+    /**
+     * 🎯 核心优化：由 UI 界面（Activity/Fragment）在切换开关状态时即时计算并写入该静态变量。
+     * 默认值为 0（代表 3 个特殊联动动作全关）。
+     * 位权定义：1 = 睡眠模式手势宏，2 = 短震动开关，4 = 省电模式
+     */
+    public static int cachedMaskValue = 0;
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
@@ -32,77 +41,87 @@ public class PhoneDndService extends Service {
             return START_NOT_STICKY;
         }
 
-        // 🛡️ 拦截锁：如果是由于接收手表信令导致手机系统勿扰变化而回调触发的，直接拦截，防止无限双端死循环
-        if (PhoneSyncListenerService.isInternalUpdate) {
-            Log.d(TAG, "🔒 [防回环] 检测到属于内部接收变更引起的系统回调，拦截发信，防止双端死锁。");
+        // 📥 分支一：承接来自手表反向同步手机系统硬勿扰的请求（此流向绝对不触发震动，也不动手机开关）
+        if (intent.hasExtra("dnd_profile_value") && PhoneSyncListenerService.isInternalUpdate) {
+            int wearSystemDndVal = intent.getIntExtra("dnd_profile_value", -1);
+            Log.d(TAG, "📥 收到来自手表的反向硬勿扰同步，目标系统值: " + wearSystemDndVal);
+            if (wearSystemDndVal != -1) {
+                try {
+                    NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+                    if (nm != null && nm.isNotificationPolicyAccessGranted()) {
+                        nm.setInterruptionFilter(wearSystemDndVal);
+                        Log.d(TAG, "☯️ [反向同步成功] 已将手机系统硬勿扰过滤器设置为: " + wearSystemDndVal);
+                    }
+                } catch (Exception e) {
+                    Log.e(TAG, "应用手表反向勿扰状态失败", e);
+                } finally {
+                    // 留足系统反应缓冲时间，1秒后安全释放拦截锁
+                    new Thread(() -> {
+                        try { Thread.sleep(1000); } catch (InterruptedException ignored) {}
+                        PhoneSyncListenerService.isInternalUpdate = false;
+                        Log.d(TAG, "🔓 内部更新拦截锁已安全释放。");
+                    }).start();
+                }
+            }
             stopSelf();
             return START_NOT_STICKY;
         }
 
-        Log.d(TAG, "☯️ 独立勿扰服务启动，准备依据 [1, 2, 4] 协议计算 Mask 并推送至手表...");
+        // 🛡️ 发送侧拦截锁：如果是由于手机本地收到手表反向通知导致的内部状态回调，直接拦截，防止自循环
+        if (PhoneSyncListenerService.isInternalUpdate) {
+            Log.d(TAG, "🔒 [防回环] 处于内部更新锁状态，拦截本次手机向手表的同步推流。");
+            stopSelf();
+            return START_NOT_STICKY;
+        }
 
+        // 📤 分支二：手机端主动触发同步（不管是拨动了子开关，还是手机自身勿扰变了，都要强制对齐）
+        Log.d(TAG, "☯️ 手机勿扰状态或配置变更，准备向手表同步...");
+        
         new Thread(() -> {
             try {
-                // 1️⃣ 从本地持久化存储中获取 4 个开关的最新物理状态
+                // 1. 验证总开关是否开启
                 SharedPreferences prefs = getSharedPreferences("wear_sync_prefs", Context.MODE_PRIVATE);
-                
-                // 【总开关】：勿扰同步总开关
                 boolean isDndSyncMasterOn = prefs.getBoolean("key_dnd_sync_master", true);
                 if (!isDndSyncMasterOn) {
-                    Log.d(TAG, "🚫 勿扰同步总开关已关闭，放弃本次跨端数据同步。");
+                    Log.d(TAG, "🚫 勿扰同步总开关已关闭，终止跨端数据同步。");
                     return;
                 }
 
-                // 【3个子开关】
-                boolean isSleepModeOn = prefs.getBoolean("key_sleep_mode", false); // 对应权值 1
-                boolean isVibrateOn = prefs.getBoolean("key_dnd_vibrate", false);   // 对应权值 2
-                boolean isPowerSaveOn = prefs.getBoolean("key_power_save", false); // 对应权值 4
-
-                // 2️⃣ 🎯 严格尊照原版二进制位权协议计算 Mask 值
-                int maskValue = 0;
-                
-                if (isSleepModeOn) {
-                    maskValue |= 1;  // 睡眠模式 = 1
-                }
-                if (isVibrateOn) {
-                    maskValue |= 2;  // 勿扰震动 = 2
-                }
-                if (isPowerSaveOn) {
-                    maskValue |= 4;  // 省电模式 = 4
+                // 2. 获取手机系统当前【真实的硬勿扰状态级别】
+                int currentPhoneDndStatus = 1; // 默认放行全部（INTERRUPTION_FILTER_ALL = 1）
+                NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+                if (nm != null) {
+                    currentPhoneDndStatus = nm.getCurrentInterruptionFilter();
                 }
 
-                Log.d(TAG, "🔢 [4开关状态清点] -> 睡眠: " + isSleepModeOn 
-                        + " | 震动: " + isVibrateOn + " | 省电: " + isPowerSaveOn 
-                        + " => 最终组合计算结果 Mask = " + maskValue);
+                // 3. 直接提取 UI 层在变动时提早存入静态变量的计算结果
+                int finalMask = cachedMaskValue;
+                Log.d(TAG, "🔢 [高性能发信准备] 当前缓存的开关 Mask = " + finalMask + " | 手机当前硬勿扰系统状态 = " + currentPhoneDndStatus);
 
-                // 3️⃣ 组装符合你项目原生的信令 JSON 协议
+                // 4. 组装极度纯净的 JSON 协议大对齐
                 JSONObject json = new JSONObject();
                 json.put("sender", "phone");
                 json.put("type", "dnd");
-                json.put("action", String.valueOf(maskValue));  // 把动态组合后的计算结果作为 action 推送
-                json.put("dnd_profile_value", maskValue);       // 完美兼容手表端的多重取值方式
+                json.put("switches_mask", finalMask);               // 👈 纯净开关掩码（仅代表 1-睡眠、2-震动、4-省电的动作命令）
+                json.put("dnd_profile_value", currentPhoneDndStatus); // 👈 手机当前真实的硬勿扰系统值（哪怕 Mask 是 0，它也负责让手表强制跟变）
+                json.put("action", String.valueOf(finalMask));
 
                 byte[] dataPayload = json.toString().getBytes(StandardCharsets.UTF_8);
 
-                // 4️⃣ 发射信令给手表
+                // 5. 跨端发射
                 List<Node> connectedNodes = Tasks.await(Wearable.getNodeClient(this).getConnectedNodes());
                 if (connectedNodes != null && !connectedNodes.isEmpty()) {
                     for (Node node : connectedNodes) {
-                        Tasks.await(Wearable.getMessageClient(this).sendMessage(
-                                node.getId(), 
-                                UNIVERSAL_SYNC_PATH, 
-                                dataPayload
-                        ));
-                        Log.d(TAG, "🚀 [跨端同步成功] 已将最新复合计算结果 [" + maskValue + "] 推送至手表: " + node.getDisplayName());
+                        Tasks.await(Wearable.getMessageClient(this).sendMessage(node.getId(), UNIVERSAL_SYNC_PATH, dataPayload));
+                        Log.d(TAG, "🚀 [同步成功] 已将最新同步信令推送到手表: " + node.getDisplayName());
                     }
                 } else {
-                    Log.w(TAG, "⚠️ 未检测到任何已连接的手表节点，放弃发送。");
+                    Log.w(TAG, "⚠️ 未检测到任何可用的手表节点。");
                 }
 
             } catch (Exception e) {
-                Log.e(TAG, "跨端推送 Mask 状态信令发生异常", e);
+                Log.e(TAG, "手机向手表发送同步信令灾难性失败", e);
             } finally {
-                // 执行完毕后，清空内存自杀，符合极致纯净解耦规范
                 stopSelf();
             }
         }).start();
