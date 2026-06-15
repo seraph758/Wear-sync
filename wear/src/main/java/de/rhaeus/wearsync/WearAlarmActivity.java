@@ -3,6 +3,7 @@ package de.rhaeus.wearsync;
 import android.app.Activity;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.View;
 import android.widget.Button;
 import com.google.android.gms.tasks.Tasks;
 import com.google.android.gms.wearable.Node;
@@ -13,7 +14,7 @@ import java.util.List;
 
 /**
  * 手表全屏响铃 Activity
- * 完美修复：精准绑定你之前在 XML 中亲手修改并对齐的 btn_dismiss_alarm 和 btn_snooze_alarm！
+ * 完美修正：精准绑定你提供的 activity_wear_alarm.xml 及其按钮 ID。
  */
 public class WearAlarmActivity extends Activity {
     private static final String TAG = "WearSync_WearAlarm";
@@ -22,31 +23,43 @@ public class WearAlarmActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         
-        // 🎯 绑定包含你新修改 ID 的闹钟布局文件
-        setContentView(R.layout.activity_alarm); 
-
-        // 🎯 精准匹配：关闭/停止闹钟按钮
-        Button btnDismiss = findViewById(R.id.btn_dismiss_alarm);
-        if (btnDismiss != null) {
-            btnDismiss.setOnClickListener(v -> {
-                Log.d(TAG, "🛎️ 用户点击[停止]按钮，正在向手机投递关闭信号...");
-                sendAlarmActionToPhone("DISMISS_ALARM");
-                finish();
-            });
-        } else {
-            Log.e(TAG, "❌ 警告：在布局中未找到 R.id.btn_dismiss_alarm，请核对 XML！");
+        // 🎯 1. 核心修正：精准对齐你本地存在的 activity_wear_alarm.xml 文件名
+        try {
+            setContentView(R.layout.activity_wear_alarm); 
+        } catch (Exception e) {
+            Log.e(TAG, "❌ 严重错误：找不到 R.layout.activity_wear_alarm，请检查文件名！", e);
+            // 兜底防崩溃：如果依然找不到，加载一个空白视图，防止崩溃
+            setContentView(new View(this));
         }
 
-        // 🎯 精准匹配：稍后提醒/延后按钮
+        // 🎯 2. 精准绑定 XML 里的延后按钮：btn_snooze_alarm
         Button btnSnooze = findViewById(R.id.btn_snooze_alarm);
         if (btnSnooze != null) {
             btnSnooze.setOnClickListener(v -> {
-                Log.d(TAG, "🛎️ 用户点击[延后]按钮，正在向手机投递延时信号...");
+                Log.d(TAG, "⏰ 用户点击了[延后]按钮，正在向手机投递延迟信号...");
                 sendAlarmActionToPhone("SNOOZE_ALARM");
                 finish();
             });
         } else {
-            Log.e(TAG, "❌ 警告：在布局中未找到 R.id.btn_snooze_alarm，请核对 XML！");
+            Log.e(TAG, "⚠️ 警告：在布局中未找到 R.id.btn_snooze_alarm，执行盲操全屏兜底");
+            // 兜底：如果找不到按钮，点屏幕任意地方也触发延后
+            View container = findViewById(R.id.alarm_container);
+            if (container != null) {
+                container.setOnClickListener(v -> {
+                    sendAlarmActionToPhone("SNOOZE_ALARM");
+                    finish();
+                });
+            }
+        }
+
+        // 🎯 3. 精准绑定 XML 里的停止按钮：btn_dismiss_alarm
+        Button btnDismiss = findViewById(R.id.btn_dismiss_alarm);
+        if (btnDismiss != null) {
+            btnDismiss.setOnClickListener(v -> {
+                Log.d(TAG, "🛑 用户点击了[停止]按钮，正在向手机投递关闭信号...");
+                sendAlarmActionToPhone("DISMISS_ALARM");
+                finish();
+            });
         }
     }
 
