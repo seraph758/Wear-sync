@@ -1,23 +1,23 @@
 package de.rhaeus.wearsync;
 
 import android.content.Intent;
-import android.graphics.Bitmap;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
-import android.view.View;
-import android.widget.ImageView;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.fragment.app.FragmentTransaction;
 
+/**
+ * 核心功能：充当一加实机后台唤醒的“前台防御盾牌”。
+ * 完美支持 getInstance() 单例供相机后台服务调取感知生命周期，
+ * 完美支持智能意图识别分流，防止用户点击桌面图标时误触发相机流采集。
+ */
 public class PhoneSyncMainActivity extends AppCompatActivity {
     private static final String TAG = "WearSync_PhoneMain";
-    private ImageView ivLocalPreview;
-
-    // 🎯 [全新追加]：靜態持有單例實例，為 PhoneSyncCameraService 提供 getInstance() 的應答鏈條
+    
+    // 建立安全的静态实例持有者
     private static PhoneSyncMainActivity instance;
 
-    // 🎯 [全新追加]：向全域暴露當前運行的實例，完美相容 CameraService 既有呼叫
     public static PhoneSyncMainActivity getInstance() {
         return instance;
     }
@@ -26,20 +26,15 @@ public class PhoneSyncMainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         com.google.android.material.color.DynamicColors.applyToActivityIfAvailable(this);
         super.onCreate(savedInstanceState);
-
-        // 🎯 綁定當前實例
+        
         instance = this;
 
         if (getSupportActionBar() != null) {
             getSupportActionBar().hide();
         }
 
-        // 🎯 [手機端核心防禦]：防止手機端彈出 Activity 提權後，因無人觸控自動熄屏導致相機被一加系統強行凍結
-        getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        // 绑定原本载入 ComposeView 容器的布局
         setContentView(R.layout.activity_main);
-
-        // 初始化本地相機小窗預覽控制項
-        ivLocalPreview = findViewById(R.id.iv_local_preview);
 
         if (savedInstanceState == null) {
             FragmentTransaction ft = getSupportFragmentManager().beginTransaction();
@@ -47,7 +42,7 @@ public class PhoneSyncMainActivity extends AppCompatActivity {
             ft.commit();
         }
 
-        // 🎯 處理第一次創建 Activity 時的拉起指令
+        // 第一次创建时，对传入的意图进行智能路由分流判断
         handleIncomingIntent(getIntent());
     }
 
@@ -55,66 +50,39 @@ public class PhoneSyncMainActivity extends AppCompatActivity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
-        // 🎯 處理 Activity 已經在後台存活時，再次被複用拉起時的指令
+        // 复用旧实例时，重新对新意图进行智能路由分流判断
         handleIncomingIntent(intent);
     }
 
+    /**
+     * 核心智能分流逻辑：判断是手表远程反向拉起的，还是用户自己点击桌面进入设置的
+     */
     private void handleIncomingIntent(Intent intent) {
         if (intent == null) return;
         String action = intent.getAction();
-        Log.d(TAG, "📥 MainActivity 收到意圖 Action: " + action);
+        Log.d(TAG, "📥 手机端主页面收到检测意图 Action: " + action);
 
+        // 场景：只有捕获到专门的手表反向穿透拉起暗号，才开启屏幕常亮并拉起拍照服务
         if ("ACTION_START_CAMERA_FLOW".equalsIgnoreCase(action)) {
-            Log.d(TAG, "🎬 [前台合法接力] 已經處於前台活躍狀態，正在開啟相機前台服務...");
-            Intent svc = new Intent(this, PhoneSyncCameraService.class);
-            svc.setAction("START_CAMERA");
+            Log.d(TAG, "🎬 [手表唤醒判定成功]：强制开启一加屏幕常亮防冻结机制，并接力相机后台采集服务...");
+            
+            // 一加熄屏防御核心：强制保持屏幕常亮，防止无触控导致的后台相机硬件冻结
+            getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            
+            Intent cameraService = new Intent(this, PhoneSyncCameraService.class);
+            cameraService.setAction("START_CAMERA");
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(svc);
+                startForegroundService(cameraService);
             } else {
-                startService(svc);
+                startService(cameraService);
             }
+        } else {
+            Log.d(TAG, "🏡 [普通日常点击设置判定]：仅加载 Compose 设置主界面，不干预相机后台硬件。");
         }
-    }
-
-    /**
-     * 🎯 [相機小窗安全歸位保險]：供前台相機服務動態投遞局部幀，實現低延遲小窗預覽
-     */
-    public void updateLocalPreview(Bitmap bitmap) {
-        runOnUiThread(() -> {
-            if (ivLocalPreview != null && ivLocalPreview.getVisibility() == View.VISIBLE && bitmap != null) {
-                ivLocalPreview.setImageBitmap(bitmap);
-            }
-        });
-    }
-
-    /**
-     * 🎯 [相機小窗安全歸位保險]：顯示本地相機預覽小窗
-     */
-    public void showLocalPreview() {
-        runOnUiThread(() -> {
-            if (ivLocalPreview != null) {
-                ivLocalPreview.setVisibility(View.VISIBLE);
-                Log.d(TAG, "📸 本地相機小窗預覽已設為 VISIBLE");
-            }
-        });
-    }
-
-    /**
-     * 🎯 [相機小窗安全歸位保險]：隱藏本地相機預覽小窗并清空殘留幀
-     */
-    public void hideLocalPreview() {
-        runOnUiThread(() -> {
-            if (ivLocalPreview != null) {
-                ivLocalPreview.setVisibility(View.GONE);
-                ivLocalPreview.setImageBitmap(null);
-                Log.d(TAG, "🔒 本地相機小窗預覽已安全隱藏 (GONE) 並清空殘留緩衝");
-            }
-        });
     }
 
     @Override
     protected void onDestroy() {
-        // 🎯 [核心防禦保險]：防止銷毀時產生的記憶體洩漏，將單例引用安全歸零
         if (instance == this) {
             instance = null;
         }

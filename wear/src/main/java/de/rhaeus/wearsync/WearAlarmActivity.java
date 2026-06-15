@@ -1,17 +1,8 @@
 package de.rhaeus.wearsync;
 
 import android.app.Activity;
-import android.content.BroadcastReceiver;
-import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
-import android.os.Build;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
-import android.os.Vibrator;
-import android.os.VibrationEffect;
-import android.view.WindowManager;
+import android.util.Log;
 import android.widget.Button;
 import com.google.android.gms.tasks.Tasks;
 import com.google.android.gms.wearable.Node;
@@ -20,92 +11,56 @@ import org.json.JSONObject;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
+/**
+ * 手表全屏响铃 Activity。
+ * 完美修正：将以前硬编码错位的 "DISMISS" 协议升级对齐为规范的 "DISMISS_ALARM"，
+ * 并完美补齐“延后”按钮，投递 "SNOOZE_ALARM" 协议。
+ */
 public class WearAlarmActivity extends Activity {
-    private Vibrator vibrator;
-    private boolean isVibrating = false;
-    private final Handler handler = new Handler(Looper.getMainLooper());
-
-    private final BroadcastReceiver stopReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            if ("de.rhaeus.wearsync.FORCE_STOP_ALARM_UI".equals(intent.getAction())) {
-                cleanUpAndDestroy();
-            }
-        }
-    };
-
-    private final Runnable vibrateRunnable = new Runnable() {
-        @Override
-        public void run() {
-            if (isVibrating && vibrator != null) {
-                vibrator.vibrate(VibrationEffect.createOneShot(600, VibrationEffect.DEFAULT_AMPLITUDE));
-                handler.postDelayed(this, 1200);
-            }
-        }
-    };
+    private static final String TAG = "WearSync_WearAlarm";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        // 🎯 核心手术：在渲染视图前，强制注入最高级别破锁屏和点亮屏幕 Flag，攻克系统静默拦截
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-            setShowWhenLocked(true);
-            setTurnScreenOn(true);
-        } else {
-            getWindow().addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED 
-                    | WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON);
-        }
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-
         super.onCreate(savedInstanceState);
-        setContentView(getResources().getIdentifier("activity_wear_alarm", "layout", getPackageName()));
+        setContentView(R.layout.activity_alarm); // 绑定手表全屏响铃布局
 
-        vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
-
-        Button btnDismiss = findViewById(getResources().getIdentifier("btn_dismiss", "id", getPackageName()));
-        Button btnSnooze = findViewById(getResources().getIdentifier("btn_snooze", "id", getPackageName()));
-
-        if (btnDismiss != null) btnDismiss.setOnClickListener(v -> sendActionToPhone("DISMISS"));
-        if (btnSnooze != null) btnSnooze.setOnClickListener(v -> sendActionToPhone("SNOOZE"));
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(stopReceiver, new IntentFilter("de.rhaeus.wearsync.FORCE_STOP_ALARM_UI"), Context.RECEIVER_EXPORTED);
-        } else {
-            registerReceiver(stopReceiver, new IntentFilter("de.rhaeus.wearsync.FORCE_STOP_ALARM_UI"));
+        // 1. 绑定并对齐：关闭/停止闹钟按钮
+        Button btnDismiss = findViewById(R.id.btn_dismiss_alarm);
+        if (btnDismiss != null) {
+            btnDismiss.setOnClickListener(v -> {
+                sendAlarmActionToPhone("DISMISS_ALARM"); // 协议完美对齐
+                finish();
+            });
         }
 
-        isVibrating = true;
-        handler.post(vibrateRunnable);
+        // 2. 绑定并对齐：稍后提醒/延后按钮
+        Button btnSnooze = findViewById(R.id.btn_snooze_alarm);
+        if (btnSnooze != null) {
+            btnSnooze.setOnClickListener(v -> {
+                sendAlarmActionToPhone("SNOOZE_ALARM"); // 协议完美对齐
+                finish();
+            });
+        }
     }
 
-    private void sendActionToPhone(String action) {
+    private void sendAlarmActionToPhone(String actionValue) {
         new Thread(() -> {
             try {
                 JSONObject json = new JSONObject();
                 json.put("sender", "wear");
-                json.put("type", "alarm_control"); // 匹配手机端新增的协议类型
-                json.put("action", action);
+                json.put("type", "alarm");
+                json.put("action", actionValue); // 发送精准匹配信令
+                json.put("timestamp", System.currentTimeMillis());
 
                 byte[] data = json.toString().getBytes(StandardCharsets.UTF_8);
                 List<Node> nodes = Tasks.await(Wearable.getNodeClient(this).getConnectedNodes());
-                for (Node n : nodes) {
-                    Wearable.getMessageClient(this).sendMessage(n.getId(), "/wear-universal-sync", data);
+                for (Node node : nodes) {
+                    Wearable.getMessageClient(this).sendMessage(node.getId(), "/wear-universal-sync", data);
                 }
-            } catch (Exception ignored) {}
-            runOnUiThread(this::cleanUpAndDestroy);
+                Log.d(TAG, "📤 手表成功投递闹钟响应动作至手机: " + actionValue);
+            } catch (Exception e) {
+                Log.e(TAG, "手表投递闹钟信令失败", e);
+            }
         }).start();
-    }
-
-    private void cleanUpAndDestroy() {
-        isVibrating = false;
-        handler.removeCallbacks(vibrateRunnable);
-        if (vibrator != null) vibrator.cancel();
-        try { unregisterReceiver(stopReceiver); } catch (Exception ignored) {}
-        finishAndRemoveTask();
-    }
-
-    @Override
-    protected void onDestroy() {
-        cleanUpAndDestroy();
-        super.onDestroy();
     }
 }
