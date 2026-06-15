@@ -12,9 +12,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 /**
- * 手表全屏响铃 Activity。
- * 完美修正：对齐手錶端原版现有的 activity_main 布局资源（原项目没有 activity_alarm），
- * 并精准绑定原版自带的 bt_dismiss 按钮！
+ * 手表全屏响铃 Activity
+ * 完美修复：精准绑定你之前在 XML 中亲手修改并对齐的 btn_dismiss_alarm 和 btn_snooze_alarm！
  */
 public class WearAlarmActivity extends Activity {
     private static final String TAG = "WearSync_WearAlarm";
@@ -23,25 +22,31 @@ public class WearAlarmActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         
-        // 🎯 核心修复：直接绑定手錶端原本自带的 activity_main 布局
-        setContentView(R.layout.activity_main); 
+        // 🎯 绑定包含你新修改 ID 的闹钟布局文件
+        setContentView(R.layout.activity_alarm); 
 
-        // 🎯 核心修复：对齐绑定你原本 XML 里现成的关闭闹钟按钮 ID (bt_dismiss)
-        Button btnDismiss = findViewById(R.id.bt_dismiss);
+        // 🎯 精准匹配：关闭/停止闹钟按钮
+        Button btnDismiss = findViewById(R.id.btn_dismiss_alarm);
         if (btnDismiss != null) {
             btnDismiss.setOnClickListener(v -> {
-                sendAlarmActionToPhone("DISMISS_ALARM"); // 协议完美对齐手机端关键字
+                Log.d(TAG, "🛎️ 用户点击[停止]按钮，正在向手机投递关闭信号...");
+                sendAlarmActionToPhone("DISMISS_ALARM");
                 finish();
             });
+        } else {
+            Log.e(TAG, "❌ 警告：在布局中未找到 R.id.btn_dismiss_alarm，请核对 XML！");
         }
 
-        // 🎯 核心修复：对齐绑定你原本 XML 里现成的延后/稍后提醒按钮 ID (bt_snooze)
-        Button btnSnooze = findViewById(R.id.bt_snooze);
+        // 🎯 精准匹配：稍后提醒/延后按钮
+        Button btnSnooze = findViewById(R.id.btn_snooze_alarm);
         if (btnSnooze != null) {
             btnSnooze.setOnClickListener(v -> {
-                sendAlarmActionToPhone("SNOOZE_ALARM"); // 协议完美对齐手机端关键字
+                Log.d(TAG, "🛎️ 用户点击[延后]按钮，正在向手机投递延时信号...");
+                sendAlarmActionToPhone("SNOOZE_ALARM");
                 finish();
             });
+        } else {
+            Log.e(TAG, "❌ 警告：在布局中未找到 R.id.btn_snooze_alarm，请核对 XML！");
         }
     }
 
