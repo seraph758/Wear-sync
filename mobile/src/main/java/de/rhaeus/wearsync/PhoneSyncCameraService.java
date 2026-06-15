@@ -291,13 +291,22 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
 
     @Override
     public void onDestroy() {
+        Log.d(TAG, "🛑 Camera 采集服务正在执行 onDestroy 销毁流程...");
         isRunning = false; 
         lifecycleRegistry.setCurrentState(Lifecycle.State.DESTROYED);
+        
         if (cameraProvider != null) {
             cameraProvider.unbindAll();
         }
-        mStreamExecutor.shutdownNow(); 
+        if (mStreamExecutor != null) {
+            mStreamExecutor.shutdownNow(); 
+        }
+        
         closeChannelSafely();
+
+        // 🎯 【核心新增联动】：当相机采集服务下线时，强制通知主 Activity 卸载屏幕长亮锁并自杀！
+        PhoneSyncMainActivity.closeAndReleaseScreenLock();
+
         super.onDestroy();
     }
 
