@@ -32,7 +32,10 @@
             </intent-filter>
         </activity>
        
+        <service android:name=".PhoneAlarmService" android:exported="false" />
 
+        <service android:name=".PhoneDndService" android:exported="false" />
+        
         <service
             android:name=".PhoneSyncNotificationService"
             android:exported="true"
