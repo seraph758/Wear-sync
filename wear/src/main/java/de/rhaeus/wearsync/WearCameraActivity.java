@@ -58,32 +58,38 @@ public class WearCameraActivity extends Activity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_wear_camera);
-
-        // 1. 绑定弱引用静态持有
-        sActivityRef = new WeakReference<>(this);
-
-        // 2. 提取手机端传过来的物理窗口旋转角度
-        mRotationDegrees = getIntent().getIntExtra("rotation_degrees", 0);
-        Log.d(TAG, "📐 收到手机主控端下发的画面旋转纠偏矩阵角度: " + mRotationDegrees);
-
-        imgPreview = findViewById(R.id.img_camera_preview);
-
-        // 🌟 【极致性能优化】：我们绝不在后台调用 Bitmap.createBitmap 进行高频像素级矩阵旋转计算！
-        // 直接通过 View 层的 setRotation 属性，利用手表的 GPU 硬件加速瞬间完成画面旋转！性能提升数倍！
-        if (imgPreview != null && mRotationDegrees != 0) {
-            imgPreview.setRotation(mRotationDegrees);
-        }
-
-        // 3. 触摸大屏幕的任意位置，都可以跨端代点触发手机的“快门拍照”动作
-        RelativeLayout rootLayout = findViewById(R.id.layout_camera_root);
-        if (rootLayout != null) {
-            rootLayout.setOnClickListener(v -> {
-                Log.d(TAG, "📸 [手势快门] 用户轻触手表屏幕，下发快门指令投递给手机代点...");
-                sendControlSignalToPhone("CAPTURE_SHUTTER");
-            });
-        }
+            super.onCreate(savedInstanceState);
+            setContentView(R.layout.activity_wear_camera);
+        
+            sActivityRef = new WeakReference<>(this);
+            mRotationDegrees = getIntent().getIntExtra("rotation_degrees", 0);
+            imgPreview = findViewById(R.id.img_camera_preview);
+        
+            if (imgPreview != null && mRotationDegrees != 0) {
+                imgPreview.setRotation(mRotationDegrees); // 硬件加速旋转
+            }
+        
+            // 🎯 优化一：点击全屏空白处 ➔ 触发拍照
+            RelativeLayout rootLayout = findViewById(R.id.layout_camera_root);
+            if (rootLayout != null) {
+                rootLayout.setOnClickListener(v -> {
+                    Log.d(TAG, "📸 用户轻触全屏任意区域 ➔ 下发快门");
+                    sendControlSignalToPhone("CAPTURE_SHUTTER");
+                });
+            }
+        
+            // 🎯 优化二：精准点击底部的相机小按钮 ➔ 同样触发拍照
+            Button btnCapture = findViewById(R.id.btn_capture); // 对应你布局里的 id btnCapture (注意大小写对齐)
+            if (btnCapture == null) {
+                // 兼容你 XML 里的驼峰命名 id：btnCapture
+                btnCapture = findViewById(R.id.btnCapture);
+            }
+            if (btnCapture != null) {
+                btnCapture.setOnClickListener(v -> {
+                    Log.d(TAG, "📸 用户点击了底部的专属相机按钮 ➔ 下发快门");
+                    sendControlSignalToPhone("CAPTURE_SHUTTER");
+                });
+            }
     }
 
     /**
