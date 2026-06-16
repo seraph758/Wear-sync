@@ -1,104 +1,170 @@
 package de.rhaeus.wearsync;
 
 import android.app.Activity;
-import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.os.Bundle;
 import android.util.Log;
-import android.view.View;
-import android.widget.Button;
 import android.widget.ImageView;
+import android.widget.RelativeLayout;
+
 import com.google.android.gms.tasks.Tasks;
 import com.google.android.gms.wearable.Node;
 import com.google.android.gms.wearable.Wearable;
+
 import org.json.JSONObject;
+import java.lang.ref.WeakReference;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
+/**
+ * 📸 手表端独立解耦相机全屏交互舱
+ * 核心职责：
+ * 1. 建立弱引用安全访问通路，供 Service 高频零延时直接泵入图片。
+ * 2. 接收手机端物理姿态角度，采用 Hardware-Accelerated View 矩阵旋转纠偏（杜绝GC内存抖动）。
+ * 3. 屏幕点击触发快门下发，退出时触发双端对齐释放，并执行 finishAndRemoveTask() 核级自杀。
+ */
 public class WearCameraActivity extends Activity {
-    private static final String TAG = "WearSync_WearCamera";
+    private static final String TAG = "WearSync_WearCameraUI";
+    private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
+
+    private ImageView imgPreview;
+    private int mRotationDegrees = 0;
+    private boolean isUserExiting = false;
+
+    // 🌟 核心高能内存设计：利用弱引用持有当前活动实例，既保证了高频帧数据的零拷贝极速分发，又绝对防止了 Activity 内存泄漏
+    private static WeakReference<WearCameraActivity> sActivityRef = new WeakReference<>(null);
+
+    /**
+     * 🛰️ 高速外部泵入接口：由 Service 线程直接高频调用
+     */
+    public static void updateFrame(byte[] jpegData) {
+        WearCameraActivity activity = sActivityRef.get();
+        if (activity != null && jpegData != null) {
+            activity.renderJpegFrame(jpegData);
+        }
+    }
+
+    /**
+     * 🛰️ 强退接口：由 Service 收到手机彻底退出消息时直接调用
+     */
+    public static void forceQuitInstance() {
+        WearCameraActivity activity = sActivityRef.get();
+        if (activity != null) {
+            Log.d(TAG, "🛑 收到手机端强迫退出指令，触发核级自杀退出...");
+            activity.cleanExit(false);
+        }
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        
-        // 绑定相机主布局
-        setContentView(R.layout.activity_main); 
+        setContentView(R.layout.activity_wear_camera);
 
-        // 🎯 核心修正：彻底移除 btn_capture，只保留完美匹配你 XML 的驼峰命名 ID
-        Button btnCapture = findViewById(R.id.btnCapture); 
+        // 1. 绑定弱引用静态持有
+        sActivityRef = new WeakReference<>(this);
 
-        if (btnCapture != null) {
-            btnCapture.setOnClickListener(v -> {
-                Log.d(TAG, "📸 成功点击手表端 btnCapture 按钮，触发快门...");
-                sendCameraCaptureSignal();
-            });
+        // 2. 提取手机端传过来的物理窗口旋转角度
+        mRotationDegrees = getIntent().getIntExtra("rotation_degrees", 0);
+        Log.d(TAG, "📐 收到手机主控端下发的画面旋转纠偏矩阵角度: " + mRotationDegrees);
+
+        imgPreview = findViewById(R.id.img_camera_preview);
+
+        // 🌟 【极致性能优化】：我们绝不在后台调用 Bitmap.createBitmap 进行高频像素级矩阵旋转计算！
+        // 直接通过 View 层的 setRotation 属性，利用手表的 GPU 硬件加速瞬间完成画面旋转！性能提升数倍！
+        if (imgPreview != null && mRotationDegrees != 0) {
+            imgPreview.setRotation(mRotationDegrees);
         }
 
-        // 盲操退出：点击预览画面任意地方优雅下线
-        ImageView frameView = findViewById(R.id.frameView);
-        if (frameView != null) {
-            frameView.setOnClickListener(v -> {
-                Log.d(TAG, "🛎️ 用户点击预览画面，执行协同退出...");
-                executeElegantExitFlow();
+        // 3. 触摸大屏幕的任意位置，都可以跨端代点触发手机的“快门拍照”动作
+        RelativeLayout rootLayout = findViewById(R.id.layout_camera_root);
+        if (rootLayout != null) {
+            rootLayout.setOnClickListener(v -> {
+                Log.d(TAG, "📸 [手势快门] 用户轻触手表屏幕，下发快门指令投递给手机代点...");
+                sendControlSignalToPhone("CAPTURE_SHUTTER");
             });
         }
     }
 
-    private void sendCameraCaptureSignal() {
-        new Thread(() -> {
+    /**
+     * 🖼️ 高速位图渲染器：在 UI 线程高速还原 JPEG 帧
+     */
+    private void renderJpegFrame(byte[] jpegData) {
+        runOnUiThread(() -> {
             try {
-                JSONObject json = new JSONObject();
-                json.put("sender", "wear");
-                json.put("type", "camera_action");
-                json.put("action", "TAKE_PICTURE");
-                json.put("timestamp", System.currentTimeMillis());
-
-                byte[] data = json.toString().getBytes(StandardCharsets.UTF_8);
-                List<Node> nodes = Tasks.await(Wearable.getNodeClient(this).getConnectedNodes());
-                for (Node node : nodes) {
-                    Wearable.getMessageClient(this).sendMessage(node.getId(), "/wear-universal-sync", data);
-                }
-            } catch (Exception e) {
-                Log.e(TAG, "发送快门信号失败", e);
-            }
-        }).start();
-    }
-
-    private void executeElegantExitFlow() {
-        new Thread(() -> {
-            try {
-                JSONObject json = new JSONObject();
-                json.put("sender", "wear");
-                json.put("type", "camera_action");
-                json.put("action", "STOP_CAMERA_UI");
-                json.put("timestamp", System.currentTimeMillis());
-
-                byte[] data = json.toString().getBytes(StandardCharsets.UTF_8);
-                List<Node> nodes = Tasks.await(Wearable.getNodeClient(this).getConnectedNodes());
-                for (Node node : nodes) {
-                    Wearable.getMessageClient(this).sendMessage(node.getId(), "/wear-universal-sync", data);
-                }
+                if (isUserExiting || imgPreview == null) return;
                 
-                Intent closeMainIntent = new Intent("DE_RHAEUS_WEARSYNC_FORCE_CLOSE_MAIN");
-                closeMainIntent.setPackage(getPackageName());
-                sendBroadcast(closeMainIntent);
-
-                runOnUiThread(this::finish);
+                // 将干净的压缩包解码为原生 Bitmap
+                Bitmap bitmap = BitmapFactory.decodeByteArray(jpegData, 0, jpegData.length);
+                if (bitmap != null) {
+                    imgPreview.setImageBitmap(bitmap);
+                }
             } catch (Exception e) {
-                Log.e(TAG, "退出通信流程失败", e);
-                runOnUiThread(this::finish);
+                Log.e(TAG, "渲染图片预览帧发生不可控异常", e);
+            }
+        });
+    }
+
+    /**
+     * 🚀 跨端发射器：向手机发送快门或退出要求
+     */
+    private void sendControlSignalToPhone(String actionStr) {
+        new Thread(() -> {
+            try {
+                JSONObject json = new JSONObject();
+                json.put("sender", "wear");
+                json.put("type", "camera_control");
+                json.put("action", actionStr); // "CAPTURE_SHUTTER" 或 "STOP_CAMERA"
+                json.put("timestamp", System.currentTimeMillis());
+
+                byte[] payload = json.toString().getBytes(StandardCharsets.UTF_8);
+                List<Node> nodes = Tasks.await(Wearable.getNodeClient(this).getConnectedNodes());
+                if (nodes != null) {
+                    for (Node n : nodes) {
+                        Wearable.getMessageClient(this).sendMessage(n.getId(), UNIVERSAL_SYNC_PATH, payload);
+                    }
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "向手机端投递相机控场指令失败", e);
             }
         }).start();
+    }
+
+    /**
+     * 🧹 撤退清空协议：斩草除根式退出，绝不留任何 Recent Tasks 后台污染
+     */
+    private void cleanExit(boolean notifyPhone) {
+        if (isUserExiting) return;
+        isUserExiting = true;
+        Log.d(TAG, "🧹 正在启动手表相机退出机制，全面清理资源通道...");
+
+        if (notifyPhone) {
+            // 如果是用户自己在手表上滑走或者按返回退出的，必须通知手机端关闭相机硬件并摧毁 Channel 管道
+            sendControlSignalToPhone("STOP_CAMERA");
+        }
+
+        // 解除弱引用绑定
+        if (sActivityRef.get() == this) {
+            sActivityRef.clear();
+        }
+
+        if (imgPreview != null) {
+            imgPreview.setImageBitmap(null); // 解除图片资产绑定，供虚拟机全力回收内存
+        }
+
+        // 🏁 核心：执行彻底的销毁并从最近任务列表中彻底抹去残影（核级自杀）
+        finishAndRemoveTask();
+    }
+
+    @Override
+    public void onBackPressed() {
+        cleanExit(true); // 拦截返回键，优雅走完清空流程
+        super.onBackPressed();
     }
 
     @Override
     protected void onDestroy() {
-        try {
-            setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_NOSENSOR);
-        } catch (Exception e) {
-            Log.e(TAG, "清理残留异常", e);
-        }
+        cleanExit(true); // 拦截左滑退出，进行终极安全防御
         super.onDestroy();
-        android.os.Process.killProcess(android.os.Process.myPid());
     }
 }
