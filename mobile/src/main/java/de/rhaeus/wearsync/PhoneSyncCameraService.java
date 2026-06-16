@@ -35,7 +35,7 @@ public class PhoneSyncCameraService extends Service implements Camera.PreviewCal
     private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
     private static final String CAMERA_PREVIEW_STREAM_PATH = "/camera-preview-stream";
 
-    public static final String ACTION_START_CAMERA_STREAM = "de.rhaeus.wearsync.ACTION_START_CAMERA_STREAM";
+    public static final String ACTION_START_CAMERA = "de.rhaeus.wearsync.ACTION_START_CAMERA";
     public static final String ACTION_STOP_CAMERA_STREAM = "de.rhaeus.wearsync.ACTION_STOP_CAMERA_STREAM";
     public static final String ACTION_TRIGGER_SHUTTER = "de.rhaeus.wearsync.ACTION_TRIGGER_SHUTTER";
 
@@ -54,7 +54,7 @@ public class PhoneSyncCameraService extends Service implements Camera.PreviewCal
         String action = intent.getAction();
         Log.d(TAG, "⚙️ 手机相机服务收到动作: " + action);
 
-        if (ACTION_START_CAMERA_STREAM.equals(action)) {
+        if (ACTION_START_CAMERA.equals(action)) {
             startCameraAndSetupPipeline();
         } else if (ACTION_STOP_CAMERA_STREAM.equals(action)) {
             releaseCameraAndPipeline();
