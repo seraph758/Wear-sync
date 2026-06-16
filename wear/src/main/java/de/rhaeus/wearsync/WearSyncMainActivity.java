@@ -32,12 +32,12 @@ public class WearSyncMainActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        // 1. 初始化所有生命线检查看板
+        // 1. 初始化全量加回的生命线检测看板组件（请确保在 activity_main.xml 顶端加了这三个 TextView）
         tvNotificationStatus = findViewById(R.id.tv_notification_status);
         tvAccessibilityStatus = findViewById(R.id.tv_accessibility_status);
         tvConnectionStatus = findViewById(R.id.tv_connection_status);
 
-        // 2. 挂载点击跳转设置逻辑
+        // 2. 挂载点击跳转系统设置逻辑
         if (tvNotificationStatus != null) {
             tvNotificationStatus.setOnClickListener(v -> {
                 try {
@@ -58,21 +58,24 @@ public class WearSyncMainActivity extends Activity {
             });
         }
 
-        // 3. 挂载原生的设置项Fragment，保证别的模块不受任何影响
+        // 3. 挂载原生的设置项Fragment
+        // 🎯 修复重点 1：将错误的 R.id.settings 修改为手表端原生定义的 R.id.content_frame
         if (savedInstanceState == null) {
             getFragmentManager().beginTransaction()
-                    .replace(R.id.settings, new WearSyncMainFragment())
+                    .replace(R.id.content_frame, new WearSyncMainFragment())
                     .commit();
         }
 
-        // 4. 绑定相机按钮并校准协议
-        Button btnLaunchCamera = findViewById(R.id.btn_trigger_camera);
+        // 4. 绑定相机按钮并校准双端连通协议
+        // 🎯 修复重点 2：将错误的 R.id.btn_trigger_camera 修改为手表端原生定义的 R.id.camera_button
+        Button btnLaunchCamera = findViewById(R.id.camera_button);
         if (btnLaunchCamera != null) {
             btnLaunchCamera.setOnClickListener(v -> {
-                Log.d(TAG, "🚀 用户点击唤醒相机：执行双向协议连通...");
-                // 🎯 协议拉齐：原 camera_action 改为 camera，完美配对手机底层拦截器
+                Log.d(TAG, "🚀 用户点击唤醒相机：执行全链路拉齐协议发送...");
+                // 发送给手机底层通道，告诉手机立刻把相机 Activity 拉起来
                 sendActionToPhone("camera", "START_CAMERA_UI");
 
+                // 手表本地同步进入相机预览流 Activity
                 Intent intent = new Intent(WearSyncMainActivity.this, WearCameraActivity.class);
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
                 startActivity(intent);
@@ -83,7 +86,7 @@ public class WearSyncMainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        // 界面恢复时高频刷新三大生命线状态
+        // 每次返回主界面，全量刷新三大核心健康度状态
         checkAllPermissionsAndLinks();
     }
 
