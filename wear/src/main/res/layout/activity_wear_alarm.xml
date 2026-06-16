@@ -19,7 +19,7 @@
         android:layout_marginBottom="16dp"/>
 
     <Button
-        android:id="@+id/btn_snooze_alarm"
+        android:id="@+id/btn_snooze"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="延后 (Snooze)"
@@ -28,7 +28,7 @@
         android:layout_marginBottom="8dp"/>
 
     <Button
-        android:id="@+id/btn_dismiss_alarm"
+        android:id="@+id/btn_dismiss"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="停止"
