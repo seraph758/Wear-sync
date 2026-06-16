@@ -62,14 +62,14 @@ public class PhoneSyncListenerService extends WearableListenerService {
             if ("camera_control".equalsIgnoreCase(type)) {
                 Log.d(TAG, "📸 [信令分发] 收到手表相机控制指令: " + action);
                 
-                Intent camIntent = new Intent(this, PhoneCameraService.class);
+                Intent camIntent = new Intent(this, PhoneSyncCameraService.class);
                 if ("CAPTURE_SHUTTER".equalsIgnoreCase(action)) {
                     // 手表用户在手表屏幕按下了快门键 -> 吩咐手机代点拍照
-                    camIntent.setAction(PhoneCameraService.ACTION_TRIGGER_SHUTTER);
+                    camIntent.setAction(PhoneSyncCameraService.ACTION_TRIGGER_SHUTTER);
                     startService(camIntent);
                 } else if ("STOP_CAMERA".equalsIgnoreCase(action)) {
                     // 手表用户主动退出了拍照界面 -> 吩咐手机立刻释放相机资源断开数据管道
-                    camIntent.setAction(PhoneCameraService.ACTION_STOP_CAMERA_STREAM);
+                    camIntent.setAction(PhoneSyncCameraService.ACTION_STOP_CAMERA_STREAM);
                     startService(camIntent);
                 }
                 return;
