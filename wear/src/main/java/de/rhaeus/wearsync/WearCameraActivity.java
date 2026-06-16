@@ -20,10 +20,6 @@ import java.util.List;
 
 /**
  * 📸 手表端独立解耦相机全屏交互舱
- * 核心职责：
- * 1. 建立弱引用安全访问通路，供 Service 高频零延时直接泵入图片。
- * 2. 接收手机端物理姿态角度，采用 Hardware-Accelerated View 矩阵旋转纠偏（杜绝GC内存抖动）。
- * 3. 屏幕点击触发快门下发，退出时触发双端对齐释放，并执行 finishAndRemoveTask() 核级自杀。
  */
 public class WearCameraActivity extends Activity {
     private static final String TAG = "WearSync_WearCameraUI";
@@ -33,11 +29,11 @@ public class WearCameraActivity extends Activity {
     private int mRotationDegrees = 0;
     private boolean isUserExiting = false;
 
-    // 🌟 核心高能内存设计：利用弱引用持有当前活动实例，既保证了高频帧数据的零拷贝极速分发，又绝对防止了 Activity 内存泄漏
+    // 弱引用持有当前活动实例，防止 Activity 内存泄漏
     private static WeakReference<WearCameraActivity> sActivityRef = new WeakReference<>(null);
 
     /**
-     * 🛰️ 高速外部泵入接口：由 Service 线程直接高频调用 (修复找不到符号报错)
+     * 🛰️ 高速外部泵入接口：由 Service 线程直接高频调用
      */
     public static void updateFrame(byte[] jpegData) {
         WearCameraActivity activity = sActivityRef.get();
@@ -47,7 +43,7 @@ public class WearCameraActivity extends Activity {
     }
 
     /**
-     * 🛰️ 强退接口：由 Service 收到手机彻底退出消息时直接调用 (修复找不到符号报错)
+     * 🛰️ 强退接口：由 Service 收到手机彻底退出消息时直接调用
      */
     public static void forceQuitInstance() {
         WearCameraActivity activity = sActivityRef.get();
@@ -79,12 +75,8 @@ public class WearCameraActivity extends Activity {
             });
         }
     
-        // 🎯 优化二：精准点击底部的相机小按钮 ➔ 同样触发拍照
-        Button btnCapture = findViewById(R.id.btn_capture);
-        if (btnCapture == null) {
-            // 兼容你 XML 里的驼峰命名 id：btnCapture
-            btnCapture = findViewById(R.id.btnCapture);
-        }
+        // 🎯 核心修复：彻底删掉不存在的 btn_capture 变量行，直接精准、唯一匹配 XML 里的驼峰 ID btnCapture
+        Button btnCapture = findViewById(R.id.btnCapture); 
         if (btnCapture != null) {
             btnCapture.setOnClickListener(v -> {
                 Log.d(TAG, "📸 用户点击了底部的专属相机按钮 ➔ 下发快门");
@@ -101,7 +93,6 @@ public class WearCameraActivity extends Activity {
             try {
                 if (isUserExiting || imgPreview == null) return;
                 
-                // 将干净的压缩包解码为原生 Bitmap
                 Bitmap bitmap = BitmapFactory.decodeByteArray(jpegData, 0, jpegData.length);
                 if (bitmap != null) {
                     imgPreview.setImageBitmap(bitmap);
@@ -121,7 +112,7 @@ public class WearCameraActivity extends Activity {
                 JSONObject json = new JSONObject();
                 json.put("sender", "wear");
                 json.put("type", "camera_control");
-                json.put("action", actionStr); // "CAPTURE_SHUTTER" 或 "STOP_CAMERA"
+                json.put("action", actionStr);
                 json.put("timestamp", System.currentTimeMillis());
 
                 byte[] payload = json.toString().getBytes(StandardCharsets.UTF_8);
@@ -138,7 +129,7 @@ public class WearCameraActivity extends Activity {
     }
 
     /**
-     * 🧹 撤退清空协议：斩草除根式退出，绝不留任何 Recent Tasks 后台污染
+     * 🧹 撤退清空协议
      */
     private void cleanExit(boolean notifyPhone) {
         if (isUserExiting) return;
@@ -146,32 +137,29 @@ public class WearCameraActivity extends Activity {
         Log.d(TAG, "🧹 正在启动手表相机退出机制，全面清理资源通道...");
 
         if (notifyPhone) {
-            // 如果是用户自己在手表上滑走或者按返回退出的，必须通知手机端关闭相机硬件并摧毁 Channel 管道
             sendControlSignalToPhone("STOP_CAMERA");
         }
 
-        // 解除弱引用绑定
         if (sActivityRef.get() == this) {
             sActivityRef.clear();
         }
 
         if (imgPreview != null) {
-            imgPreview.setImageBitmap(null); // 解除图片资产绑定，供虚拟机全力回收内存
+            imgPreview.setImageBitmap(null);
         }
 
-        // 🏁 核心：执行彻底的销毁并从最近任务列表中彻底抹去残影（核级自杀）
         finishAndRemoveTask();
     }
 
     @Override
     public void onBackPressed() {
-        cleanExit(true); // 拦截返回键，优雅走完清空流程
+        cleanExit(true);
         super.onBackPressed();
     }
 
     @Override
     protected void onDestroy() {
-        cleanExit(true); // 拦截左滑退出，进行终极安全防御
+        cleanExit(true);
         super.onDestroy();
     }
 }
