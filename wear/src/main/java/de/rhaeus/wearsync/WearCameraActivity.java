@@ -148,7 +148,7 @@ public class WearCameraActivity extends Activity {
             imgPreview.setImageBitmap(null);
         }
 
-        finishAndRemoveTask();
+        finish();
     }
 
     @Override
