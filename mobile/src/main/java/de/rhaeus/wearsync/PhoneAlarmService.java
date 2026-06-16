@@ -10,86 +10,149 @@ import android.service.notification.StatusBarNotification;
 import android.util.Log;
 import androidx.annotation.Nullable;
 
+import com.google.android.gms.tasks.Tasks;
+import com.google.android.gms.wearable.Node;
+import com.google.android.gms.wearable.Wearable;
+
+import org.json.JSONObject;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+
 /**
- * 独立解耦的自定义闹钟处理服务。
- * 完美解决手表端点击“关闭”和“延后”无效、对齐双端协议。
- * 动态加载用户自定义的停止/延后关键字，遍历一加/谷歌系统当前的响铃通知，精准触发挂起意图模拟点击。
+ * ⏰ 独立解耦的远端闹钟控制服务（手机端核心逻辑）
+ * 核心职责：
+ * 1. 响应手机闹钟响铃，向手表投递唤醒并全屏弹窗的指令（含重复响铃的二次防护拉起）。
+ * 2. 接收手表回传的 DISMISS / SNOOZE 动作，通过单例动态拉取列表实现高精准代点。
+ * 3. 响应手机端闹钟关闭，同步通知手表彻底销毁界面，保持全周期双端生命周期联锁。
  */
 public class PhoneAlarmService extends Service {
     private static final String TAG = "WearSync_PhoneAlarm";
+    private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
+
+    // 🌟 规范定义的显式指令 Action
+    public static final String ACTION_PHONE_ALARM_RINGING = "de.rhaeus.wearsync.ACTION_ALARM_RINGING";
+    public static final String ACTION_PHONE_ALARM_DISMISSED = "de.rhaeus.wearsync.ACTION_ALARM_DISMISSED";
+    public static final String ACTION_WATCH_ALARM_COMMAND = "de.rhaeus.wearsync.ACTION_WATCH_COMMAND";
+
+    public static final String EXTRA_COMMAND_TYPE = "command_type"; // 取值: "DISMISS" 或 "SNOOZE"
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent == null) {
+        if (intent == null || intent.getAction() == null) {
             stopSelf();
             return START_NOT_STICKY;
         }
 
-        String action = intent.getStringExtra("action");
-        Log.d(TAG, "🔔 独立闹钟服务启动，收到手表动作信令: " + action);
+        String action = intent.getAction();
+        Log.d(TAG, "⚙️ 独立闹钟服务收到指令 Action: " + action);
 
-        if ("DISMISS_ALARM".equalsIgnoreCase(action) || "SNOOZE_ALARM".equalsIgnoreCase(action)) {
-            executeAlarmAction(action);
-        }
+        new Thread(() -> {
+            try {
+                if (ACTION_PHONE_ALARM_RINGING.equals(action)) {
+                    // 手机闹钟响铃 -> 命令手表拉起全屏 UI 并密集震动
+                    sendAlarmSignalToWatch("START_ALARM_UI");
+                } else if (ACTION_PHONE_ALARM_DISMISSED.equals(action)) {
+                    // 手机闹钟主动关闭 -> 强行让手表也停止震动并销毁 UI
+                    sendAlarmSignalToWatch("FORCE_STOP_WEAR_ALARM");
+                } else if (ACTION_WATCH_ALARM_COMMAND.equals(action)) {
+                    // 收到来自手表的代点请求
+                    String command = intent.getStringExtra(EXTRA_COMMAND_TYPE);
+                    if (command != null) {
+                        executeWatchCommandOnPhone(command);
+                    }
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "处理闹钟核心逻辑发生致命异常", e);
+            } finally {
+                stopSelf(); // 任务执行完立即清空自杀，保持纯净
+            }
+        }).start();
 
-        stopSelf();
         return START_NOT_STICKY;
     }
 
-    private void executeAlarmAction(String watchAction) {
+    /**
+     * 🛰️ 跨端发射器：向手表推送闹钟状态交互信令
+     */
+    private void sendAlarmSignalToWatch(String alarmAction) {
         try {
-            // 1. 读取本地偏好设置中的用户自定义内容
-            SharedPreferences prefs = getSharedPreferences("dndsync_prefs", Context.MODE_PRIVATE);
-            
-            // 动态读取自定义闹钟包名，如果没有则采用谷歌时钟和一加时钟作为兜底默认值
-            String customPackages = prefs.getString("custom_alarm_packages", "com.google.android.deskclock,com.oneplus.deskclock");
-            
-            // 动态读取用户自定义停止和延后的匹配关键字（默认简体中文：停止、延后）
-            String dismissKeyword = prefs.getString("custom_dismiss_keyword", "停止");
-            String snoozeKeyword = prefs.getString("custom_snooze_keyword", "延后");
+            JSONObject json = new JSONObject();
+            json.put("sender", "phone");
+            json.put("type", "alarm");
+            json.put("action", alarmAction);
+            json.put("timestamp", System.currentTimeMillis());
 
-            // 2. 获取当前 system 通知栏挂载的所有活跃通知
-            PhoneSyncNotificationService notificationService = PhoneSyncNotificationService.getInstance();
-            if (notificationService == null) {
-                Log.w(TAG, "PhoneSyncNotificationService 尚未就绪，尝试发送系统按键广播兜底模拟中断。");
-                sendBroadcast(new Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS));
-                return;
-            }
-
-            StatusBarNotification[] activeNotifications = notificationService.getActiveNotifications();
-            if (activeNotifications == null) return;
-
-            // 3. 寻找与当前自定义响铃包名相匹配的正在响铃的活跃通知
-            for (StatusBarNotification sbn : activeNotifications) {
-                String pkgName = sbn.getPackageName();
-                
-                // 判断此通知包名是否处于用户自定义的闹钟包名列表内
-                if (customPackages.contains(pkgName)) {
-                    Notification notification = sbn.getNotification();
-                    if (notification.actions == null) continue;
-
-                    // 4. 遍历该闹钟通知自带的所有 Action 动作按钮（如通知栏上的“清除”或“稍后提醒”）
-                    for (Notification.Action action : notification.actions) {
-                        String buttonText = action.title.toString();
-                        
-                        // 场景 A：手表点了关闭 -> 精准匹配用户设定的停止关键字（如包含“停止”、“关闭”、“清除”等）
-                        if ("DISMISS_ALARM".equalsIgnoreCase(watchAction) && buttonText.contains(dismissKeyword)) {
-                            Log.d(TAG, "🎯 成功匹配到手机通知栏停止按钮: [" + buttonText + "]，开始下发挂起意图模拟按下...");
-                            action.actionIntent.send();
-                            return;
-                        }
-                        
-                        // 场景 B：手表点了延后 -> 精准匹配用户设定的延后关键字（如包含“延后”、“稍后提醒”、“贪睡”等）
-                        else if ("SNOOZE_ALARM".equalsIgnoreCase(watchAction) && buttonText.contains(snoozeKeyword)) {
-                            Log.d(TAG, "🎯 成功匹配到手机通知栏延后按钮: [" + buttonText + "]，开始下发挂起意图模拟延时...");
-                            action.actionIntent.send();
-                            return;
-                        }
-                    }
+            byte[] payload = json.toString().getBytes(StandardCharsets.UTF_8);
+            List<Node> nodes = Tasks.await(Wearable.getNodeClient(this).getConnectedNodes());
+            if (nodes != null && !nodes.isEmpty()) {
+                for (Node node : nodes) {
+                    Tasks.await(Wearable.getMessageClient(this).sendMessage(node.getId(), UNIVERSAL_SYNC_PATH, payload));
+                    Log.d(TAG, "🚀 [闹钟同步] 成功向手表推送动作: " + alarmAction + " -> 目标节点: " + node.getDisplayName());
                 }
             }
         } catch (Exception e) {
-            Log.e(TAG, "执行远程自定义关键字匹配关闹钟产生异常", e);
+            Log.e(TAG, "向手表发送闹钟状态信令失败", e);
+        }
+    }
+
+    /**
+     * 🎯 核心高精准代点：通过单例动态拉取通知栏列表，模拟点击对应的 Stop 或 Snooze 动作按钮
+     */
+    private void executeWatchCommandOnPhone(String command) {
+        // 1. 安全提取通知栏哨兵的全局静态单例
+        PhoneSyncNotificationService notificationService = PhoneSyncNotificationService.getInstance();
+        if (notificationService == null) {
+            Log.e(TAG, "❌ 无法执行代点：PhoneSyncNotificationService 单例为空，可能未获取通知栏访问权限！");
+            return;
+        }
+
+        // 2. 动态加载 UI 层的自定义配置项
+        SharedPreferences prefs = getSharedPreferences("wear_sync_prefs", Context.MODE_PRIVATE);
+        String targetPkg = prefs.getString("key_alarm_package_name", "com.google.android.deskclock");
+        
+        // 智能匹配对应的停止/延后关键字
+        String keyword = "DISMISS".equalsIgnoreCase(command) ? 
+                prefs.getString("key_alarm_keyword_stop", "停止") : 
+                prefs.getString("key_alarm_keyword_snooze", "延后");
+
+        Log.d(TAG, "🔍 [精确检索] 开始在通知栏扫描包名 [" + targetPkg + "]，寻找包含关键字 [" + keyword + "] 的动作按钮...");
+
+        try {
+            // 3. 动态拉取当前系统通知栏列表
+            StatusBarNotification[] activeNotifications = notificationService.getActiveNotifications();
+            if (activeNotifications == null || activeNotifications.length == 0) {
+                Log.w(TAG, "⚠️ 手机当前通知栏中没有活动中的通知。");
+                return;
+            }
+
+            boolean isClickedSuccess = false;
+            for (StatusBarNotification sbn : activeNotifications) {
+                if (targetPkg.equalsIgnoreCase(sbn.getPackageName())) {
+                    Notification notification = sbn.getNotification();
+                    if (notification != null && notification.actions != null) {
+                        // 4. 遍历通知中附带的物理动作按钮（如：Action 1 叫 "延后"、Action 2 叫 "停止"）
+                        for (Notification.Action act : notification.actions) {
+                            String actionTitle = act.title != null ? act.title.toString() : "";
+                            
+                            // 5. 智能文本模糊过滤匹配
+                            if (actionTitle.toLowerCase().contains(keyword.toLowerCase())) {
+                                Log.d(TAG, "🎯 [精准代点成功] 匹配到目标按钮: " + actionTitle + "，正在跨进程触发模拟点击！");
+                                act.actionIntent.send(); // 👈 模拟代点核心动作，使手机本地通知消失并执行闹钟逻辑
+                                isClickedSuccess = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (isClickedSuccess) break;
+            }
+
+            if (!isClickedSuccess) {
+                Log.w(TAG, "❌ 未能在目标闹钟通知包名下找到包含关键字 [" + keyword + "] 的操作按钮。");
+            }
+
+        } catch (Exception e) {
+            Log.e(TAG, "模拟代点通知栏按钮产生异常", e);
         }
     }
 
