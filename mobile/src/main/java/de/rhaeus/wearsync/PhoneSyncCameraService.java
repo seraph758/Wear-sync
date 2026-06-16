@@ -24,14 +24,14 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 /**
- * 📸 独立解耦的手机端相机流控服务
+ * 📸 独立解耦的手机端相机流控服务（对齐原有文件名版）
  * 核心职责：
  * 1. 启动时计算手机旋转角度，向手表下发方向锁定指令。
  * 2. 握手成功后开启 Channel 管道，将 NV21 帧高频压缩为 JPEG 并流式发射。
  * 3. 承接快门代点、彻底释放程序，拒绝任何内存和全局方向污染。
  */
 public class PhoneSyncCameraService extends Service implements Camera.PreviewCallback {
-    private static final String TAG = "WearSync_PhoneCamera";
+    private static final String TAG = "WearSync_PhoneSyncCamera";
     private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
     private static final String CAMERA_PREVIEW_STREAM_PATH = "/camera-preview-stream";
 
@@ -74,7 +74,7 @@ public class PhoneSyncCameraService extends Service implements Camera.PreviewCal
 
         new Thread(() -> {
             try {
-                // 1. 初始化手机本地硬件相机 (此处以简洁的Camera1为例展示核心流式打包)
+                // 1. 初始化手机本地硬件相机
                 mCamera = Camera.open(Camera.CameraInfo.CAMERA_FACING_BACK);
                 Camera.Parameters parameters = mCamera.getParameters();
                 parameters.setPreviewSize(640, 480); // 专为手表屏幕优化的低带宽分辨率
@@ -163,11 +163,9 @@ public class PhoneSyncCameraService extends Service implements Camera.PreviewCal
     private void executePhoneShutter() {
         if (mCamera != null) {
             Log.d(TAG, "📸 [快门联动] 接收到手表手势触发，手机本地代点快门拍照！");
-            // 此处调用手机系统的拍照、发出快门音、并执行本地保存图片资产
             mCamera.takePicture(null, null, (data, camera) -> {
                 Log.d(TAG, "💾 照片资产已成功在手机本地持久化落盘。");
-                // 拍照完毕后，重新拉起预览流保持画面连贯
-                if (mCamera != null) mCamera.startPreview();
+                if (mCamera != null) mCamera.startPreview(); // 拍照完毕后重新拉起预览流
             });
         }
     }
@@ -214,7 +212,7 @@ public class PhoneSyncCameraService extends Service implements Camera.PreviewCal
             json.put("sender", "phone");
             json.put("type", "camera_control");
             json.put("action", actionStr);
-            json.put("rotation_degrees", rotation); // 👈 手机端强制控制的画面局部转换矩阵角度
+            json.put("rotation_degrees", rotation); 
 
             byte[] payload = json.toString().getBytes(StandardCharsets.UTF_8);
             List<Node> nodes = Tasks.await(Wearable.getNodeClient(this).getConnectedNodes());
