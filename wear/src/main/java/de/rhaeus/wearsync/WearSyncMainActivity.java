@@ -12,7 +12,7 @@ import org.json.JSONObject;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
-public class WearMainActivity extends Activity {
+public class WearSyncMainActivity extends Activity {
     private static final String TAG = "WearSync_WearMain";
 
     @Override
