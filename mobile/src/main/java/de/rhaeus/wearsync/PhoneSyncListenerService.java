@@ -9,8 +9,9 @@ import org.json.JSONObject;
 import java.nio.charset.StandardCharsets;
 
 /**
- * 🚀 中央信令路由器
- * 职责：作为交通枢纽，完美分发勿扰、闹钟和相机信令。
+ * 🚀 中央信令路由器 (手机端终结对齐版)
+ * 职责：作为交通枢纽，收到手表的原生信令后，负责拉起核心拦截锁并分发显式 Intent，
+ * 至此彻底实现勿扰、闹钟、相机三大核心模块在手机端的完美分发闭环。
  */
 public class PhoneSyncListenerService extends WearableListenerService {
     private static final String TAG = "WearSync_PhoneListener";
@@ -31,9 +32,10 @@ public class PhoneSyncListenerService extends WearableListenerService {
             String type = json.optString("type", "");
             String action = json.optString("action", "");
 
+            // 过滤掉手机自身发出的回环信令
             if ("phone".equalsIgnoreCase(sender)) return; 
 
-            // ================= 🌙 1️⃣ 勿扰同步模块分发 =================
+            // ================= 🌙 1️⃣ 勿扰同步模块完美分发 =================
             if ("dnd".equalsIgnoreCase(type)) {
                 int dndVal = json.optInt("dnd_profile_value", -1);
                 Log.d(TAG, "📥 [信令分发] 收到手表反向勿扰信令，目标系统状态: " + dndVal);
@@ -46,11 +48,9 @@ public class PhoneSyncListenerService extends WearableListenerService {
                 return;
             }
 
-            // ================= ⏰ 2️⃣ 远端闹钟控制模块分发（完美复活） =================
+            // ================= ⏰ 2️⃣ 远端闹钟控制模块分发 =================
             if ("alarm_action".equalsIgnoreCase(type)) {
                 Log.d(TAG, "⏰ [信令分发] 收到手表闹钟反馈动作: " + action + " -> 立即转接至独立闹钟服务进行精准代点");
-                
-                // action 字段携带了来自手表的最高控制口令: "DISMISS" 或 "SNOOZE"
                 Intent alarmIntent = new Intent(this, PhoneAlarmService.class);
                 alarmIntent.setAction(PhoneAlarmService.ACTION_WATCH_ALARM_COMMAND);
                 alarmIntent.putExtra(PhoneAlarmService.EXTRA_COMMAND_TYPE, action); 
@@ -58,10 +58,20 @@ public class PhoneSyncListenerService extends WearableListenerService {
                 return;
             }
 
-            // ================= 📸 3️⃣ 相机控制模块分发（留存框架） =================
+            // ================= 📸 3️⃣ 相机控制模块分发 (完美复活填平) =================
             if ("camera_control".equalsIgnoreCase(type)) {
                 Log.d(TAG, "📸 [信令分发] 收到手表相机控制指令: " + action);
-                // 后续在此扩展相机的双端互相强制退出或心跳等逻辑
+                
+                Intent camIntent = new Intent(this, PhoneCameraService.class);
+                if ("CAPTURE_SHUTTER".equalsIgnoreCase(action)) {
+                    // 手表用户在手表屏幕按下了快门键 -> 吩咐手机代点拍照
+                    camIntent.setAction(PhoneCameraService.ACTION_TRIGGER_SHUTTER);
+                    startService(camIntent);
+                } else if ("STOP_CAMERA".equalsIgnoreCase(action)) {
+                    // 手表用户主动退出了拍照界面 -> 吩咐手机立刻释放相机资源断开数据管道
+                    camIntent.setAction(PhoneCameraService.ACTION_STOP_CAMERA_STREAM);
+                    startService(camIntent);
+                }
                 return;
             }
 
