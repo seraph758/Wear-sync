@@ -59,7 +59,7 @@ public class PhoneSyncListenerService extends WearableListenerService {
             }
 
             // ================= 📸 3️⃣ 相机控制模块分发 (完美复活填平) =================
-            if ("camera_action".equalsIgnoreCase(type)) {
+            if ("camera_control".equalsIgnoreCase(type)) {
                 Log.d(TAG, "📸 [信令分发] 收到手表相机控制指令: " + action);
                 
                 Intent camIntent = new Intent(this, PhoneSyncCameraService.class);
