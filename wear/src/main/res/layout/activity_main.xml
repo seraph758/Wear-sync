@@ -9,23 +9,32 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical">
-
-        <FrameLayout
-            android:id="@+id/settings"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
-
-        <Button
-            android:id="@+id/btn_trigger_camera"
+        android:orientation="vertical"
+        android:background="#111111"
+        android:padding="4dp">
+    
+        <TextView
+            android:id="@+id/tv_notification_status"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:layout_marginBottom="24dp"
-            android:text="唤醒手机相机"
-            android:textSize="14sp"
-            android:backgroundTint="#F57C00"
-            android:textColor="#FFFFFF" />
-
+            android:text="⏳ 勿扰控制权限：检查中..."
+            android:textSize="11sp"
+            android:padding="4dp"/>
+    
+        <TextView
+            android:id="@+id/tv_accessibility_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="⏳ 辅助无障碍核心：检查中..."
+            android:textSize="11sp"
+            android:padding="4dp"/>
+    
+        <TextView
+            android:id="@+id/tv_connection_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="⏳ 手机互联状态：检查中..."
+            android:textSize="11sp"
+            android:padding="4dp"/>
     </LinearLayout>
 </androidx.core.widget.NestedScrollView>
