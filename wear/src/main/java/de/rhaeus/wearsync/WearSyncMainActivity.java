@@ -22,10 +22,10 @@ public class WearSyncMainActivity extends Activity {
         setContentView(R.layout.activity_main); 
 
         // 🎯 修复核心：找到你手表主界面上的那个“唤醒/打开相机”的按钮 ID
-        Button btnLaunchCamera = findViewById(R.id.btn_launch_camera); 
+        Button btnLaunchCamera = findViewById(R.id.btn_trigger_camera); 
         if (btnLaunchCamera == null) {
             // 兼容可能存在的不同 ID 命名
-            btnLaunchCamera = findViewById(R.id.btnCamera);
+            btnLaunchCamera = findViewById(R.id.btn_trigger_camera);
         }
 
         if (btnLaunchCamera != null) {
