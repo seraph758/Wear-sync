@@ -1,82 +1,68 @@
 package de.rhaeus.wearsync;
 
-import android.content.Intent;
 import android.util.Log;
-import androidx.annotation.NonNull;
 import com.google.android.gms.wearable.MessageEvent;
 import com.google.android.gms.wearable.WearableListenerService;
 import org.json.JSONObject;
 import java.nio.charset.StandardCharsets;
 
-/**
- * 🚀 中央信令路由器 (手机端终结对齐版)
- * 职责：作为交通枢纽，收到手表的原生信令后，负责拉起核心拦截锁并分发显式 Intent，
- * 至此彻底实现勿扰、闹钟、相机三大核心模块在手机端的完美分发闭环。
- */
 public class PhoneSyncListenerService extends WearableListenerService {
     private static final String TAG = "WearSync_PhoneListener";
-    private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
-    
-    public static boolean isInternalUpdate = false;
+    public static boolean isInternalUpdate = false; // 原生反向锁
 
     @Override
-    public void onMessageReceived(@NonNull MessageEvent messageEvent) {
-        if (!UNIVERSAL_SYNC_PATH.equalsIgnoreCase(messageEvent.getPath())) return;
-        byte[] data = messageEvent.getData();
-        if (data == null) return;
+    public void onMessageReceived(MessageEvent messageEvent) {
+        if (!"/wear-universal-sync".equals(messageEvent.getPath())) {
+            super.onMessageReceived(messageEvent);
+            return;
+        }
 
         try {
-            String jsonStr = new String(data, StandardCharsets.UTF_8);
+            String jsonStr = new String(messageEvent.getData(), StandardCharsets.UTF_8);
             JSONObject json = new JSONObject(jsonStr);
-            String sender = json.optString("sender", "");
-            String type = json.optString("type", "");
-            String action = json.optString("action", "");
+            String type = json.optString("type");
+            String action = json.optString("action");
 
-            // 过滤掉手机自身发出的回环信令
-            if ("phone".equalsIgnoreCase(sender)) return; 
+            Log.d(TAG, "📥 手机底层收网到信令 -> 类型: " + type + ", 动作: " + action);
 
-            // ================= 🌙 1️⃣ 勿扰同步模块完美分发 =================
-            if ("dnd".equalsIgnoreCase(type)) {
-                int dndVal = json.optInt("dnd_profile_value", -1);
-                Log.d(TAG, "📥 [信令分发] 收到手表反向勿扰信令，目标系统状态: " + dndVal);
-                if (dndVal != -1) {
-                    isInternalUpdate = true;
-                    Intent dndIntent = new Intent(this, PhoneDndService.class);
-                    dndIntent.putExtra("dnd_profile_value", dndVal); 
-                    startService(dndIntent);
+            // 1. DND 模块反向同步
+            if ("dnd".equals(type)) {
+                int state = json.optInt("dnd_state", -1);
+                if (state != -1) {
+                    isInternalUpdate = true; // 激活内部更新锁，防止无限回环循环同步
+                    PhoneDndManager.handleIncomingAction(this, state);
+                    
+                    // 缓冲 1 秒后释放锁
+                    new Thread(() -> {
+                        try { Thread.sleep(1000); } catch (InterruptedException ignored) {}
+                        isInternalUpdate = false;
+                    }).start();
                 }
-                return;
-            }
-
-            // ================= ⏰ 2️⃣ 远端闹钟控制模块分发 =================
-            if ("alarm_action".equalsIgnoreCase(type)) {
-                Log.d(TAG, "⏰ [信令分发] 收到手表闹钟反馈动作: " + action + " -> 立即转接至独立闹钟服务进行精准代点");
-                Intent alarmIntent = new Intent(this, PhoneAlarmService.class);
-                alarmIntent.setAction(PhoneAlarmService.ACTION_WATCH_ALARM_COMMAND);
-                alarmIntent.putExtra(PhoneAlarmService.EXTRA_COMMAND_TYPE, action); 
-                startService(alarmIntent);
-                return;
-            }
-
-            // ================= 📸 3️⃣ 相机控制模块分发 (完美复活填平) =================
-            if ("camera_control".equalsIgnoreCase(type)) {
-                Log.d(TAG, "📸 [信令分发] 收到手表相机控制指令: " + action);
-                
-                Intent camIntent = new Intent(this, PhoneSyncCameraService.class);
-                if ("CAPTURE_SHUTTER".equalsIgnoreCase(action)) {
-                    // 手表用户在手表屏幕按下了快门键 -> 吩咐手机代点拍照
-                    camIntent.setAction(PhoneSyncCameraService.ACTION_TRIGGER_SHUTTER);
-                    startService(camIntent);
-                } else if ("STOP_CAMERA".equalsIgnoreCase(action)) {
-                    // 手表用户主动退出了拍照界面 -> 吩咐手机立刻释放相机资源断开数据管道
-                    camIntent.setAction(PhoneSyncCameraService.ACTION_STOP_CAMERA_STREAM);
-                    startService(camIntent);
+            } 
+            // 2. 闹钟模块：代点匹配关键字
+            else if ("alarm".equals(type)) {
+                if ("ACTION_WATCH_ALARM_COMMAND".equalsIgnoreCase(action) || json.has("command_type")) {
+                    String commandType = json.optString("command_type", "DISMISS");
+                    PhoneAlarmManager.handleWatchCommand(this, commandType);
+                } else if ("FORCE_STOP_PHONE_ALARM".equalsIgnoreCase(action)) {
+                    PhoneAlarmManager.handleWatchCommand(this, "DISMISS");
                 }
-                return;
+            } 
+            // 3. 相机模块
+            else if ("camera".equals(type)) {
+                if ("START_CAMERA_UI".equalsIgnoreCase(action)) {
+                    android.content.Intent cIntent = new android.content.Intent();
+                    cIntent.setClassName(getPackageName(), "de.rhaeus.wearsync.PhoneSyncCameraActivity");
+                    cIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK | android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                    startActivity(cIntent);
+                } else if ("STOP_CAMERA_STREAM".equalsIgnoreCase(action)) {
+                    android.content.Intent stopIntent = new android.content.Intent("de.rhaeus.wearsync.ACTION_STOP_CAMERA_STREAM");
+                    sendBroadcast(stopIntent);
+                }
             }
 
         } catch (Exception e) {
-            Log.e(TAG, "中央路由器解析手表消息失败", e);
+            Log.e(TAG, "通道解析多端协同信令失败", e);
         }
     }
 }
