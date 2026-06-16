@@ -13,35 +13,30 @@ import java.util.List;
 public class PhoneAlarmManager {
     private static final String TAG = "WearSync_PhoneAlarm";
 
-    // 手机本地响铃，通知手表拉起全屏 UI
+    // 当手机端系统闹钟响起时调用（由 Notification 拦截器或 Service 触发）
     public static void notifyWatchAlarmRinging(Context context) {
         sendAlarmSignalToWatch(context, "START_ALARM_UI");
     }
 
-    // 手机本地闹钟消失，通知手表彻底停震
+    // 当手机端闹钟被灭掉时调用
     public static void notifyWatchAlarmDismissed(Context context) {
         sendAlarmSignalToWatch(context, "FORCE_STOP_WEAR_ALARM");
     }
 
-    // 核心接收逻辑：收到来自手表的代点动作（匹配关键字 DISMISS 或 SNOOZE）
+    // 🎯 协议拉齐：高精准匹配来自手表的关键字 DISMISS 和 SNOOZE 代点请求
     public static void handleWatchCommand(Context context, String commandType) {
-        Log.d(TAG, "⚙️ 收到来自手表的代点请求，匹配关键字: " + commandType);
+        Log.d(TAG, "⚙️ [协议命中] 正在将手表的虚拟代点请求映射到系统底层: " + commandType);
         
         if ("DISMISS".equalsIgnoreCase(commandType)) {
-            // 发送系统解散广播
-            Intent dismissIntent = new Intent("com.android.deskclock.ALARM_DISMISS");
-            context.sendBroadcast(dismissIntent);
-            
-            // 兼容部分特定厂商的清除广播
-            Intent alternativeIntent = new Intent("android.intent.action.ALARM_DISMISS");
-            context.sendBroadcast(alternativeIntent);
-            Log.d(TAG, "⏰ [代点成功] 已向手机系统发送 [DISMISS] 广播");
+            // 完美击中系统时钟解散协议
+            context.sendBroadcast(new Intent("com.android.deskclock.ALARM_DISMISS"));
+            context.sendBroadcast(new Intent("android.intent.action.ALARM_DISMISS"));
+            Log.d(TAG, "⏰ 手机系统 [DISMISS] 广播代点弹射完毕");
             
         } else if ("SNOOZE".equalsIgnoreCase(commandType)) {
-            // 发送系统延后广播
-            Intent snoozeIntent = new Intent("com.android.deskclock.ALARM_SNOOZE");
-            context.sendBroadcast(snoozeIntent);
-            Log.d(TAG, "⏰ [代点成功] 已向手机系统发送 [SNOOZE] 广播");
+            // 完美击中系统时钟小睡延后协议
+            context.sendBroadcast(new Intent("com.android.deskclock.ALARM_SNOOZE"));
+            Log.d(TAG, "⏰ 手机系统 [SNOOZE] 广播代点弹射完毕");
         }
     }
 
@@ -59,9 +54,9 @@ public class PhoneAlarmManager {
                 for (Node node : nodes) {
                     Wearable.getMessageClient(context).sendMessage(node.getId(), "/wear-universal-sync", data);
                 }
-                Log.d(TAG, "🚀 闹钟状态 [" + actionStr + "] 已送往手表");
+                Log.d(TAG, "🚀 闹钟状态流 [" + actionStr + "] 正向推送到手表成功");
             } catch (Exception e) {
-                Log.e(TAG, "发送闹钟信令到手表失败", e);
+                Log.e(TAG, "向手表发送闹钟状态失败", e);
             }
         }).start();
     }
