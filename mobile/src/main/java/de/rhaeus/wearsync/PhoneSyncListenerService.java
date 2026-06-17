@@ -26,9 +26,8 @@ public class PhoneSyncListenerService extends WearableListenerService {
 
             Log.d(TAG, "📥 手机底层骨干网收到信令 -> type: " + type + ", action: " + action);
 
-            // 1. ☯️ 勿扰反向同步协议拉齐
+            // 1. ☯️ 勿扰反向同步
             if ("dnd".equalsIgnoreCase(type)) {
-                // 同时兼容读取 dnd_state 和 dnd_profile_value，阻断任何因拼写不一致导致的失效
                 int state = json.has("dnd_state") ? json.optInt("dnd_state", -1) : json.optInt("dnd_profile_value", -1);
                 if (state != -1) {
                     isInternalUpdate = true;
@@ -40,22 +39,28 @@ public class PhoneSyncListenerService extends WearableListenerService {
                     }).start();
                 }
             } 
-            // 2. ⏰ 闹钟反向代点协议拉齐
+            // 2. ⏰ 闹钟反向代点
             else if ("alarm".equalsIgnoreCase(type) || "alarm_action".equalsIgnoreCase(type)) {
-                // 完美匹配来自手表的 action（DISMISS / SNOOZE）
                 if ("DISMISS".equalsIgnoreCase(action) || "SNOOZE".equalsIgnoreCase(action)) {
                     PhoneAlarmManager.handleWatchCommand(this, action);
                 }
             } 
-            // 3. 📸 相机唤醒与释放协议拉齐
-            else if ("camera".equalsIgnoreCase(type)) {
+            // 3. 📸 相机唤醒与释放协议（★核心重构点：手錶直接拉起手機端 Activity 跳板★）
+            else if ("camera".equalsIgnoreCase(type) || "camera_control".equalsIgnoreCase(type)) {
                 if ("START_CAMERA_UI".equalsIgnoreCase(action)) {
-                    Log.d(TAG, "📸 收到手表开机口令，正在全速拉开相机前台画布Activity...");
-                    Intent cIntent = new Intent();
-                    cIntent.setClassName(getPackageName(), "de.rhaeus.wearsync.PhoneSyncCameraActivity");
-                    cIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-                    startActivity(cIntent);
-                } else if ("STOP_CAMERA_STREAM".equalsIgnoreCase(action)) {
+                    Log.d(TAG, "🚀 [核心重构] 收到手表拍照口令！拒绝后启动，直接将手机主控 Activity 拽到前台...");
+                    
+                    // 🎯 核心改变：拉起手机主界面，而非直接拉起后台预览
+                    Intent clIntent = new Intent();
+                    clIntent.setClassName(getPackageName(), "de.rhaeus.wearsync.PhoneSyncMainActivity");
+                    clIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK 
+                                    | Intent.FLAG_ACTIVITY_CLEAR_TOP 
+                                    | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                    clIntent.putExtra("INTERNAL_CMD", "LAUNCH_CAMERA_SERVICE_FROM_FOREGROUND");
+                    startActivity(clIntent);
+
+                } else if ("STOP_CAMERA".equalsIgnoreCase(action) || "STOP_CAMERA_STREAM".equalsIgnoreCase(action)) {
+                    Log.d(TAG, "🛑 收到手表断开要求，下发本地广播释放手机端相机服务");
                     sendBroadcast(new Intent("de.rhaeus.wearsync.ACTION_STOP_CAMERA_STREAM"));
                 }
             }
