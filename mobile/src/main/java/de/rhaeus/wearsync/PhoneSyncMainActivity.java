@@ -15,9 +15,6 @@ public class PhoneSyncMainActivity extends AppCompatActivity {
         return instance;
     }
 
-    /**
-     * 🎯 核心新增：专门给外部分流或 Service 销毁时调用的“闭幕式”清理函数
-     */
     public static void closeAndReleaseScreenLock() {
         if (instance != null) {
             instance.runOnUiThread(() -> {
@@ -26,7 +23,6 @@ public class PhoneSyncMainActivity extends AppCompatActivity {
                     if (instance.getWindow() != null) {
                         instance.getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
                     }
-                    // 彻底关闭自己，让一加系统可以顺利将屏幕熄屏睡眠
                     instance.finish();
                 } catch (Exception e) {
                     Log.e(TAG, "卸载屏幕锁发生异常", e);
@@ -53,25 +49,28 @@ public class PhoneSyncMainActivity extends AppCompatActivity {
             ft.commit();
         }
 
-        handleIncomingIntent(getIntent());
+        // 🎯 规范化对齐：统一调用 handleIncomingCommand 
+        handleIncomingCommand(getIntent());
     }
 
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
-        handleIncomingIntent(intent);
+        // 🎯 确保热启动状态下收到手表的跳板指令也能响应
+        handleIncomingCommand(intent);
     }
 
     private void handleIncomingCommand(Intent intent) {
-    if (intent != null && "LAUNCH_CAMERA_SERVICE_FROM_FOREGROUND".equals(intent.getStringExtra("INTERNAL_CMD"))) {
-        Log.d("PhoneSync_UI", "🟢 應用已安全立足於前台！現在名正言順啟動拍照服務與混合協議傳輸。");
-        
-        Intent cameraServiceIntent = new Intent(this, PhoneSyncCameraService.class);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(cameraServiceIntent);
-        } else {
-            startService(cameraServiceIntent);
+        if (intent != null && "LAUNCH_CAMERA_SERVICE_FROM_FOREGROUND".equals(intent.getStringExtra("INTERNAL_CMD"))) {
+            Log.d(TAG, "🟢 应用已安全立足于前台！现在名正言顺启动拍照服务与混合协议传输。");
+            
+            // 🎯 这里去调起负责开启相机和建立 Channel Client 通道的服务
+            Intent cameraServiceIntent = new Intent(this, PhoneSyncCameraService.class);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(cameraServiceIntent);
+            } else {
+                startService(cameraServiceIntent);
             }
         }
     }
