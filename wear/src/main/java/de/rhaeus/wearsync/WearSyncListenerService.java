@@ -38,11 +38,9 @@ public class WearSyncListenerService extends WearableListenerService {
 
             // ================= 🌙 1️⃣ 勿扰模式协议完美校准 =================
             if ("dnd".equalsIgnoreCase(type)) {
-                // 🎯 协议拉齐：读取手机端发出的 dnd_state 字段
                 int phoneDndState = json.optInt("dnd_state", -1);
                 Log.d(TAG, "📥 [勿扰信令] 收到手机正向同步勿扰状态: " + phoneDndState);
                 if (phoneDndState != -1) {
-                    // 执行无障碍自动化模拟剧本
                     WearSyncAccessService serv = WearSyncAccessService.getSharedInstance();
                     if (serv != null) {
                         new Thread(() -> {
@@ -80,7 +78,7 @@ public class WearSyncListenerService extends WearableListenerService {
             }
 
             // ================= 📸 3️⃣ 相机主控协议连通 =================
-            if ("camera_control".equalsIgnoreCase(type)) {
+            if ("camera_control".equalsIgnoreCase(type) || "camera".equalsIgnoreCase(type)) {
                 Log.d(TAG, "📥 [相机信令] 收到主控动作: " + action);
                 if ("START_CAMERA".equalsIgnoreCase(action)) {
                     int rotationDegrees = json.optInt("rotation_degrees", 0);
@@ -88,8 +86,13 @@ public class WearSyncListenerService extends WearableListenerService {
                     camIntent.putExtra("rotation_degrees", rotationDegrees);
                     camIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
                     startActivity(camIntent);
-                } else if ("FORCE_QUIT_CAMERA".equalsIgnoreCase(action)) {
-                    WearCameraActivity.forceQuitInstance();
+                } 
+                // 🎯 核心对齐：全面接收来自手机点击关闭相机的毁灭性信令
+                else if ("FORCE_QUIT_CAMERA".equalsIgnoreCase(action) || "STOP_CAMERA_ACTIVE".equalsIgnoreCase(action)) {
+                    Log.d(TAG, "🛑 收到手机下发的明确关闭命令，下发手錶本地广播清退相机...");
+                    Intent killIntent = new Intent("de.rhaeus.wearsync.ACTION_KILL_WEAR_CAMERA");
+                    sendBroadcast(killIntent);
+                    WearCameraActivity.forceQuitInstance(); // 双重兜底清理
                 }
                 return;
             }
@@ -128,7 +131,7 @@ public class WearSyncListenerService extends WearableListenerService {
                     WearCameraActivity.updateFrame(jpegPayload);
                 }
             } catch (Exception ignored) {
-            } finally {
+            } finaly {
                 if (inputStream != null) {
                     try { inputStream.close(); } catch (Exception ignored) {}
                 }
