@@ -32,7 +32,7 @@ public class WearSyncMainActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        // 1. 初始化全量加回的生命线检测看板组件（请确保在 activity_main.xml 顶端加了这三个 TextView）
+        // 1. 初始化三大核心看板组件
         tvNotificationStatus = findViewById(R.id.tv_notification_status);
         tvAccessibilityStatus = findViewById(R.id.tv_accessibility_status);
         tvConnectionStatus = findViewById(R.id.tv_connection_status);
@@ -58,24 +58,21 @@ public class WearSyncMainActivity extends Activity {
             });
         }
 
-        // 3. 挂载原生的设置项Fragment
-        // 🎯 修复重点 1：将错误的 R.id.settings 修改为手表端原生定义的 R.id.content_frame
+        // 3. 挂载原生的设置项 Fragment
         if (savedInstanceState == null) {
             getFragmentManager().beginTransaction()
                     .replace(R.id.content_frame, new WearSyncMainFragment())
                     .commit();
         }
 
-        // 4. 绑定相机按钮并校准双端连通协议
-        // 🎯 修复重点 2：将错误的 R.id.btn_trigger_camera 修改为手表端原生定义的 R.id.camera_button
+        // 4. 绑定相机唤醒按钮，执行双向拉齐控制协议
         Button btnLaunchCamera = findViewById(R.id.camera_button);
         if (btnLaunchCamera != null) {
             btnLaunchCamera.setOnClickListener(v -> {
-                Log.d(TAG, "🚀 用户点击唤醒相机：执行全链路拉齐协议发送...");
-                // 发送给手机底层通道，告诉手机立刻把相机 Activity 拉起来
+                Log.d(TAG, "🚀 用户点击唤醒相机：执行双向协议连通...");
+                // 🎯 协议对齐：发送给手机统一底层通用通道拦截器
                 sendActionToPhone("camera", "START_CAMERA_UI");
 
-                // 手表本地同步进入相机预览流 Activity
                 Intent intent = new Intent(WearSyncMainActivity.this, WearCameraActivity.class);
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
                 startActivity(intent);
@@ -86,7 +83,7 @@ public class WearSyncMainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        // 每次返回主界面，全量刷新三大核心健康度状态
+        // 界面重新可见时，高频刷新三大生命线状态
         checkAllPermissionsAndLinks();
     }
 
