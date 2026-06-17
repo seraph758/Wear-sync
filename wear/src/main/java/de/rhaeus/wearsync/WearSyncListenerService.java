@@ -2,7 +2,9 @@ package de.rhaeus.wearsync;
 
 import android.content.Context;
 import android.content.Intent;
+import android.media.AudioManager;
 import android.os.PowerManager;
+import android.provider.Settings;
 import android.util.Log;
 import androidx.annotation.NonNull;
 import com.google.android.gms.tasks.Tasks;
@@ -36,28 +38,66 @@ public class WearSyncListenerService extends WearableListenerService {
 
             if ("wear".equalsIgnoreCase(sender)) return;
 
-            // ================= 🌙 1️⃣ 勿扰模式协议完美校准 =================
-            if ("dnd".equalsIgnoreCase(type)) {
-                int phoneDndState = json.optInt("dnd_state", -1);
-                Log.d(TAG, "📥 [勿扰信令] 收到手机正向同步勿扰状态: " + phoneDndState);
-                if (phoneDndState != -1) {
-                    WearSyncAccessService serv = WearSyncAccessService.getSharedInstance();
-                    if (serv != null) {
-                        new Thread(() -> {
-                            try {
+            // ================= 🧠 終極重構：雙端 Bitmask 狀態矩陣解耦分流器 =================
+            if ("status_mask".equalsIgnoreCase(type) || json.has("status_mask") || "dnd".equalsIgnoreCase(type)) {
+                // 優先讀取綜合 mask，若無則降級兼容舊勿擾欄位
+                int statusMask = json.optInt("status_mask", -1);
+                if (statusMask == -1 && json.has("dnd_state")) {
+                    int dndState = json.optInt("dnd_state", 0);
+                    statusMask = (dndState > 0) ? 0x01 : 0x00;
+                }
+
+                if (statusMask != -1) {
+                    final int finalMask = statusMask;
+                    Log.d(TAG, "📥 [骨幹矩陣信令] 手錶解析到手機同步 Mask: " + finalMask + " (二進制: " + Integer.toBinaryString(finalMask) + ")");
+                    
+                    new Thread(() -> {
+                        try {
+                            // 1. 【勿擾模式校準】 檢查第 1 位 (0x01)
+                            boolean dndEnabled = (finalMask & 0x01) != 0;
+                            Log.d(TAG, " 🌗 矩陣分流 ➔ 勿擾模式狀態: " + dndEnabled);
+                            WearSyncAccessService serv = WearSyncAccessService.getSharedInstance();
+                            if (serv != null) {
+                                // 觸發無障礙自動點擊同步
                                 serv.swipeDown(); Thread.sleep(600);
                                 serv.clickIcon1_2(); Thread.sleep(500);
-                                serv.goBack();
-                            } catch (Exception ignored) {}
-                        }).start();
-                    }
+                                serv.goBack(); Thread.sleep(500);
+                            }
+
+                            // 2. 【就寢/睡眠模式校準】 檢查第 2 位 (0x02)
+                            boolean bedtimeEnabled = (finalMask & 0x02) != 0;
+                            Log.d(TAG, " 🛌 矩陣分流 ➔ 就寢模式狀態: " + bedtimeEnabled);
+                            Settings.Global.putInt(getContentResolver(), "bedtime_mode", bedtimeEnabled ? 1 : 0);
+
+                            // 3. 【同步震動模式校準】 檢查第 3 位 (0x04)
+                            boolean vibrateEnabled = (finalMask & 0x04) != 0;
+                            Log.d(TAG, " 📳 矩陣分流 ➔ 震動狀態: " + vibrateEnabled);
+                            AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+                            if (am != null) {
+                                am.setRingerMode(vibrateEnabled ? AudioManager.RINGER_MODE_VIBRATE : AudioManager.RINGER_MODE_NORMAL);
+                            }
+
+                            // 4. 【系統省電模式校準】 檢查第 4 位 (0x08)
+                            boolean powerSaveEnabled = (finalMask & 0x08) != 0;
+                            Log.d(TAG, " 🔋 矩陣分流 ➔ 系統省電模式狀態: " + powerSaveEnabled);
+                            String powerValue = powerSaveEnabled ? "1" : "0";
+                            // 利用 ADB 授予的 WRITE_SECURE_SETTINGS 權限雙域協同寫入
+                            Settings.Global.putString(getContentResolver(), "low_power", powerValue);
+                            Settings.Secure.putString(getContentResolver(), "low_power", powerValue);
+
+                        } catch (Exception e) {
+                            Log.e(TAG, "🔴 手錶執行矩陣指令時遭遇中斷或權限拒絕", e);
+                        }
+                    }).start();
                 }
-                return;
+                
+                // 如果純粹是狀態同步，解析完 mask 即可返回；若含舊型 dnd 字段則不影響向下執行
+                if ("status_mask".equalsIgnoreCase(type)) return;
             }
 
-            // ================= ⏰ 2️⃣ 远端闹钟核心连通协议 =================
+            // ================= ⏰ 2️⃣ 遠端鬧鐘核心連通協議 =================
             if ("alarm".equalsIgnoreCase(type)) {
-                Log.d(TAG, "📥 [闹钟信令] 收到控制动作: " + action);
+                Log.d(TAG, "📥 [鬧鐘信令] 收到控制動作: " + action);
                 if ("START_ALARM_UI".equalsIgnoreCase(action)) {
                     PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
                     if (pm != null) {
@@ -77,9 +117,9 @@ public class WearSyncListenerService extends WearableListenerService {
                 return;
             }
 
-            // ================= 📸 3️⃣ 相机主控协议连通 =================
+            // ================= 📸 3️⃣ 相機主控協議連通 =================
             if ("camera_control".equalsIgnoreCase(type) || "camera".equalsIgnoreCase(type)) {
-                Log.d(TAG, "📥 [相机信令] 收到主控动作: " + action);
+                Log.d(TAG, "📥 [相機信令] 收到主控動作: " + action);
                 if ("START_CAMERA".equalsIgnoreCase(action)) {
                     int rotationDegrees = json.optInt("rotation_degrees", 0);
                     Intent camIntent = new Intent(this, WearCameraActivity.class);
@@ -87,18 +127,17 @@ public class WearSyncListenerService extends WearableListenerService {
                     camIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
                     startActivity(camIntent);
                 } 
-                // 🎯 核心对齐：全面接收来自手机点击关闭相机的毁灭性信令
                 else if ("FORCE_QUIT_CAMERA".equalsIgnoreCase(action) || "STOP_CAMERA_ACTIVE".equalsIgnoreCase(action)) {
-                    Log.d(TAG, "🛑 收到手机下发的明确关闭命令，下发手錶本地广播清退相机...");
+                    Log.d(TAG, "🛑 收到手機下發的明確關閉命令，下發手錶本地廣播清退相機...");
                     Intent killIntent = new Intent("de.rhaeus.wearsync.ACTION_KILL_WEAR_CAMERA");
                     sendBroadcast(killIntent);
-                    WearCameraActivity.forceQuitInstance(); // 双重兜底清理
+                    WearCameraActivity.forceQuitInstance(); // 雙重兜底清理
                 }
                 return;
             }
 
         } catch (Exception e) {
-            Log.e(TAG, "手表骨干路由分发异常", e);
+            Log.e(TAG, "手錶骨幹路由分發異常", e);
         }
     }
 
@@ -131,7 +170,7 @@ public class WearSyncListenerService extends WearableListenerService {
                     WearCameraActivity.updateFrame(jpegPayload);
                 }
             } catch (Exception ignored) {
-            } finaly {
+            } finally {
                 if (inputStream != null) {
                     try { inputStream.close(); } catch (Exception ignored) {}
                 }
