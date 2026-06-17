@@ -1,6 +1,5 @@
 package de.rhaeus.wearsync;
 
-import android.app.Activity;
 import android.app.NotificationManager;
 import android.content.Context;
 import android.content.Intent;
@@ -12,6 +11,8 @@ import android.util.Log;
 import android.widget.Button;
 import android.widget.TextView;
 
+import androidx.fragment.app.FragmentActivity;
+
 import com.google.android.gms.tasks.Tasks;
 import com.google.android.gms.wearable.Node;
 import com.google.android.gms.wearable.Wearable;
@@ -20,7 +21,7 @@ import org.json.JSONObject;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
-public class WearSyncMainActivity extends Activity {
+public class WearSyncMainActivity extends FragmentActivity {
     private static final String TAG = "WearSync_WearMain";
     
     private TextView tvNotificationStatus;
@@ -32,7 +33,7 @@ public class WearSyncMainActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        // 1. 初始化三大核心看板组件
+        // 1. 初始化看板组件
         tvNotificationStatus = findViewById(R.id.tv_notification_status);
         tvAccessibilityStatus = findViewById(R.id.tv_accessibility_status);
         tvConnectionStatus = findViewById(R.id.tv_connection_status);
@@ -58,19 +59,18 @@ public class WearSyncMainActivity extends Activity {
             });
         }
 
-        // 3. 挂载原生的设置项 Fragment
+        // 3. 使用安全的支持库管理器挂载原生的设置项 Fragment，完美解决类型转换报错
         if (savedInstanceState == null) {
-            getFragmentManager().beginTransaction()
+            getSupportFragmentManager().beginTransaction()
                     .replace(R.id.content_frame, new WearSyncMainFragment())
                     .commit();
         }
 
-        // 4. 绑定相机唤醒按钮，执行双向拉齐控制协议
+        // 4. 绑定相机唤醒按钮
         Button btnLaunchCamera = findViewById(R.id.camera_button);
         if (btnLaunchCamera != null) {
             btnLaunchCamera.setOnClickListener(v -> {
                 Log.d(TAG, "🚀 用户点击唤醒相机：执行双向协议连通...");
-                // 🎯 协议对齐：发送给手机统一底层通用通道拦截器
                 sendActionToPhone("camera", "START_CAMERA_UI");
 
                 Intent intent = new Intent(WearSyncMainActivity.this, WearCameraActivity.class);
@@ -83,12 +83,10 @@ public class WearSyncMainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        // 界面重新可见时，高频刷新三大生命线状态
         checkAllPermissionsAndLinks();
     }
 
     private void checkAllPermissionsAndLinks() {
-        // A. 检查勿扰控制通知权限
         NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         if (tvNotificationStatus != null) {
             if (nm != null && nm.isNotificationPolicyAccessGranted()) {
@@ -100,7 +98,6 @@ public class WearSyncMainActivity extends Activity {
             }
         }
 
-        // B. 检查无障碍防吞自动模拟点击权限
         if (tvAccessibilityStatus != null) {
             if (isAccessibilityServiceEnabled()) {
                 tvAccessibilityStatus.setText("🟢 辅助无障碍核心：已激活");
@@ -111,7 +108,6 @@ public class WearSyncMainActivity extends Activity {
             }
         }
 
-        // C. 检查与手机的谷歌骨干网互联状态
         if (tvConnectionStatus != null) {
             Wearable.getNodeClient(this).getConnectedNodes()
                 .addOnSuccessListener(nodes -> {
