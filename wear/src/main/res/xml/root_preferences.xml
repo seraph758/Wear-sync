@@ -39,7 +39,13 @@
             android:title="同步勿擾模式"
             android:visible="false"
             app:iconSpaceReserved="false" />
-
+        <SwitchPreferenceCompat
+            android:key="battery_saver_sync_key"
+            android:title="系統省電模式"
+            android:summary="物理讀寫手錶低功耗省電開關"
+            android:defaultValue="false"
+            app:iconSpaceReserved="false" />
+        
         <SwitchPreferenceCompat
             android:defaultValue="true"
             android:key="bedtime_key"
