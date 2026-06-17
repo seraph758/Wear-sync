@@ -38,32 +38,33 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
         super.onDestroy();
     }
 
+    // 💡 修改手機端 PhoneSyncNotificationService.java
     @Override
     public void onNotificationPosted(StatusBarNotification sbn) {
-        super.onNotificationPosted(sbn);
-        if (sbn == null) return;
-
-        // ⏰ 1. 验证闹钟同步总开关
-        SharedPreferences prefs = getSharedPreferences("wear_sync_prefs", Context.MODE_PRIVATE);
-        boolean isAlarmSyncOn = prefs.getBoolean("key_alarm_sync_master", true);
-        if (!isAlarmSyncOn) return;
-
-        // ⏰ 2. 匹配自定义闹钟包名
-        String targetPkg = prefs.getString("key_alarm_package_name", "com.google.android.deskclock");
-        if (targetPkg.equalsIgnoreCase(sbn.getPackageName())) {
-
-            // 🎯 【精准过滤预告通知算法】：
-            // 真实的闹钟响铃通知必然满足两个硬条件：一是正在运行中（isOngoing），二是绝对无法被清除（!isClearable）
-            if (sbn.isOngoing() && !sbn.isClearable()) {
-                Log.d(TAG, "⏰ [哨兵拦截] 检测到目标闹钟包名正在进入真实响铃状态: " + sbn.getPackageName());
-
-                // 🌟 干净平移：直接使用新重构的管理类静态方法发送响铃信令
-                PhoneAlarmManager.notifyWatchAlarmRinging(this);
-
-            } else {
-                Log.d(TAG, "⏳ [哨兵拦截] 目标闹钟产生通知，但判定为「预告通知」或「非响铃状态」，已自动安全过滤。");
+        String packageName = sbn.getPackageName();
+        
+        // 判斷是否為常見的系統鬧鐘包名
+        if ("com.google.android.deskclock".equals(packageName) 
+            || "com.coloros.alarmclock".equals(packageName) 
+            || "com.android.deskclock".equals(packageName)) {
+            
+            Notification notification = sbn.getNotification();
+            
+            // 🎯 核心看門狗：利用真正的鬧鐘響鈴核心特徵進行嚴格過濾
+            boolean isInsistent = (notification.flags & Notification.FLAG_INSISTENT) != 0;
+            boolean isOngoing = (notification.flags & Notification.FLAG_ONGOING_EVENT) != 0;
+            boolean isAlarmCategory = Notification.CATEGORY_ALARM.equals(notification.category);
+    
+            // 如果不是正在轟鳴的正式鬧鐘事件，直接攔截並就地正法，絕不傳遞給手錶
+            if (!isInsistent && !isOngoing && !isAlarmCategory) {
+                Log.d("PhoneSync_Alarm", "🚫 [精準攔截] 檢測到該通知為鬧鐘預告/非響鈴事件，直接過濾，不發往手錶。");
+                return; 
             }
+    
+            Log.d("PhoneSync_Alarm", "🔥 [放行轟鳴] 檢測到真正的鬧鐘響鈴事件！Flags: " + notification.flags);
         }
+    
+        // 只有通過上方驗證的真正響鈴事件，才會繼續往下走原有的 MessageClient 傳輸邏輯...
     }
 
     @Override
