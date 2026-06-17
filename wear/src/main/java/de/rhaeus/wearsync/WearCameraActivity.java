@@ -1,8 +1,13 @@
 package de.rhaeus.wearsync;
 
 import android.app.Activity;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
 import android.widget.Button;
@@ -18,9 +23,6 @@ import java.lang.ref.WeakReference;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
-/**
- * 📸 手表端独立解耦相机全屏交互舱
- */
 public class WearCameraActivity extends Activity {
     private static final String TAG = "WearSync_WearCameraUI";
     private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
@@ -29,12 +31,19 @@ public class WearCameraActivity extends Activity {
     private int mRotationDegrees = 0;
     private boolean isUserExiting = false;
 
-    // 弱引用持有当前活动实例，防止 Activity 内存泄漏
     private static WeakReference<WearCameraActivity> sActivityRef = new WeakReference<>(null);
 
-    /**
-     * 🛰️ 高速外部泵入接口：由 Service 线程直接高频调用
-     */
+    // 🎯 核心重构：增加本地看门狗广播接收器，响应由 Service 转发来的手机关闭信令
+    private final BroadcastReceiver phoneKillReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if ("de.rhaeus.wearsync.ACTION_KILL_WEAR_CAMERA".equals(intent.getAction())) {
+                Log.d(TAG, "🏳️ 收到手机端关闭指令的本地广播，手錶端 Camera UI 无条件自杀退出...");
+                cleanExit(false); // 手机端关的，不需要重复反向通知手机
+            }
+        }
+    };
+
     public static void updateFrame(byte[] jpegData) {
         WearCameraActivity activity = sActivityRef.get();
         if (activity != null && jpegData != null) {
@@ -42,13 +51,10 @@ public class WearCameraActivity extends Activity {
         }
     }
 
-    /**
-     * 🛰️ 强退接口：由 Service 收到手机彻底退出消息时直接调用
-     */
     public static void forceQuitInstance() {
         WearCameraActivity activity = sActivityRef.get();
         if (activity != null) {
-            Log.d(TAG, "🛑 收到手机端强迫退出指令，触发核级自杀退出...");
+            Log.d(TAG, "🛑 触发兜底自杀退出...");
             activity.cleanExit(false);
         }
     }
@@ -63,10 +69,9 @@ public class WearCameraActivity extends Activity {
         imgPreview = findViewById(R.id.img_camera_preview);
     
         if (imgPreview != null && mRotationDegrees != 0) {
-            imgPreview.setRotation(mRotationDegrees); // 硬件加速旋转
+            imgPreview.setRotation(mRotationDegrees);
         }
     
-        // 🎯 优化一：点击全屏空白处 ➔ 触发拍照
         RelativeLayout rootLayout = findViewById(R.id.layout_camera_root);
         if (rootLayout != null) {
             rootLayout.setOnClickListener(v -> {
@@ -75,7 +80,6 @@ public class WearCameraActivity extends Activity {
             });
         }
     
-        // 🎯 核心修复：彻底删掉不存在的 btn_capture 变量行，直接精准、唯一匹配 XML 里的驼峰 ID btnCapture
         Button btnCapture = findViewById(R.id.btnCapture); 
         if (btnCapture != null) {
             btnCapture.setOnClickListener(v -> {
@@ -83,16 +87,19 @@ public class WearCameraActivity extends Activity {
                 sendControlSignalToPhone("CAPTURE_SHUTTER");
             });
         }
+
+        // 🎯 注册看门狗
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(phoneKillReceiver, new IntentFilter("de.rhaeus.wearsync.ACTION_KILL_WEAR_CAMERA"), Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(phoneKillReceiver, new IntentFilter("de.rhaeus.wearsync.ACTION_KILL_WEAR_CAMERA"));
+        }
     }
 
-    /**
-     * 🖼️ 高速位图渲染器：在 UI 线程高速还原 JPEG 帧
-     */
     private void renderJpegFrame(byte[] jpegData) {
         runOnUiThread(() -> {
             try {
                 if (isUserExiting || imgPreview == null) return;
-                
                 Bitmap bitmap = BitmapFactory.decodeByteArray(jpegData, 0, jpegData.length);
                 if (bitmap != null) {
                     imgPreview.setImageBitmap(bitmap);
@@ -103,9 +110,6 @@ public class WearCameraActivity extends Activity {
         });
     }
 
-    /**
-     * 🚀 跨端发射器：向手机发送快门或退出要求
-     */
     private void sendControlSignalToPhone(String actionStr) {
         new Thread(() -> {
             try {
@@ -128,17 +132,19 @@ public class WearCameraActivity extends Activity {
         }).start();
     }
 
-    /**
-     * 🧹 撤退清空协议
-     */
     private void cleanExit(boolean notifyPhone) {
         if (isUserExiting) return;
         isUserExiting = true;
-        Log.d(TAG, "🧹 正在启动手表相机退出机制，全面清理资源通道...");
+        Log.d(TAG, "🧹 正在启动手表相机退出机制...");
 
         if (notifyPhone) {
+            // 🎯 与手机端 PhoneSyncListenerService 完美拉齐的停止协议口令
             sendControlSignalToPhone("STOP_CAMERA");
         }
+
+        try {
+            unregisterReceiver(phoneKillReceiver);
+        } catch (Exception ignored) {}
 
         if (sActivityRef.get() == this) {
             sActivityRef.clear();
@@ -148,7 +154,7 @@ public class WearCameraActivity extends Activity {
             imgPreview.setImageBitmap(null);
         }
 
-        finish();
+        finishAndRemoveTask(); // 彻底斩断后台残影
     }
 
     @Override
