@@ -39,7 +39,6 @@ public class PhoneSyncMainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         com.google.android.material.color.DynamicColors.applyToActivityIfAvailable(this);
         super.onCreate(savedInstanceState);
-        
         instance = this;
 
         if (getSupportActionBar() != null) {
@@ -64,26 +63,16 @@ public class PhoneSyncMainActivity extends AppCompatActivity {
         handleIncomingIntent(intent);
     }
 
-    private void handleIncomingIntent(Intent intent) {
-        if (intent == null) return;
-        String action = intent.getAction();
-        Log.d(TAG, "📥 手机端主页面收到检测意图 Action: " + action);
-
-        if ("ACTION_START_CAMERA_FLOW".equalsIgnoreCase(action)) {
-            Log.d(TAG, "🎬 [手表唤醒判定成功]：强制开启一加屏幕常亮防冻结机制...");
-            
-            // 锁定屏幕常亮
-            getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-            
-            Intent cameraService = new Intent(this, PhoneSyncCameraService.class);
-            cameraService.setAction("START_CAMERA");
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(cameraService);
-            } else {
-                startService(cameraService);
-            }
+    private void handleIncomingCommand(Intent intent) {
+    if (intent != null && "LAUNCH_CAMERA_SERVICE_FROM_FOREGROUND".equals(intent.getStringExtra("INTERNAL_CMD"))) {
+        Log.d("PhoneSync_UI", "🟢 應用已安全立足於前台！現在名正言順啟動拍照服務與混合協議傳輸。");
+        
+        Intent cameraServiceIntent = new Intent(this, PhoneSyncCameraService.class);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(cameraServiceIntent);
         } else {
-            Log.d(TAG, "🏡 [普通日常点击设置判定]：仅加载 Compose 设置主界面。");
+            startService(cameraServiceIntent);
+            }
         }
     }
 
