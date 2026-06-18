@@ -11,7 +11,8 @@ import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.util.Log;
 import android.view.WindowManager;
-import android.widget.Button; // 实际编写UI时可替换为对应的圆圈样式或ImageButton
+import android.widget.Button;
+import android.widget.TextView; // 🎯 引入 TextView 用於全屏提示
 
 import com.google.android.gms.tasks.Tasks;
 import com.google.android.gms.wearable.Node;
@@ -21,14 +22,6 @@ import org.json.JSONObject;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
-/**
- * ⏰ 手表端远端闹钟全屏交互控制舱
- * 核心职责：
- * 1. 顶层显示并强制维持屏幕常亮。
- * 2. 启动时启动无限循环的高频强力震动链条。
- * 3. 监听手机端随时传来的解脱强退广播。
- * 4. 用户点击 停止(DISMISS) 或 延后(SNOOZE) 时，反向对手机投递精准代点信令并利落自杀。
- */
 public class WearAlarmActivity extends Activity {
     private static final String TAG = "WearSync_WearAlarmUI";
     private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
@@ -37,14 +30,15 @@ public class WearAlarmActivity extends Activity {
     private Vibrator vibrator;
     private boolean isDestroyedBySystem = false;
 
-    /**
-     * 🛰️ 核心看门狗：随时准备接收由于手机端点灭闹钟而下发的强退广播
-     */
+    // 🎯 UI 提示控件定義
+    private TextView tvAlarmTime;
+    private TextView tvAlarmLabel;
+
     private final BroadcastReceiver forceStopReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
             if (ACTION_INTERNAL_FORCE_STOP.equalsIgnoreCase(intent.getAction())) {
-                Log.d(TAG, "🛑 收到广播：手机端已关闭闹钟。手表端准备无条件清净退出。");
+                Log.d(TAG, "🛑 收到廣播：手機端已成功關閉鬧鐘。手錶端清淨退出。");
                 isDestroyedBySystem = true;
                 cleanExit();
             }
@@ -54,8 +48,8 @@ public class WearAlarmActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        
-        // 🔒 1. 窗口控场锁：强制点亮屏幕并保持常亮，允许在锁屏界面上方直接无阻碍全屏弹窗
+
+        // 🔒 窗口控場鎖
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             setShowWhenLocked(true);
             setTurnScreenOn(true);
@@ -65,35 +59,40 @@ public class WearAlarmActivity extends Activity {
         }
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
-        // 🌟 2. 动态加载一个简单的全屏交互布局（包含两个控制按钮：btn_dismiss 和 btn_snooze）
         setContentView(R.layout.activity_wear_alarm); 
 
-        // 🛰️ 3. 注册强退看门狗广播
+        // 🎯 1. 綁定全屏提示的 TextView（請確保您的 activity_wear_alarm.xml 裡有這兩個 ID）
+        tvAlarmTime = findViewById(R.id.tv_alarm_time);   // 用於顯示 07:30 
+        tvAlarmLabel = findViewById(R.id.tv_alarm_label); // 用於顯示 "起床鬧鐘"
+
+        // 🎯 2. 解析並渲染全屏提示內容
+        parseAndRenderIntentData(getIntent());
+
+        // 🛰️ 註冊強退看門狗廣播
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(forceStopReceiver, new IntentFilter(ACTION_INTERNAL_FORCE_STOP), Context.RECEIVER_NOT_EXPORTED);
         } else {
             registerReceiver(forceStopReceiver, new IntentFilter(ACTION_INTERNAL_FORCE_STOP));
         }
 
-        // ⚡ 4. 激活无限高频强震动链条
         vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
         startInfiniteVibration();
 
-        // 🎯 5. 绑定“停止（DISMISS）”按钮动作
+        // 停止按鈕
         Button btnDismiss = findViewById(R.id.btn_dismiss);
         if (btnDismiss != null) {
             btnDismiss.setOnClickListener(v -> {
-                Log.d(TAG, "👉 用户在手表端点击了【停止】");
+                Log.d(TAG, "👉 用戶在手錶端點擊了【停止】");
                 sendActionToPhone("DISMISS");
-                cleanExit();
+                cleanExit(); // 乾淨撤退，把命運交給「核查機制」：如果手機沒滅，手機會再次將我拉起！
             });
         }
 
-        // 🎯 6. 绑定“延后（SNOOZE）”按钮动作
+        // 延後按鈕
         Button btnSnooze = findViewById(R.id.btn_snooze);
         if (btnSnooze != null) {
             btnSnooze.setOnClickListener(v -> {
-                Log.d(TAG, "👉 用户在手表端点击了【延后】");
+                Log.d(TAG, "👉 用戶在手錶端點擊了【延後】");
                 sendActionToPhone("SNOOZE");
                 cleanExit();
             });
@@ -101,34 +100,60 @@ public class WearAlarmActivity extends Activity {
     }
 
     /**
-     * ⚡ 高频震动编排器：制造强烈的规律性同步手腕震感
+     * 🔥【核心核查防漏機制】：如果手錶點了關閉，但手機代點失敗還在響，
+     * 手機端再次發送 START_ALARM_UI 拽起手錶時，如果本頁面還沒退乾淨，會直接觸發這裡！
      */
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        Log.w(TAG, "⚠️ [再次拉起核查警告]：手機端依舊在轟鳴！說明代點可能失敗，重新刷新全屏提示並加強震動！");
+        
+        // 1. 重新解析可能變更的鬧鐘提示
+        parseAndRenderIntentData(intent);
+        
+        // 2. 重新激活震動，防止代點期間震動中斷
+        startInfiniteVibration();
+    }
+
+    /**
+     * 🎯 萃取並渲染全屏提示文字的方法
+     */
+    private void parseAndRenderIntentData(Intent intent) {
+        if (intent == null) return;
+        String label = intent.getStringExtra("EXTRA_ALARM_LABEL");
+        String time = intent.getStringExtra("EXTRA_ALARM_TIME");
+
+        if (tvAlarmLabel != null && label != null) {
+            tvAlarmLabel.setText(label);
+        }
+        if (tvAlarmTime != null && time != null) {
+            tvAlarmTime.setText(time);
+        }
+    }
+
     private void startInfiniteVibration() {
         if (vibrator == null || !vibrator.hasVibrator()) return;
         try {
-            // 编排一个典型的闹钟震动模式：震动500毫秒，停顿300毫秒，以此循环
+            vibrator.cancel(); // 先取消，確保重新編排
             long[] pattern = {0, 500, 300};
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                // 最后一个参数 0 代表从数组索引0开始无限循环震动
                 vibrator.vibrate(VibrationEffect.createWaveform(pattern, 0));
             } else {
                 vibrator.vibrate(pattern, 0);
             }
         } catch (Exception e) {
-            Log.e(TAG, "启动手表核心震动失败", e);
+            Log.e(TAG, "啟動手錶核心震動失敗", e);
         }
     }
 
-    /**
-     * 🚀 跨端反向发射：通知手机中央路由器执行通知栏高精准虚拟代点
-     */
     private void sendActionToPhone(String actionCommand) {
         new Thread(() -> {
             try {
                 JSONObject json = new JSONObject();
                 json.put("sender", "wear");
                 json.put("type", "alarm_action");
-                json.put("action", actionCommand); // 发送 "DISMISS" 或 "SNOOZE"
+                json.put("action", actionCommand);
                 json.put("timestamp", System.currentTimeMillis());
 
                 byte[] payload = json.toString().getBytes(StandardCharsets.UTF_8);
@@ -136,34 +161,26 @@ public class WearAlarmActivity extends Activity {
                 if (nodes != null) {
                     for (Node n : nodes) {
                         Tasks.await(Wearable.getMessageClient(this).sendMessage(n.getId(), UNIVERSAL_SYNC_PATH, payload));
-                        Log.d(TAG, "🚀 [闹钟反向代点] 成功向手机投递口令: " + actionCommand);
+                        Log.d(TAG, "🚀 [鬧鐘反向代點] 成功向手機投遞口令: " + actionCommand);
                     }
                 }
             } catch (Exception e) {
-                Log.e(TAG, "手表向手机反向推送代点指令失败", e);
+                Log.e(TAG, "手錶向手機反向推送代點指令失敗", e);
             }
         }).start();
     }
 
-    /**
-     * 🧹 干净撤退协议：彻底掐断震动、注销看门狗、抹去历史任务残余
-     */
     private void cleanExit() {
+        isDestroyedBySystem = true; // 🎯 防禦重置，告訴 onDestroy 不要重複注銷 Receiver
         try {
-            if (vibrator != null) {
-                vibrator.cancel(); // 🛑 瞬间停震，还用户清净
-            }
+            if (vibrator != null) { vibrator.cancel(); }
             unregisterReceiver(forceStopReceiver);
         } catch (Exception ignored) {}
-
-        // 调用 finishAndRemoveTask()。配合 CLEAR_TOP 标志，
-        // 能将本页面从系统的最近任务（Recent Tasks）列表中斩草除根，绝不留任何后台残影。
         finishAndRemoveTask();
     }
 
     @Override
     protected void onDestroy() {
-        // 二次兜底安全阀：防止用户通过左滑手势强行划走页面时，震动依然残留在后台压榨电池
         if (!isDestroyedBySystem) {
             if (vibrator != null) vibrator.cancel();
             try { unregisterReceiver(forceStopReceiver); } catch (Exception ignored) {}
