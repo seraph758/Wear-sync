@@ -137,28 +137,44 @@ public class WearSyncListenerService extends WearableListenerService {
             }
 
             // =========================================================================
-            // ⏰ 模塊二：遠端鬧鐘控制鏈（完全獨立）
-            // =========================================================================
-            if ("alarm".equalsIgnoreCase(type)) {
-                Log.d(TAG, "📥 [鬧鐘模塊] 收到控制動作: " + action);
-                if ("START_ALARM_UI".equalsIgnoreCase(action)) {
-                    PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
-                    if (pm != null) {
-                        PowerManager.WakeLock wakeLock = pm.newWakeLock(
-                                PowerManager.FULL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP | PowerManager.ON_AFTER_RELEASE, 
-                                "wearsync:AlarmScreenWakeLock"
-                        );
-                        wakeLock.acquire(3000L);
-                    }
-                    Intent alarmIntent = new Intent(this, WearAlarmActivity.class);
-                    alarmIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-                    startActivity(alarmIntent);
-                } else if ("FORCE_STOP_WEAR_ALARM".equalsIgnoreCase(action)) {
-                    Intent stopBroadcast = new Intent(WearAlarmActivity.ACTION_INTERNAL_FORCE_STOP);
-                    sendBroadcast(stopBroadcast);
-                }
-                return; 
-            }
+ // =========================================================================
+// ⏰ 模塊二：遠端鬧鐘控制鏈（完美支持全屏提示注入與核查再次拉起機制）
+// =========================================================================
+if ("alarm".equalsIgnoreCase(type)) {
+    Log.d(TAG, "📥 [鬧鐘模塊] 收到控制動作: " + action);
+    if ("START_ALARM_UI".equalsIgnoreCase(action)) {
+        
+        // 🎯 1. 提取手機端同步發過來的全屏提示文字（若手機端沒發，則給出默認缺省值）
+        String alarmLabel = json.optString("alarm_label", "鬧鐘響鈴中");
+        String alarmTime = json.optString("alarm_time", "");
+
+        PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+        if (pm != null) {
+            PowerManager.WakeLock wakeLock = pm.newWakeLock(
+                    PowerManager.FULL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP | PowerManager.ON_AFTER_RELEASE, 
+                    "wearsync:AlarmScreenWakeLock"
+            );
+            wakeLock.acquire(3000L);
+        }
+
+        // 🎯 2. 組裝 Intent，將全屏提示數據注入 Activity
+        Intent alarmIntent = new Intent(this, WearAlarmActivity.class);
+        alarmIntent.putExtra("EXTRA_ALARM_LABEL", alarmLabel);
+        alarmIntent.putExtra("EXTRA_ALARM_TIME", alarmTime);
+        
+        // FLAG_ACTIVITY_SINGLE_TOP 核心用處：如果手錶代點失敗被手機二次拉起，
+        // 且手錶介面還沒來得及退出時，不會重複開多個頁面，而是直接觸發 onNewIntent 刷新。
+        alarmIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK 
+                            | Intent.FLAG_ACTIVITY_CLEAR_TOP 
+                            | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        startActivity(alarmIntent);
+    } 
+    else if ("FORCE_STOP_WEAR_ALARM".equalsIgnoreCase(action)) {
+        Intent stopBroadcast = new Intent(WearAlarmActivity.ACTION_INTERNAL_FORCE_STOP);
+        sendBroadcast(stopBroadcast);
+    }
+    return; 
+}
 
             // =========================================================================
             // 📸 模塊三：相機主控協議鏈（完全獨立）
