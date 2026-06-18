@@ -193,7 +193,7 @@ public class WearSyncListenerService extends WearableListenerService {
             }
 
         } catch (Exception e) {
-            Log.pre(TAG, "手錶骨幹路由分發異常", e);
+            Log.e(TAG, "手錶骨幹路由分發異常", e);
         }
     }
 
