@@ -105,21 +105,35 @@ public class WearSyncListenerService extends WearableListenerService {
                                 }
                             }
 
-                            // 3️⃣ 解析 Bit 4 (0x08) -> 同步省電模式開關
-                            boolean shouldSyncPowerSave = (finalMask & 0x08) != 0;
-                            if (shouldSyncPowerSave) {
-                                // 【規則2】省電模式如果為 true，則跟隨手錶的勿擾狀態（要開一起開，要關一起關）
-                                Log.d(TAG, "🔋 [物理執行] 省電同步開啟，跟隨手錶勿擾狀態 ➔ " + isWatchDndOn);
-                                String powerValue = isWatchDndOn ? "1" : "0";
-                                Settings.Global.putString(getContentResolver(), "low_power", powerValue);
-                                Settings.Secure.putString(getContentResolver(), "low_power", powerValue);
                             }
 
                             // 4️⃣ 解析 Bit 3 (0x04) -> 決定手錶在「收到同步且發生變更」時是否發出震動提示
                             boolean shouldVibrateOnSync = (finalMask & 0x04) != 0;
                             if (shouldVibrateOnSync) {
                                 triggerWatchVibrate();
-                            }
+                            
+// 3️⃣ 🔋 解析 Bit 3 (0x08) -> 省電模式子開關聯動矩陣（依附於勿擾模式，同開同關）
+boolean isPowerSaveLinkageOn = (finalMask & 0x08) != 0; // 手機端是否開啟了“省電模式同步”
+boolean isDndTargetOn = (finalMask & 0x01) != 0;        // 手機端當前的勿擾預期狀態
+
+// 🎯 核心產品公式：只有【省電同步開啟】且【勿擾模式開啟】時，手錶才真正進入省電模式；其餘情況一律關閉。
+boolean shouldEnableWatchPowerSave = isPowerSaveLinkageOn && isDndTargetOn;
+String expectedPowerValue = shouldEnableWatchPowerSave ? "1" : "0";
+
+// 讀取手錶底層目前的真實省電狀態，避免重復寫入
+String currentPowerValue = Settings.Global.getString(getContentResolver(), "low_power");
+
+if (!expectedPowerValue.equals(currentPowerValue)) {
+    Log.d(TAG, "🔋 [物理執行] 省電聯動觸發！省電同步開關=" + isPowerSaveLinkageOn 
+            + ", 勿擾狀態=" + isDndTargetOn 
+            + " ➔ 正在同步手錶底層省電狀態為: " + expectedPowerValue);
+            
+    Settings.Global.putString(getContentResolver(), "low_power", expectedPowerValue);
+    Settings.Secure.putString(getContentResolver(), "low_power", expectedPowerValue);
+} else {
+    Log.d(TAG, "🔋 [物理執行] 手錶省電狀態已符合子開關預期 (" + expectedPowerValue + ")，跳過重複寫入。");
+}
+
 
                         } catch (Exception e) {
                             Log.e(TAG, "🔴 閉環矩陣執行遭遇異常", e);
