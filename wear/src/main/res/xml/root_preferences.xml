@@ -3,51 +3,45 @@
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <PreferenceCategory
-        android:title="Wear Sync 連線狀態"
+        android:title="Wear Sync 连线状态"
         app:iconSpaceReserved="false">
         <Preference
             android:key="connectivity_state_key"
-            android:title="手機連線狀態"
-            android:summary="正在檢測與手機的連接..."
+            android:title="手机连线状态"
+            android:summary="正在检测与手机的连接..."
             app:iconSpaceReserved="false" />
     </PreferenceCategory>
 
     <PreferenceCategory
-        android:title="系統自動化與控制"
+        android:title="系统底层自动化核心"
         app:iconSpaceReserved="false">
         <Preference
             android:key="dnd_permission_key"
-            android:title="勿擾讀寫訪問權限"
-            android:summary="正在檢查..."
+            android:title="勿扰读写访问权限"
+            android:summary="正在检查..."
             app:iconSpaceReserved="false" />
 
         <Preference
             android:key="acc_permission_key"
-            android:title="輔助功能防吞權限"
-            android:summary="正在檢查..."
-            app:iconSpaceReserved="false" />
-
-        <SwitchPreferenceCompat
-            android:key="battery_saver_sync_key"
-            android:title="手錶系統省電模式"
-            android:summary="物理讀寫手錶低功耗省電開關"
-            android:defaultValue="false"
+            android:title="辅助功能防吞权限"
+            android:summary="正在检查..."
             app:iconSpaceReserved="false" />
             
         <Preference
             android:key="camera_control_key"
-            android:title="遠端相機控制"
-            android:summary="點擊嘗試喚醒手機相機"
+            android:title="远端相机控制"
+            android:summary="点击尝试唤醒手机相机"
             app:iconSpaceReserved="false" />
     </PreferenceCategory>
 
     <PreferenceCategory
         android:key="hidden_category_key"
-        android:title="託管項目"
+        android:title="托管项目"
         android:visible="false">
         <SwitchPreferenceCompat android:key="dnd_sync_key" android:visible="false" android:defaultValue="true"/>
         <SwitchPreferenceCompat android:key="bedtime_key" android:visible="false" android:defaultValue="true"/>
         <SwitchPreferenceCompat android:key="vibrate_key" android:visible="false" android:defaultValue="false"/>
+        <SwitchPreferenceCompat android:key="battery_saver_sync_key" android:visible="false" android:defaultValue="false" />
     </PreferenceCategory>
 
 </PreferenceScreen>
