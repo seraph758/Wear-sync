@@ -39,19 +39,18 @@ public class PhoneSyncCameraService extends Service implements Camera.PreviewCal
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        Log.d(TAG, "🚀 PhoneSyncCameraService 收到觸發信令...");
+        Log.d(TAG, "🚀 PhoneSyncCameraService 收到触发信令...");
         
-        // 🎯 掛載前台通道通知，防止高版本 Android 後臺擊殺
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             String channelId = "camera_sync_channel";
             android.app.NotificationChannel channel = new android.app.NotificationChannel(
-                    channelId, "相機遠端同步", android.app.NotificationManager.IMPORTANCE_LOW);
+                    channelId, "相机远端同步", android.app.NotificationManager.IMPORTANCE_LOW);
             android.app.NotificationManager nm = (android.app.NotificationManager) getSystemService(NOTIFICATION_SERVICE);
             if (nm != null) nm.createNotificationChannel(channel);
     
             android.app.Notification notification = new android.app.Notification.Builder(this, channelId)
                     .setContentTitle("WearSync")
-                    .setContentText("遠端相機流同步交互中...")
+                    .setContentText("远端相机流同步交互中...")
                     .setSmallIcon(android.R.drawable.ic_menu_camera)
                     .build();
             startForeground(8899, notification);
@@ -63,9 +62,9 @@ public class PhoneSyncCameraService extends Service implements Camera.PreviewCal
         }
 
         String action = intent.getAction();
-        Log.d(TAG, "⚙️ 手機相機服務收到動作: " + action);
+        Log.d(TAG, "⚙️ 手机相机服务收到动作: " + action);
 
-        // 🎯 核心修復：精確路由，移除原本最底下找不到且會重複觸發的錯誤方法
+        // 🎯 修正点：严格使用 if-else 分流，彻底删除了最下方那个错误的 initAndStartCameraPipeline()
         if (ACTION_START_CAMERA.equals(action)) {
             startCameraAndSetupPipeline();
         } else if (ACTION_STOP_CAMERA_STREAM.equals(action)) {
@@ -90,7 +89,7 @@ public class PhoneSyncCameraService extends Service implements Camera.PreviewCal
                 mCamera.setPreviewCallback(this);
 
                 int rotationDegrees = calculatePhoneRotation();
-                Log.d(TAG, "📐 手機檢測到當前畫面旋轉角度: " + rotationDegrees);
+                Log.d(TAG, "📐 手机检测到当前画面旋转角度: " + rotationDegrees);
 
                 sendControlMessageToWatch("START_CAMERA", rotationDegrees);
 
@@ -104,14 +103,14 @@ public class PhoneSyncCameraService extends Service implements Camera.PreviewCal
                     mChannelOutputStream = Tasks.await(Wearable.getChannelClient(this)
                             .getOutputStream(mTargetChannel));
                     
-                    Log.d(TAG, "🚀 [管道打通] 開始向手錶泵入實時幀。");
+                    Log.d(TAG, "🚀 [管道打通] 开始向手表泵入实时帧。");
                     mCamera.startPreview();
                 } else {
-                    Log.w(TAG, "⚠️ 找不到可用手錶節點");
+                    Log.w(TAG, "⚠️ 找不到可用的手表节点");
                     releaseCameraAndPipeline();
                 }
             } catch (Exception e) {
-                Log.e(TAG, "建立相機管道失敗", e);
+                Log.e(TAG, "建立相机传输管道灾难性失败", e);
                 releaseCameraAndPipeline();
             }
         }).start();
@@ -144,16 +143,16 @@ public class PhoneSyncCameraService extends Service implements Camera.PreviewCal
                     mChannelOutputStream.flush(); 
                 }
             } catch (Exception e) {
-                Log.e(TAG, "泵入畫面幀失敗:", e);
+                Log.e(TAG, "向通道泵入画面帧失败:", e);
             }
         }).start();
     }
 
     private void executePhoneShutter() {
         if (mCamera != null) {
-            Log.d(TAG, "📸 手機本地代點快門拍照！");
+            Log.d(TAG, "📸 [快门联动] 手机本地代点快门拍照！");
             mCamera.takePicture(null, null, (data, camera) -> {
-                Log.d(TAG, "💾 照片已成功落盤。");
+                Log.d(TAG, "💾 照片资产已成功在手机本地落盘。");
                 if (mCamera != null) mCamera.startPreview(); 
             });
         }
@@ -162,7 +161,7 @@ public class PhoneSyncCameraService extends Service implements Camera.PreviewCal
     private void releaseCameraAndPipeline() {
         if (!isStreaming) return;
         isStreaming = false;
-        Log.d(TAG, "🧹 釋放手機端相機與傳輸管道...");
+        Log.d(TAG, "🧹 销毁释放手机端相机与传输管道...");
 
         try {
             if (mCamera != null) {
@@ -181,7 +180,7 @@ public class PhoneSyncCameraService extends Service implements Camera.PreviewCal
             }
             sendControlMessageToWatch("FORCE_QUIT_CAMERA", 0);
         } catch (Exception e) {
-            Log.e(TAG, "釋放資源異常", e);
+            Log.e(TAG, "释放相机管道资源时发生异常", e);
         } finally {
             stopSelf();
         }
