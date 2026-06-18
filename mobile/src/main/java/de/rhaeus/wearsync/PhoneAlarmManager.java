@@ -13,34 +13,49 @@ import java.util.List;
 public class PhoneAlarmManager {
     private static final String TAG = "WearSync_PhoneAlarm";
 
-    // 当手机端系统闹钟响起时调用（由 Notification 拦截器或 Service 触发）
-    public static void notifyWatchAlarmRinging(Context context) {
-        sendAlarmSignalToWatch(context, "START_ALARM_UI");
+    /**
+     * 🎯 升級：當手機端系統鬧鐘響起時調用（由通知攔截哨兵服務觸發）
+     * @param context 上下文
+     * @param label   鬧鐘標題（例如 "起床上班"）
+     * @param time    鬧鐘響鈴時間（例如 "07:30"）
+     */
+    public static void notifyWatchAlarmRinging(Context context, String label, String time) {
+        Log.d(TAG, "🔔 偵測到手機鬧鐘轟鳴，準備注入全屏提示資料 ➔ 標題: " + label + ", 時間: " + time);
+        sendAlarmSignalToWatch(context, "START_ALARM_UI", label, time);
     }
 
-    // 当手机端闹钟被灭掉时调用
+    /**
+     * 🤝 當用戶主動在手機端關閉/延後鬧鐘，導致手機通知消失時，由哨兵調用此處。
+     * 職責：發射強退信號，遠程同步銷毀手錶端的全屏 AlarmActivity。
+     */
     public static void notifyWatchAlarmDismissed(Context context) {
-        sendAlarmSignalToWatch(context, "FORCE_STOP_WEAR_ALARM");
+        Log.d(TAG, "⏰ [雙端控制閉環] 手機端鬧鐘通知已消失，正在命令手錶端強行銷毀 UI 並停震...");
+        sendAlarmSignalToWatch(context, "FORCE_STOP_WEAR_ALARM", null, null);
     }
 
-    // 🎯 协议拉齐：高精准匹配来自手表的关键字 DISMISS 和 SNOOZE 代点请求
+    /**
+     * 🎯 協議拉齊：高精準匹配來自手錶的關鍵字 DISMISS 和 SNOOZE 代點請求
+     */
     public static void handleWatchCommand(Context context, String commandType) {
-        Log.d(TAG, "⚙️ [协议命中] 正在将手表的虚拟代点请求映射到系统底层: " + commandType);
+        Log.d(TAG, "⚙️ [協議命中] 正在將手表的虛擬代點請求映射到系統底層: " + commandType);
         
         if ("DISMISS".equalsIgnoreCase(commandType)) {
-            // 完美击中系统时钟解散协议
+            // 完美擊中系統時鐘解散協議
             context.sendBroadcast(new Intent("com.android.deskclock.ALARM_DISMISS"));
             context.sendBroadcast(new Intent("android.intent.action.ALARM_DISMISS"));
-            Log.d(TAG, "⏰ 手机系统 [DISMISS] 广播代点弹射完毕");
+            Log.d(TAG, "⏰ 手機系統 [DISMISS] 廣播代點彈射完畢");
             
         } else if ("SNOOZE".equalsIgnoreCase(commandType)) {
-            // 完美击中系统时钟小睡延后协议
+            // 完美擊中系統時鐘小睡延後協議
             context.sendBroadcast(new Intent("com.android.deskclock.ALARM_SNOOZE"));
-            Log.d(TAG, "⏰ 手机系统 [SNOOZE] 广播代点弹射完毕");
+            Log.d(TAG, "⏰ 手機系統 [SNOOZE] 廣播代點彈射完畢");
         }
     }
 
-    private static void sendAlarmSignalToWatch(Context context, String actionStr) {
+    /**
+     * 🚀 內部發送核心：封裝全屏提示資料 JSON 並投遞給手錶
+     */
+    private static void sendAlarmSignalToWatch(Context context, String actionStr, String label, String time) {
         new Thread(() -> {
             try {
                 JSONObject json = new JSONObject();
@@ -49,14 +64,25 @@ public class PhoneAlarmManager {
                 json.put("action", actionStr);
                 json.put("timestamp", System.currentTimeMillis());
 
+                // 🎯 核心：只有在拉起 UI 時，才塞入鬧鐘資料文字
+                if ("START_ALARM_UI".equalsIgnoreCase(actionStr)) {
+                    json.put("alarm_label", (label == null || label.isEmpty()) ? "鬧鐘響鈴中" : label);
+                    json.put("alarm_time", (time == null) ? "" : time);
+                }
+
                 byte[] data = json.toString().getBytes(StandardCharsets.UTF_8);
                 List<Node> nodes = Tasks.await(Wearable.getNodeClient(context).getConnectedNodes());
-                for (Node node : nodes) {
-                    Wearable.getMessageClient(context).sendMessage(node.getId(), "/wear-universal-sync", data);
+                
+                if (nodes != null && !nodes.isEmpty()) {
+                    for (Node node : nodes) {
+                        Tasks.await(Wearable.getMessageClient(context).sendMessage(node.getId(), "/wear-universal-sync", data));
+                    }
+                    Log.d(TAG, "🚀 鬧鐘狀態流 [" + actionStr + "] 正向推送到手錶成功。資料包: " + json.toString());
+                } else {
+                    Log.w(TAG, "⚠️ 傳輸失敗：當前沒有任何已連接的手錶節點！");
                 }
-                Log.d(TAG, "🚀 闹钟状态流 [" + actionStr + "] 正向推送到手表成功");
             } catch (Exception e) {
-                Log.e(TAG, "向手表发送闹钟状态失败", e);
+                Log.e(TAG, "🔴 向手錶發送鬧鐘狀態或封裝資料失敗", e);
             }
         }).start();
     }
