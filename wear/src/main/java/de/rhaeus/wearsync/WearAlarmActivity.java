@@ -152,7 +152,7 @@ public class WearAlarmActivity extends Activity {
             try {
                 JSONObject json = new JSONObject();
                 json.put("sender", "wear");
-                json.put("type", "alarm_action");
+                json.put("type", "alarm");
                 json.put("action", actionCommand);
                 json.put("timestamp", System.currentTimeMillis());
 
