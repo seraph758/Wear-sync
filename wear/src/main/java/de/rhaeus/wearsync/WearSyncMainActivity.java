@@ -10,7 +10,7 @@ public class WearSyncMainActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(Bundle savedInstanceState);
+        super.onCreate(savedInstanceState);
         Log.d(TAG, "🚀 onCreate: 手表主 Activity 启动...");
         
         // 1. 加载已经精简过的全屏 FrameLayout 布局
