@@ -47,95 +47,51 @@ public class WearSyncListenerService extends WearableListenerService {
             if ("wear".equalsIgnoreCase(sender)) return;
 
             // =========================================================================
-            // 🌗 模塊一：狀態掩碼閉環矩陣（勿擾、就寢、省電同開同關子架構）
-            // =========================================================================
-            if ("status_mask".equalsIgnoreCase(type) || json.has("status_mask") || "dnd".equalsIgnoreCase(type)) {
-                int statusMask = json.optInt("status_mask", -1);
-                if (statusMask == -1 && json.has("dnd_state")) {
-                    statusMask = (json.optInt("dnd_state", 0) > 0) ? 0x01 : 0x00;
+// 🌗 模块一：勿扰模式单向对齐块（手机发 MASK -> 手表对齐本地勿扰）
+// =========================================================================
+if ("status_mask".equalsIgnoreCase(type) || json.has("status_mask") || "dnd".equalsIgnoreCase(type)) {
+    int statusMask = json.optInt("status_mask", -1);
+    if (statusMask == -1 && json.has("dnd_state")) {
+        statusMask = (json.optInt("dnd_state", 0) > 0) ? 0x01 : 0x00;
+    }
+
+    if (statusMask != -1) {
+        final int finalMask = statusMask;
+        Log.d(TAG, "📥 [勿扰模块] 收到手机端权威状态 MASK: " + finalMask);
+
+        // 🔒 激活锁，防止手表本地勿扰改变反向回传手机
+        isInternalUpdate = true;
+
+        new Thread(() -> {
+            try {
+                NotificationManager mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+                if (mNotificationManager != null) {
+                    int currentWatchDndFilter = mNotificationManager.getCurrentInterruptionFilter();
+                    boolean isWatchDndOn = (currentWatchDndFilter > 1); // >1 说明开启了某些勿扰
+
+                    // 🎯 核心：精炼提取手机发来的 Bit 0 勿扰标志位 (0x01)
+                    boolean targetDndEnabled = (finalMask & 0x01) != 0;
+                    Log.d(TAG, "🔍 勿扰对齐核查 -> 手机 Mask 勿扰状态=" + targetDndEnabled + ", 手表当当前状态=" + isWatchDndOn);
+
+                    if (targetDndEnabled != isWatchDndOn) {
+                        // 3 代表 INTERRUPTION_FILTER_NONE (全面勿扰模式), 1 代表 INTERRUPTION_FILTER_ALL (允许所有)
+                        mNotificationManager.setInterruptionFilter(targetDndEnabled ? 3 : 1);
+                        Log.i(TAG, "🌗 [物理执行] 手表本地勿扰已完美对齐手机，状态: " + targetDndEnabled);
+                    }
                 }
-
-                if (statusMask != -1) {
-                    final int finalMask = statusMask;
-                    Log.d(TAG, "📥 [狀態模塊] 收到手機端權威 Mask: " + finalMask);
-
-                    // 🔒 上鎖：防止狀態雙向碰撞回旋
-                    isInternalUpdate = true;
-
-                    new Thread(() -> {
-                        try {
-                            // ------ 🚀 獲取手錶當前物理狀態 ------
-                            NotificationManager mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-                            int currentWatchDndFilter = (mNotificationManager != null) ? mNotificationManager.getCurrentInterruptionFilter() : 1;
-                            boolean isWatchDndOn = (currentWatchDndFilter > 1);
-                            boolean isWatchBedtimeOn = Settings.Global.getInt(getContentResolver(), "bedtime_mode", 0) == 1;
-
-                            // ------ 🎯 🧠 狀態動態校準與執行 ------
-
-                            // 1️⃣ 解析 Bit 0 (0x01) -> 手機送來的勿擾預期狀態
-                            boolean targetDndEnabled = (finalMask & 0x01) != 0;
-                            Log.d(TAG, "🔍 勿擾校準: 手機預期=" + targetDndEnabled + ", 手錶當前=" + isWatchDndOn);
-
-                            if (targetDndEnabled != isWatchDndOn) {
-                                Log.d(TAG, " 🌗 [物理執行] 手錶勿擾狀態與手機不一致，開始對齊...");
-                                if (mNotificationManager != null && mNotificationManager.isNotificationPolicyAccessGranted()) {
-                                    mNotificationManager.setInterruptionFilter(targetDndEnabled ? 3 : 1);
-                                    isWatchDndOn = targetDndEnabled; // 實時更新快照
-                                }
-                            }
-
-                            // 2️⃣ 解析 Bit 1 (0x02) -> 就寢/睡眠模式狀態
-                            boolean targetBedtimeEnabled = (finalMask & 0x02) != 0;
-                            Log.d(TAG, "🔍 睡眠校準: 手機預期=" + targetBedtimeEnabled + ", 手錶當前=" + isWatchBedtimeOn);
-
-                            if (targetBedtimeEnabled != isWatchBedtimeOn) {
-                                Log.d(TAG, " 🛌 [物理執行] 手錶睡眠狀態與手機不一致，啟動無障礙自動點擊...");
-                                Settings.Global.putInt(getContentResolver(), "bedtime_mode", targetBedtimeEnabled ? 1 : 0);
-
-                                WearSyncAccessService serv = WearSyncAccessService.getSharedInstance();
-                                if (serv != null) {
-                                    triggerBedtimeModeViaAccessibility(serv);
-                                }
-                            }
-
-                            // 3️⃣ 🔋 解析 Bit 3 (0x08) -> 省電模式子開關聯動（完全依附於勿擾模式，同開同關）
-                            boolean isPowerSaveLinkageOn = (finalMask & 0x08) != 0;
-                            boolean isDndTargetOn = (finalMask & 0x01) != 0;
-
-                            // 只有【省電同步開啟】且【手機勿擾開啟】時，手錶才真正進省電；否則一律保持關閉
-                            boolean shouldEnableWatchPowerSave = isPowerSaveLinkageOn && isDndTargetOn;
-                            String expectedPowerValue = shouldEnableWatchPowerSave ? "1" : "0";
-
-                            String currentPowerValue = Settings.Global.getString(getContentResolver(), "low_power");
-
-                            if (!expectedPowerValue.equals(currentPowerValue)) {
-                                Log.d(TAG, "🔋 [物理執行] 省電聯動觸發！同步開關=" + isPowerSaveLinkageOn + ", 勿擾狀態=" + isDndTargetOn + " ➔ 物理同步手錶底層為: " + expectedPowerValue);
-                                Settings.Global.putString(getContentResolver(), "low_power", expectedPowerValue);
-                                Settings.Secure.putString(getContentResolver(), "low_power", expectedPowerValue);
-                            } else {
-                                Log.d(TAG, "🔋 [物理執行] 手錶省電狀態符合預期，跳過重複寫入。");
-                            }
-
-                            // 4️⃣ 解析 Bit 2 (0x04) -> 決定手錶在「收到同步且發生變更」時是否發出震動提示
-                            boolean shouldVibrateOnSync = (finalMask & 0x04) != 0;
-                            if (shouldVibrateOnSync) {
-                                triggerWatchVibrate();
-                            }
-
-                        } catch (Exception e) {
-                            Log.e(TAG, "🔴 閉環矩陣執行遭遇異常", e);
-                        } finally {
-                            // ⏳ 延時重置更新鎖，破除狀態反向回旋死循環
-                            new Thread(() -> {
-                                try { Thread.sleep(1200); } catch (Exception ignored) {}
-                                isInternalUpdate = false;
-                                Log.d(TAG, "🔒 [解鎖] 內部更新鎖解除，恢復手錶主動控手機能力。");
-                            }).start();
-                        }
-                    }).start();
-                }
-                return; 
+            } catch (Exception e) {
+                Log.e(TAG, "🔴 物理执行同步手表勿扰异常", e);
+            } finally {
+                // ⏳ 延时安全释放锁
+                new Handler(getMainLooper()).postDelayed(() -> {
+                    isInternalUpdate = false;
+                    Log.d(TAG, "🔒 [解锁] 手表内部勿扰更新锁已释放。");
+                }, 1500);
             }
+        }).start();
+    }
+    return;
+}
 
             // =========================================================================
             // ⏰ 模塊二：遠端鬧鐘控制鏈（完美支持全屏提示注入與核查再次拉起機制）
