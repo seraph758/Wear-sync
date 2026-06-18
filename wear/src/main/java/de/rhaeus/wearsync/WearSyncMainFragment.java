@@ -8,7 +8,6 @@ import android.util.Log;
 import android.widget.Toast;
 
 import androidx.preference.Preference;
-import androidx.preference.PreferenceCategory;
 import androidx.preference.PreferenceFragmentCompat;
 
 import com.google.android.gms.wearable.CapabilityClient;
@@ -28,32 +27,29 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
         dndPref = findPreference("dnd_permission_key");
         accPref = findPreference("acc_permission_key");
 
+        // 🎯 遵照核心規則：手錶無法自開通知監聽，此條目僅做 ADB 狀態展示，徹底鎖死不可點擊
         if (dndPref != null) {
-            dndPref.setSelectable(false); // 仅做状态展示，不可点击
+            dndPref.setSelectable(false); 
         }
 
-        // 核心：无障碍跳转
+        // 🟢 遵照核心規則：只有無障礙可以引導用戶去手錶系統頁面手動授權
         if (accPref != null) {
             accPref.setOnPreferenceClickListener(preference -> {
                 try {
                     startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
                 } catch (Exception e) {
-                    Toast.makeText(getContext(), "无法跳转，请在手表系统设置中手动开启无障碍", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(getContext(), "無法跳轉，請在手錶系統設置中手動開啟無障礙", Toast.LENGTH_SHORT).show();
                 }
                 return true;
             });
         }
 
-        // 📷 绑定相机快捷 Preference 条目
+        // 📸 綁定相機快捷 Preference 條目
         Preference cameraPref = findPreference("camera_control_key");
         if (cameraPref != null) {
             cameraPref.setOnPreferenceClickListener(preference -> {
-                Log.d("WearSync_UI", "👉 用户在 Preference 列表点击了【远端相机控制】");
-                
-                // 🚀 执行你原先给相机按键写的发射逻辑，例如向手机发包
-                // PhoneSyncCameraService.invokeCamera(getContext());
-                
-                Toast.makeText(getContext(), "正在发送相机唤醒指令...", Toast.LENGTH_SHORT).show();
+                Log.d("WearSync_UI", "👉 用戶在 Preference 列表點擊了【遠端相機控制】");
+                Toast.makeText(getContext(), "正在發送相機喚醒指令...", Toast.LENGTH_SHORT).show();
                 return true;
             });
         }
@@ -64,7 +60,7 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
     @Override
     public void onResume() {
         super.onResume();
-        updatePermissionStatus(); // 🎯 仅刷新核心权限状态
+        updatePermissionStatus(); // 🎯 精準動態核查本地底層權限
         registerConnectivityListener();
     }
 
@@ -75,23 +71,28 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
     }
 
     /**
-     * 🎯 仅核查并刷新必要的本地硬权限状态
+     * 🎯 精準權限核查矩陣（徹底剔除 NotificationManager 誤區）
      */
     private void updatePermissionStatus() {
         Context ctx = getContext();
         if (ctx == null) return;
 
-        // 1. 通知监听权限核查
-        String flat = Settings.Secure.getString(ctx.getContentResolver(), "enabled_notification_listeners");
-        boolean notificationAllowed = flat != null && flat.contains(ctx.getPackageName());
+        // 1. 🔍 通過安全設置數據庫，精準核查手錶端是否已獲取 [通知監聽權限 (ADB授權)]
+        String enabledListeners = Settings.Secure.getString(ctx.getContentResolver(), "enabled_notification_listeners");
+        boolean notificationAllowed = enabledListeners != null && enabledListeners.contains(ctx.getPackageName());
+        
         if (dndPref != null) {
-            dndPref.setSummary(notificationAllowed ? "通知接听权限：已启用" : "通知接听权限：未启用 (请通过ADB授权)");
+            dndPref.setSummary(notificationAllowed 
+                    ? "🟢 通知監聽權限：已獲取 (ADB授權成功)" 
+                    : "🔴 通知監聽權限：未啟用 (請通過 ADB 命令授權)");
         }
 
-        // 2. 无障碍自动点击核心核查
+        // 2. 🔍 核查 [輔助無障礙核心開關] 是否激活
         boolean accAllowed = WearSyncAccessService.getSharedInstance() != null;
         if (accPref != null) {
-            accPref.setSummary(accAllowed ? "辅助无障碍自动点击：已就绪" : "辅助无障碍自动点击：未开启，点击去授权");
+            accPref.setSummary(accAllowed 
+                    ? "🟢 輔助無障礙核心：已激活" 
+                    : "🔴 輔助無障礙核心：未激活 (點擊前往授權)");
         }
     }
 
@@ -117,7 +118,7 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
 
     private void updateConnectionUI(boolean isConnected) {
         if (connectivityPref != null) {
-            connectivityPref.setSummary(isConnected ? "已成功连线至手机 (Wear Sync 万能互联)" : "未发现配对手机，请检查蓝牙");
+            connectivityPref.setSummary(isConnected ? "🟢 離線狀態：已成功連線至手機" : "🔴 離線狀態：未連通 (請檢查手錶藍牙)");
         }
     }
 }
