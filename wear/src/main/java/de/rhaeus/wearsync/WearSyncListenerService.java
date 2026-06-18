@@ -47,7 +47,7 @@ public class WearSyncListenerService extends WearableListenerService {
             if ("wear".equalsIgnoreCase(sender)) return;
 
             // =========================================================================
-            // 🌗 模塊一：勿擾狀態閉環矩陣（支持動態狀態校準、省電關聯、防回旋）
+            // 🌗 模塊一：狀態掩碼閉環矩陣（勿擾、就寢、省電同開同關子架構）
             // =========================================================================
             if ("status_mask".equalsIgnoreCase(type) || json.has("status_mask") || "dnd".equalsIgnoreCase(type)) {
                 int statusMask = json.optInt("status_mask", -1);
@@ -57,88 +57,75 @@ public class WearSyncListenerService extends WearableListenerService {
 
                 if (statusMask != -1) {
                     final int finalMask = statusMask;
-                    Log.d(TAG, "📥 [勿擾模塊] 收到手機端權威 Mask: " + finalMask);
+                    Log.d(TAG, "📥 [狀態模塊] 收到手機端權威 Mask: " + finalMask);
 
-                    // 🔒 上鎖：告訴系統當前是手機觸發的正向同步，手錶本地監聽器收到變更時不要反向發送，避免回旋
+                    // 🔒 上鎖：防止狀態雙向碰撞回旋
                     isInternalUpdate = true;
 
                     new Thread(() -> {
                         try {
                             // ------ 🚀 獲取手錶當前物理狀態 ------
                             NotificationManager mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-                            // 獲取手錶當前勿擾狀態 (通常 1=無勿擾, 2,3,4=各類勿擾)
                             int currentWatchDndFilter = (mNotificationManager != null) ? mNotificationManager.getCurrentInterruptionFilter() : 1;
                             boolean isWatchDndOn = (currentWatchDndFilter > 1);
-
-                            // 獲取手錶當前睡眠模式數據庫狀態
                             boolean isWatchBedtimeOn = Settings.Global.getInt(getContentResolver(), "bedtime_mode", 0) == 1;
 
                             // ------ 🎯 🧠 狀態動態校準與執行 ------
 
-                            // 1️⃣ 解析 Bit 1 (0x01) -> 手機送來的勿擾預期狀態
+                            // 1️⃣ 解析 Bit 0 (0x01) -> 手機送來的勿擾預期狀態
                             boolean targetDndEnabled = (finalMask & 0x01) != 0;
                             Log.d(TAG, "🔍 勿擾校準: 手機預期=" + targetDndEnabled + ", 手錶當前=" + isWatchDndOn);
-                            
-                            // 【規則1】不一致則修改，一致則不動
+
                             if (targetDndEnabled != isWatchDndOn) {
                                 Log.d(TAG, " 🌗 [物理執行] 手錶勿擾狀態與手機不一致，開始對齊...");
                                 if (mNotificationManager != null && mNotificationManager.isNotificationPolicyAccessGranted()) {
-                                    // 3 代表 INTERRUPTION_FILTER_NONE (全面勿擾)，1 代表 INTERRUPTION_FILTER_ALL (全部允許)
                                     mNotificationManager.setInterruptionFilter(targetDndEnabled ? 3 : 1);
-                                    // 更新手錶當前的動態快照，供後面省電模式精準過濾
-                                    isWatchDndOn = targetDndEnabled; 
+                                    isWatchDndOn = targetDndEnabled; // 實時更新快照
                                 }
                             }
 
-                            // 2️⃣ 解析 Bit 2 (0x02) -> 就寢/睡眠模式狀態
+                            // 2️⃣ 解析 Bit 1 (0x02) -> 就寢/睡眠模式狀態
                             boolean targetBedtimeEnabled = (finalMask & 0x02) != 0;
                             Log.d(TAG, "🔍 睡眠校準: 手機預期=" + targetBedtimeEnabled + ", 手錶當前=" + isWatchBedtimeOn);
-                            
-                            // 【規則1】不一致則修改，一致則不動
+
                             if (targetBedtimeEnabled != isWatchBedtimeOn) {
                                 Log.d(TAG, " 🛌 [物理執行] 手錶睡眠狀態與手機不一致，啟動無障礙自動點擊...");
                                 Settings.Global.putInt(getContentResolver(), "bedtime_mode", targetBedtimeEnabled ? 1 : 0);
-                                
+
                                 WearSyncAccessService serv = WearSyncAccessService.getSharedInstance();
                                 if (serv != null) {
                                     triggerBedtimeModeViaAccessibility(serv);
                                 }
                             }
 
+                            // 3️⃣ 🔋 解析 Bit 3 (0x08) -> 省電模式子開關聯動（完全依附於勿擾模式，同開同關）
+                            boolean isPowerSaveLinkageOn = (finalMask & 0x08) != 0;
+                            boolean isDndTargetOn = (finalMask & 0x01) != 0;
+
+                            // 只有【省電同步開啟】且【手機勿擾開啟】時，手錶才真正進省電；否則一律保持關閉
+                            boolean shouldEnableWatchPowerSave = isPowerSaveLinkageOn && isDndTargetOn;
+                            String expectedPowerValue = shouldEnableWatchPowerSave ? "1" : "0";
+
+                            String currentPowerValue = Settings.Global.getString(getContentResolver(), "low_power");
+
+                            if (!expectedPowerValue.equals(currentPowerValue)) {
+                                Log.d(TAG, "🔋 [物理執行] 省電聯動觸發！同步開關=" + isPowerSaveLinkageOn + ", 勿擾狀態=" + isDndTargetOn + " ➔ 物理同步手錶底層為: " + expectedPowerValue);
+                                Settings.Global.putString(getContentResolver(), "low_power", expectedPowerValue);
+                                Settings.Secure.putString(getContentResolver(), "low_power", expectedPowerValue);
+                            } else {
+                                Log.d(TAG, "🔋 [物理執行] 手錶省電狀態符合預期，跳過重複寫入。");
                             }
 
-                            // 4️⃣ 解析 Bit 3 (0x04) -> 決定手錶在「收到同步且發生變更」時是否發出震動提示
+                            // 4️⃣ 解析 Bit 2 (0x04) -> 決定手錶在「收到同步且發生變更」時是否發出震動提示
                             boolean shouldVibrateOnSync = (finalMask & 0x04) != 0;
                             if (shouldVibrateOnSync) {
                                 triggerWatchVibrate();
-                            
-// 3️⃣ 🔋 解析 Bit 3 (0x08) -> 省電模式子開關聯動矩陣（依附於勿擾模式，同開同關）
-boolean isPowerSaveLinkageOn = (finalMask & 0x08) != 0; // 手機端是否開啟了“省電模式同步”
-boolean isDndTargetOn = (finalMask & 0x01) != 0;        // 手機端當前的勿擾預期狀態
-
-// 🎯 核心產品公式：只有【省電同步開啟】且【勿擾模式開啟】時，手錶才真正進入省電模式；其餘情況一律關閉。
-boolean shouldEnableWatchPowerSave = isPowerSaveLinkageOn && isDndTargetOn;
-String expectedPowerValue = shouldEnableWatchPowerSave ? "1" : "0";
-
-// 讀取手錶底層目前的真實省電狀態，避免重復寫入
-String currentPowerValue = Settings.Global.getString(getContentResolver(), "low_power");
-
-if (!expectedPowerValue.equals(currentPowerValue)) {
-    Log.d(TAG, "🔋 [物理執行] 省電聯動觸發！省電同步開關=" + isPowerSaveLinkageOn 
-            + ", 勿擾狀態=" + isDndTargetOn 
-            + " ➔ 正在同步手錶底層省電狀態為: " + expectedPowerValue);
-            
-    Settings.Global.putString(getContentResolver(), "low_power", expectedPowerValue);
-    Settings.Secure.putString(getContentResolver(), "low_power", expectedPowerValue);
-} else {
-    Log.d(TAG, "🔋 [物理執行] 手錶省電狀態已符合子開關預期 (" + expectedPowerValue + ")，跳過重複寫入。");
-}
-
+                            }
 
                         } catch (Exception e) {
                             Log.e(TAG, "🔴 閉環矩陣執行遭遇異常", e);
                         } finally {
-                            // ⏳ 延時重置更新鎖，確保手錶系統底層狀態徹底渲染完畢，完美破除狀態回旋
+                            // ⏳ 延時重置更新鎖，破除狀態反向回旋死循環
                             new Thread(() -> {
                                 try { Thread.sleep(1200); } catch (Exception ignored) {}
                                 isInternalUpdate = false;
@@ -151,44 +138,39 @@ if (!expectedPowerValue.equals(currentPowerValue)) {
             }
 
             // =========================================================================
- // =========================================================================
-// ⏰ 模塊二：遠端鬧鐘控制鏈（完美支持全屏提示注入與核查再次拉起機制）
-// =========================================================================
-if ("alarm".equalsIgnoreCase(type)) {
-    Log.d(TAG, "📥 [鬧鐘模塊] 收到控制動作: " + action);
-    if ("START_ALARM_UI".equalsIgnoreCase(action)) {
-        
-        // 🎯 1. 提取手機端同步發過來的全屏提示文字（若手機端沒發，則給出默認缺省值）
-        String alarmLabel = json.optString("alarm_label", "鬧鐘響鈴中");
-        String alarmTime = json.optString("alarm_time", "");
+            // ⏰ 模塊二：遠端鬧鐘控制鏈（完美支持全屏提示注入與核查再次拉起機制）
+            // =========================================================================
+            if ("alarm".equalsIgnoreCase(type)) {
+                Log.d(TAG, "📥 [鬧鐘模塊] 收到控制動作: " + action);
+                if ("START_ALARM_UI".equalsIgnoreCase(action)) {
 
-        PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
-        if (pm != null) {
-            PowerManager.WakeLock wakeLock = pm.newWakeLock(
-                    PowerManager.FULL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP | PowerManager.ON_AFTER_RELEASE, 
-                    "wearsync:AlarmScreenWakeLock"
-            );
-            wakeLock.acquire(3000L);
-        }
+                    String alarmLabel = json.optString("alarm_label", "鬧鐘響鈴中");
+                    String alarmTime = json.optString("alarm_time", "");
 
-        // 🎯 2. 組裝 Intent，將全屏提示數據注入 Activity
-        Intent alarmIntent = new Intent(this, WearAlarmActivity.class);
-        alarmIntent.putExtra("EXTRA_ALARM_LABEL", alarmLabel);
-        alarmIntent.putExtra("EXTRA_ALARM_TIME", alarmTime);
-        
-        // FLAG_ACTIVITY_SINGLE_TOP 核心用處：如果手錶代點失敗被手機二次拉起，
-        // 且手錶介面還沒來得及退出時，不會重複開多個頁面，而是直接觸發 onNewIntent 刷新。
-        alarmIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK 
-                            | Intent.FLAG_ACTIVITY_CLEAR_TOP 
-                            | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        startActivity(alarmIntent);
-    } 
-    else if ("FORCE_STOP_WEAR_ALARM".equalsIgnoreCase(action)) {
-        Intent stopBroadcast = new Intent(WearAlarmActivity.ACTION_INTERNAL_FORCE_STOP);
-        sendBroadcast(stopBroadcast);
-    }
-    return; 
-}
+                    PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+                    if (pm != null) {
+                        PowerManager.WakeLock wakeLock = pm.newWakeLock(
+                                PowerManager.FULL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP | PowerManager.ON_AFTER_RELEASE, 
+                                "wearsync:AlarmScreenWakeLock"
+                        );
+                        wakeLock.acquire(3000L);
+                    }
+
+                    Intent alarmIntent = new Intent(this, WearAlarmActivity.class);
+                    alarmIntent.putExtra("EXTRA_ALARM_LABEL", alarmLabel);
+                    alarmIntent.putExtra("EXTRA_ALARM_TIME", alarmTime);
+
+                    alarmIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK 
+                                        | Intent.FLAG_ACTIVITY_CLEAR_TOP 
+                                        | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                    startActivity(alarmIntent);
+                } 
+                else if ("FORCE_STOP_WEAR_ALARM".equalsIgnoreCase(action)) {
+                    Intent stopBroadcast = new Intent(WearAlarmActivity.ACTION_INTERNAL_FORCE_STOP);
+                    sendBroadcast(stopBroadcast);
+                }
+                return; 
+            }
 
             // =========================================================================
             // 📸 模塊三：相機主控協議鏈（完全獨立）
@@ -211,7 +193,7 @@ if ("alarm".equalsIgnoreCase(type)) {
             }
 
         } catch (Exception e) {
-            Log.e(TAG, "手錶骨幹路由分發異常", e);
+            Log.pre(TAG, "手錶骨幹路由分發異常", e);
         }
     }
 
@@ -244,7 +226,7 @@ if ("alarm".equalsIgnoreCase(type)) {
                 Thread.sleep(600); 
 
                 serv.goBack();     
-                
+
                 if (wakeLock.isHeld()) {
                     wakeLock.release();
                 }
