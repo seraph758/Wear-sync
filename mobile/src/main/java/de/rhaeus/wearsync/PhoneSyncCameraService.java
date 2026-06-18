@@ -46,6 +46,22 @@ public class PhoneSyncCameraService extends Service implements Camera.PreviewCal
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        Log.d(TAG, "🚀 PhoneSyncCameraService 收到触发信令，开始原地复活...");
+        // 🎯 挂载临时前台通道通知（防止被系统在后台当场击杀）
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            String channelId = "camera_sync_channel";
+            android.app.NotificationChannel channel = new android.app.NotificationChannel(
+                    channelId, "相机远端同步", android.app.NotificationManager.IMPORTANCE_LOW);
+            android.app.NotificationManager nm = (android.app.NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+            if (nm != null) nm.createNotificationChannel(channel);
+    
+            android.app.Notification notification = new android.app.Notification.Builder(this, channelId)
+                    .setContentTitle("WearSync")
+                    .setContentText("远端相机流同步交互中...")
+                    .setSmallIcon(android.R.drawable.ic_menu_camera)
+                    .build();
+            startForeground(8899, notification);
+        }
         if (intent == null || intent.getAction() == null) {
             stopSelf();
             return START_NOT_STICKY;
@@ -61,7 +77,7 @@ public class PhoneSyncCameraService extends Service implements Camera.PreviewCal
         } else if (ACTION_TRIGGER_SHUTTER.equals(action)) {
             executePhoneShutter();
         }
-
+        initAndStartCameraPipeline();
         return START_NOT_STICKY;
     }
 
