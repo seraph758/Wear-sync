@@ -120,21 +120,28 @@ public class PhoneSyncListenerService extends WearableListenerService {
                 return;
             } 
 
-            // ================= 📸 3️⃣ 相機喚醒與釋放協議 =================
+            // =========================================================================
+// 📸 3️⃣ 相机唤醒与释放协议（突破 Android 高版本后台拉起限制）
+// =========================================================================
             else if ("camera".equalsIgnoreCase(type) || "camera_control".equalsIgnoreCase(type)) {
-                if ("START_CAMERA_UI".equalsIgnoreCase(action)) {
-                    Log.d(TAG, "🚀 [核心重構] 收到手錶拍照口令！直接將手機主控 Activity 拽到前台...");
-
-                    Intent clIntent = new Intent();
-                    clIntent.setClassName(getPackageName(), "de.rhaeus.wearsync.PhoneSyncMainActivity");
-                    clIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK 
-                                    | Intent.FLAG_ACTIVITY_CLEAR_TOP 
-                                    | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-                    clIntent.putExtra("INTERNAL_CMD", "LAUNCH_CAMERA_SERVICE_FROM_FOREGROUND");
-                    startActivity(clIntent);
-
+                if ("START_CAMERA_UI".equalsIgnoreCase(action) || "START_CAMERA".equalsIgnoreCase(action)) {
+                    Log.d(TAG, "🚀 [相机模块] 收到手表端拍照激活口令！直接安全唤醒手机端 PhoneSyncCameraService...");
+            
+                    try {
+                        Intent cameraServiceIntent = new Intent(this, PhoneSyncCameraService.class);
+                        // 🎯 核心安全加固：高版本 Android 如果在后台启动服务，必须用 startForegroundService
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                            startForegroundService(cameraServiceIntent);
+                        } else {
+                            startService(cameraServiceIntent);
+                        }
+                        Log.i(TAG, "🟢 [网关物理执行] PhoneSyncCameraService 后台服务已成功发出拉起指令");
+                    } catch (Exception e) {
+                        Log.e(TAG, "🔴 跨进程后台拉起手机相机服务遭遇强力封杀", e);
+                    }
+            
                 } else if ("STOP_CAMERA".equalsIgnoreCase(action) || "STOP_CAMERA_STREAM".equalsIgnoreCase(action)) {
-                    Log.d(TAG, "🛑 收到手錶斷開要求，下發本地廣播釋放手機端相機服務");
+                    Log.d(TAG, "🛑 收到手表断开要求，下发本地广播释放手机端相机服务");
                     sendBroadcast(new Intent("de.rhaeus.wearsync.ACTION_STOP_CAMERA_STREAM"));
                 }
                 return;
