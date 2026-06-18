@@ -3,330 +3,155 @@ package de.rhaeus.wearsync;
 import android.app.NotificationManager;
 import android.content.Context;
 import android.content.Intent;
+import android.os.Build;
 import android.os.Handler;
 import android.os.PowerManager;
-import android.os.VibrationEffect;
-import android.os.Vibrator;
-import android.provider.Settings;
 import android.util.Log;
-import android.widget.Toast;
-import androidx.annotation.NonNull;
-
 import com.google.android.gms.tasks.Tasks;
-import com.google.android.gms.wearable.ChannelClient;
 import com.google.android.gms.wearable.MessageEvent;
+import com.google.android.gms.wearable.Node;
 import com.google.android.gms.wearable.Wearable;
 import com.google.android.gms.wearable.WearableListenerService;
 import org.json.JSONObject;
-
-import java.io.EOFException;
-import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
-public class WearSyncListenerService extends WearableListenerService {
-    private static final String TAG = "WearSync_WearListener";
+public class PhoneSyncListenerService extends WearableListenerService {
+    private static final String TAG = "WearSync_PhoneListener";
     private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
-    private static final String CAMERA_PREVIEW_STREAM_PATH = "/camera-preview-stream";
-
-    // 🔒 核心防護：全局內部更新鎖，徹底避免雙向狀態回旋死循環
-    public static boolean isInternalUpdate = false;
+    
+    // 🔒 核心防护：全局内部更新锁，彻底避免双向状态回旋死循环
+    public static boolean isInternalUpdate = false; 
 
     @Override
-    public void onMessageReceived(@NonNull MessageEvent messageEvent) {
-        if (!UNIVERSAL_SYNC_PATH.equalsIgnoreCase(messageEvent.getPath())) return;
-        byte[] data = messageEvent.getData();
-        if (data == null) return;
+    public void onMessageReceived(MessageEvent messageEvent) {
+        if (!UNIVERSAL_SYNC_PATH.equals(messageEvent.getPath())) {
+            super.onMessageReceived(messageEvent);
+            return;
+        }
 
         try {
-            String jsonStr = new String(data, StandardCharsets.UTF_8);
+            String jsonStr = new String(messageEvent.getData(), StandardCharsets.UTF_8);
             JSONObject json = new JSONObject(jsonStr);
             String sender = json.optString("sender", "");
             String type = json.optString("type", "");
             String action = json.optString("action", "");
 
-            if ("wear".equalsIgnoreCase(sender)) return;
+            // 过滤自己发出的包，防止回旋
+            if ("phone".equalsIgnoreCase(sender)) return;
+
+            Log.d(TAG, "📥 手機底層骨幹網收到信令 -> type: " + type + ", action: " + action);
 
             // =========================================================================
-// 🌗 模块一：勿扰模式单向对齐块（手机发 MASK -> 手表对齐本地勿扰）
-// =========================================================================
-if ("status_mask".equalsIgnoreCase(type) || json.has("status_mask")) {
+            // 🌗 模塊一：手機端勿擾模式接收塊（严格作为手表端旧代码机制的镜像参照物）
+            // =========================================================================
+            if ("status_mask".equalsIgnoreCase(type) || json.has("status_mask")) {
                 int statusMask = json.optInt("status_mask", -1);
                 if (statusMask != -1) {
-                    final int finalMask = statusMask;
-                    Log.d(TAG, "📥 [手錶端勿擾解析] 收到手機權威 Mask: " + finalMask);
+                    Log.d(TAG, "📥 [手機端勿擾權威對齊] 收到手錶端反向傳回的 Mask 狀態包: " + statusMask);
 
-                    isInternalUpdate = true; // 鎖定防回傳死循環
+                    isInternalUpdate = true; // 鎖定防回旋死循環
 
-                    // 解析出 1 個總開關 + 3 個手錶專屬勿擾子開關
-                    boolean targetDndEnabled = (finalMask & 0x01) != 0;       // Bit 0: 勿擾總開關
-                    boolean isVibrateSwitchOn = (finalMask & 0x02) != 0;      // Bit 1: 勿擾傳輸震動子開關
-                    boolean isSleepLinkageOpen = (finalMask & 0x04) != 0;     // Bit 2: 睡眠模式(無障礙)子開關
-                    boolean isPowerSaveLinkageOpen = (finalMask & 0x08) != 0; // Bit 3: 省電模式子開關
+                    // 🎯 逆向提取 Bit 0（勿擾總開關）
+                    boolean targetDndEnabled = (statusMask & 0x01) != 0; 
 
-                    // 🌗 【總開關執行】手錶本地勿擾狀態跟隨手機（一起開、一起關）
                     NotificationManager mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-                    boolean hasDndChanged = false; // 嚴格標記勿擾狀態是否有實質變更
-                    
                     if (mNotificationManager != null) {
-                        int currentWatchDndFilter = mNotificationManager.getCurrentInterruptionFilter();
-                        boolean isWatchDndOn = (currentWatchDndFilter > 1);
-                        if (targetDndEnabled != isWatchDndOn) {
+                        int currentInterruptionFilter = mNotificationManager.getCurrentInterruptionFilter();
+                        boolean isPhoneDndOn = (currentInterruptionFilter > 1); // 2,3,4 均为开启勿扰
+                        
+                        if (targetDndEnabled != isPhoneDndOn) {
                             mNotificationManager.setInterruptionFilter(targetDndEnabled ? 3 : 1);
-                            hasDndChanged = true;
-                            Log.i(TAG, "🌗 [勿擾同步] 手錶本地勿擾已變更為: " + targetDndEnabled);
+                            Log.i(TAG, "🌗 [手機勿擾實體同步] 手機端勿擾已成功跟隨手錶變更為: " + targetDndEnabled);
                         }
                     }
-
-                    // 📳 【子開關 1 執行】震動開關邏輯（採用舊代碼 50ms 物理震動方式）
-                    if (isVibrateSwitchOn) {
-                        Log.d(TAG, "📳 [勿擾震動子開關=開啟] 觸發 50ms 物理震動提示");
-                        vibrate(); 
-                    } else {
-                        Log.w(TAG, "🔇 [勿擾震動子開關=關閉] 攔截並封鎖震動，保持絕對靜默。");
-                    }
-
-                    // 🛌 【子開關 2 執行】睡眠模式邏輯（完全重用舊代碼安全經驗的線程挂起機制）
-                    if (isSleepLinkageOpen && hasDndChanged) {
-                        Log.d(TAG, "🛌 [睡眠模式連動激活] 狀態變更，調用本地舊代碼無障礙處理流程...");
-                        toggleBedtimeMode(); // 🎯 內部會透過 WearSyncAccessService 執行動作
-                    }
-
-                    // 🔋 【子開關 3 執行】省電模式邏輯
-                    if (isPowerSaveLinkageOpen) {
-                        Log.d(TAG, "🔋 [省電模式連動激活] 手錶省電與勿擾捆綁變更 -> 實際省電狀態=" + targetDndEnabled);
-                        Settings.Global.putInt(getContentResolver(), "low_power", targetDndEnabled ? 1 : 0);
-                        sendBroadcast(new Intent(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED));
-                    }
-
-                    // 釋放全局鎖
+                    
+                    // 延迟解锁，确保状态变更稳定
                     new Handler(getMainLooper()).postDelayed(() -> {
                         isInternalUpdate = false;
-                        Log.d(TAG, "🔒 [解鎖] 手錶內部勿擾狀態鎖已釋放。");
+                        Log.d(TAG, "🔒 [解鎖] 手機內部勿擾狀態鎖已釋放。");
                     }, 1500);
                 }
                 return;
             }
 
+            // =========================================================================
+            // ⏰ 模塊二：遠端鬧鐘控制鏈（完美對齊雙端控制閉環與反向代點）
+            // =========================================================================
+            else if ("alarm".equalsIgnoreCase(type) || "alarm_action".equalsIgnoreCase(type)) {
+                if ("DISMISS".equalsIgnoreCase(action) || "SNOOZE".equalsIgnoreCase(action)) {
+                    Log.d(TAG, "⏰ [鬧鐘模塊] 收到手錶端反向控制口令: " + action + "，交由 PhoneAlarmManager 物理執行...");
+                    PhoneAlarmManager.handleWatchCommand(this, action);
+                }
+                return;
+            } 
+
+            // =========================================================================
+            // 📸 模塊三：相機喚醒與釋放協議
+            // =========================================================================
+            else if ("camera".equalsIgnoreCase(type) || "camera_control".equalsIgnoreCase(type)) {
+                if ("START_CAMERA_UI".equalsIgnoreCase(action) || "START_CAMERA".equalsIgnoreCase(action)) {
+                    Log.d(TAG, "🚀 [相機模塊] 收到手錶端激活口令！直接安全喚醒手機端 PhoneSyncCameraService...");
+            
+                    try {
+                        Intent cameraServiceIntent = new Intent(this, PhoneSyncCameraService.class);
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            startForegroundService(cameraServiceIntent);
+                        } else {
+                            startService(cameraServiceIntent);
+                        }
+                        Log.i(TAG, "🟢 [網關物理執行] PhoneSyncCameraService 後台服務已成功發出拉起指令");
+                    } catch (Exception e) {
+                        Log.e(TAG, "🔴 跨進程後台拉起手機相機服務遭遇強力封殺", e);
+                    }
+            
+                } else if ("STOP_CAMERA".equalsIgnoreCase(action) || "STOP_CAMERA_STREAM".equalsIgnoreCase(action)) {
+                    Log.d(TAG, "🛑 [相機模塊] 收到手錶斷開要求，下發本地廣播釋放手機端相機服務");
+                    sendBroadcast(new Intent("de.rhaeus.wearsync.ACTION_STOP_CAMERA_STREAM"));
+                }
+                return;
+            }
+
         } catch (Exception e) {
-            Log.e(TAG, "🔴 手錶底層的骨幹解析發生嚴重錯誤", e);
+            Log.e(TAG, "骨幹通道解析數據包災難性失敗", e);
         }
     }
 
-    // =========================================================================
-    // 🛠️ 經真機驗證完全無誤的私有方法機制（包括內部專屬線程挂起環境）
-    // =========================================================================
-    
-    private void toggleBedtimeMode() {
-        // 🎯 這裡精確調用了您給的 WearSyncAccessService.java 暴露出來的單例！
-        WearSyncAccessService serv = WearSyncAccessService.getSharedInstance();
-        if (serv == null) {
-            Log.d(TAG, "accessibility not connected");
-            Handler mHandler = new Handler(getMainLooper());
-            mHandler.post(new Runnable() {
-                @Override
-                public void run() {
-                    Toast.makeText(getApplicationContext(), "无障碍服务未连接", Toast.LENGTH_LONG).show();
-                }
-            });
+    /**
+     * 🛰️ 权威主动外发方法：当手机端检测到系统勿扰、睡眠、省电发生变更时，调用此方法组装 Mask 发送给手表
+     * 完美复刻手表端解析规则：Bit 0=总勿扰, Bit 1=震动提示, Bit 2=睡眠联动, Bit 3=省电联动
+     */
+    public static void sendStatusMaskToWatch(Context context, boolean dndOn, boolean vibrateOn, boolean sleepLinkOn, boolean powerSaveLinkOn) {
+        if (isInternalUpdate) {
+            Log.d(TAG, "⚠️ 處於內部更新鎖定狀態，攔截本次外發，防止回旋死循環。");
             return;
         }
 
-        Log.d(TAG, "accessibility connected. Perform toggle.");
-        // turn on screen
-        PowerManager pm = (PowerManager) getApplicationContext().getSystemService(Context.POWER_SERVICE);
-        PowerManager.WakeLock wakeLock = pm.newWakeLock(PowerManager.FULL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP , "dndsync:MyWakeLock");
-        wakeLock.acquire(2*60*1000L /*2 minutes*/);
-
-        Handler mHandler = new Handler(getMainLooper());
-        mHandler.post(new Runnable() {
-            @Override
-            public void run() {
-                Toast.makeText(getApplicationContext(), "正在同步睡眠模式...", Toast.LENGTH_SHORT).show();
-            }
-        });
-
-        // wait a bit before touch input to make sure screen is on
-        try {
-            Thread.sleep(1000);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-
-        // open quick panel
-        serv.swipeDown();
-
-        // wait for quick panel to open
-        try {
-            Thread.sleep(1000);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-
-        // click on the middle icon in the first row
-        serv.clickIcon1_2();
-
-        // wait a bit
-        try {
-            Thread.sleep(1000);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-
-        // close quick panel
-        serv.goBack();
-
-        wakeLock.release();
-    }
-
-    private void vibrate() {
-        Vibrator v = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
-        if (v != null && v.hasVibrator()) {
-            v.vibrate(VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE));
-        }
-    }
-
-            // =========================================================================
-            // ⏰ 模塊二：遠端鬧鐘控制鏈（完美支持全屏提示注入與核查再次拉起機制）
-            // =========================================================================
-            if ("alarm".equalsIgnoreCase(type)) {
-                Log.d(TAG, "📥 [鬧鐘模塊] 收到控制動作: " + action);
-                if ("START_ALARM_UI".equalsIgnoreCase(action)) {
-
-                    String alarmLabel = json.optString("alarm_label", "鬧鐘響鈴中");
-                    String alarmTime = json.optString("alarm_time", "");
-
-                    PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
-                    if (pm != null) {
-                        PowerManager.WakeLock wakeLock = pm.newWakeLock(
-                                PowerManager.FULL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP | PowerManager.ON_AFTER_RELEASE, 
-                                "wearsync:AlarmScreenWakeLock"
-                        );
-                        wakeLock.acquire(3000L);
-                    }
-
-                    Intent alarmIntent = new Intent(this, WearAlarmActivity.class);
-                    alarmIntent.putExtra("EXTRA_ALARM_LABEL", alarmLabel);
-                    alarmIntent.putExtra("EXTRA_ALARM_TIME", alarmTime);
-
-                    alarmIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK 
-                                        | Intent.FLAG_ACTIVITY_CLEAR_TOP 
-                                        | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-                    startActivity(alarmIntent);
-                } 
-                else if ("FORCE_STOP_WEAR_ALARM".equalsIgnoreCase(action)) {
-                    Intent stopBroadcast = new Intent(WearAlarmActivity.ACTION_INTERNAL_FORCE_STOP);
-                    sendBroadcast(stopBroadcast);
-                }
-                return; 
-            }
-
-            // =========================================================================
-            // 📸 模塊三：相機主控協議鏈（完全獨立）
-            // =========================================================================
-            if ("camera_control".equalsIgnoreCase(type) || "camera".equalsIgnoreCase(type)) {
-                Log.d(TAG, "📥 [相機模塊] 收到主控動作: " + action);
-                if ("START_CAMERA".equalsIgnoreCase(action)) {
-                    int rotationDegrees = json.optInt("rotation_degrees", 0);
-                    Intent camIntent = new Intent(this, WearCameraActivity.class);
-                    camIntent.putExtra("rotation_degrees", rotationDegrees);
-                    camIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-                    startActivity(camIntent);
-                } 
-                else if ("FORCE_QUIT_CAMERA".equalsIgnoreCase(action) || "STOP_CAMERA_ACTIVE".equalsIgnoreCase(action)) {
-                    Intent killIntent = new Intent("de.rhaeus.wearsync.ACTION_KILL_WEAR_CAMERA");
-                    sendBroadcast(killIntent);
-                    WearCameraActivity.forceQuitInstance();
-                }
-                return; 
-            }
-
-        } catch (Exception e) {
-            Log.e(TAG, "手錶骨幹路由分發異常", e);
-        }
-    }
-
-    private void triggerWatchVibrate() {
-        try {
-            Vibrator v = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
-            if (v != null) {
-                v.vibrate(VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE));
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "手錶同步震動提示失敗", e);
-        }
-    }
-
-    private void triggerBedtimeModeViaAccessibility(WearSyncAccessService serv) {
-        try {
-            PowerManager pm = (PowerManager) getApplicationContext().getSystemService(Context.POWER_SERVICE);
-            if (pm != null) {
-                PowerManager.WakeLock wakeLock = pm.newWakeLock(
-                        PowerManager.FULL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP, 
-                        "wearsync:BedtimeWakeLock"
-                );
-                wakeLock.acquire(3000L); 
-
-                Thread.sleep(400); 
-                serv.swipeDown();  
-                Thread.sleep(800); 
-
-                serv.clickIcon1_2(); 
-                Thread.sleep(600); 
-
-                serv.goBack();     
-
-                if (wakeLock.isHeld()) {
-                    wakeLock.release();
-                }
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "睡眠模式無障礙執行中斷", e);
-        }
-    }
-
-    @Override
-    public void onChannelOpened(@NonNull ChannelClient.Channel channel) {
-        super.onChannelOpened(channel);
-        if (!CAMERA_PREVIEW_STREAM_PATH.equalsIgnoreCase(channel.getPath())) return;
-
         new Thread(() -> {
-            InputStream inputStream = null;
             try {
-                inputStream = Tasks.await(Wearable.getChannelClient(this).getInputStream(channel));
-                byte[] headerBuffer = new byte[4];
+                // 🎯 核心位運算：完美與手錶舊代碼解析器互為鏡像
+                int mask = 0;
+                if (dndOn) mask |= 0x01;             // Bit 0
+                if (vibrateOn) mask |= 0x02;         // Bit 1
+                if (sleepLinkOn) mask |= 0x04;       // Bit 2
+                if (powerSaveLinkOn) mask |= 0x08;   // Bit 3
 
-                while (true) {
-                    readFully(inputStream, headerBuffer, 4);
-                    int packetLength = ((headerBuffer[0] & 0xFF) << 24) |
-                                       ((headerBuffer[1] & 0xFF) << 16) |
-                                       ((headerBuffer[2] & 0xFF) << 8)  |
-                                       (headerBuffer[3] & 0xFF);
+                JSONObject json = new JSONObject();
+                json.put("sender", "phone");
+                json.put("type", "status_mask");
+                json.put("status_mask", mask);
 
-                    if (packetLength <= 0 || packetLength > 1024 * 1024 * 3) break;
-
-                    byte[] jpegPayload = new byte[packetLength];
-                    readFully(inputStream, jpegPayload, packetLength);
-
-                    int trailer = inputStream.read();
-                    if (trailer != 0xFF) continue;
-
-                    WearCameraActivity.updateFrame(jpegPayload);
+                byte[] payload = json.toString().getBytes(StandardCharsets.UTF_8);
+                List<Node> nodes = Tasks.await(Wearable.getNodeClient(context).getConnectedNodes());
+                if (nodes != null) {
+                    for (Node n : nodes) {
+                        Tasks.await(Wearable.getMessageClient(context).sendMessage(n.getId(), UNIVERSAL_SYNC_PATH, payload));
+                        Log.d(TAG, "🚀 [手機狀態外發] 成功向手錶投遞權威 Mask: " + mask + " (JSON: " + json.toString() + ")");
+                    }
                 }
-            } catch (Exception ignored) {
-            } finally {
-                if (inputStream != null) {
-                    try { inputStream.close(); } catch (Exception ignored) {}
-                }
+            } catch (Exception e) {
+                Log.e(TAG, "🔴 手機向手錶同步狀態掩碼失敗", e);
             }
         }).start();
-    }
-
-    private void readFully(InputStream is, byte[] buffer, int length) throws Exception {
-        int totalRead = 0;
-        while (totalRead < length) {
-            int read = is.read(buffer, totalRead, length - totalRead);
-            if (read == -1) throw new EOFException("Stream closed prematurely");
-            totalRead += read;
-        }
     }
 }
