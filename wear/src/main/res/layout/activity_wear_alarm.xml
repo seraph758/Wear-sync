@@ -9,13 +9,22 @@
     android:background="#3E0000">
 
     <TextView
-        android:id="@+id/alarm_title"
+        android:id="@+id/tv_alarm_time"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="00:00"
+        android:textColor="#FFFFFF"
+        android:textSize="32sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="2dp"/>
+
+    <TextView
+        android:id="@+id/tv_alarm_label"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="⏰ 手机闹钟响铃中"
         android:textColor="#FFFFFF"
-        android:textSize="16sp"
-        android:textStyle="bold"
+        android:textSize="14sp"
         android:layout_marginBottom="16dp"/>
 
     <Button
