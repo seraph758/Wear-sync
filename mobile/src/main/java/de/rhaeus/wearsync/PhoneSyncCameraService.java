@@ -6,7 +6,7 @@ import android.content.Intent;
 import android.graphics.ImageFormat;
 import android.graphics.Rect;
 import android.graphics.YuvImage;
-import android.hardware.Camera; // 采用PreviewCallback最纯净简洁展现流式打包逻辑
+import android.hardware.Camera; 
 import android.os.IBinder;
 import android.util.Log;
 import android.view.WindowManager;
@@ -23,13 +23,6 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
-/**
- * 📸 独立解耦的手机端相机流控服务（对齐原有文件名版）
- * 核心职责：
- * 1. 启动时计算手机旋转角度，向手表下发方向锁定指令。
- * 2. 握手成功后开启 Channel 管道，将 NV21 帧高频压缩为 JPEG 并流式发射。
- * 3. 承接快门代点、彻底释放程序，拒绝任何内存和全局方向污染。
- */
 public class PhoneSyncCameraService extends Service implements Camera.PreviewCallback {
     private static final String TAG = "WearSync_PhoneSyncCamera";
     private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
@@ -46,30 +39,33 @@ public class PhoneSyncCameraService extends Service implements Camera.PreviewCal
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        Log.d(TAG, "🚀 PhoneSyncCameraService 收到触发信令，开始原地复活...");
-        // 🎯 挂载临时前台通道通知（防止被系统在后台当场击杀）
+        Log.d(TAG, "🚀 PhoneSyncCameraService 收到觸發信令...");
+        
+        // 🎯 掛載前台通道通知，防止高版本 Android 後臺擊殺
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             String channelId = "camera_sync_channel";
             android.app.NotificationChannel channel = new android.app.NotificationChannel(
-                    channelId, "相机远端同步", android.app.NotificationManager.IMPORTANCE_LOW);
+                    channelId, "相機遠端同步", android.app.NotificationManager.IMPORTANCE_LOW);
             android.app.NotificationManager nm = (android.app.NotificationManager) getSystemService(NOTIFICATION_SERVICE);
             if (nm != null) nm.createNotificationChannel(channel);
     
             android.app.Notification notification = new android.app.Notification.Builder(this, channelId)
                     .setContentTitle("WearSync")
-                    .setContentText("远端相机流同步交互中...")
+                    .setContentText("遠端相機流同步交互中...")
                     .setSmallIcon(android.R.drawable.ic_menu_camera)
                     .build();
             startForeground(8899, notification);
         }
+
         if (intent == null || intent.getAction() == null) {
             stopSelf();
             return START_NOT_STICKY;
         }
 
         String action = intent.getAction();
-        Log.d(TAG, "⚙️ 手机相机服务收到动作: " + action);
+        Log.d(TAG, "⚙️ 手機相機服務收到動作: " + action);
 
+        // 🎯 核心修復：精確路由，移除原本最底下找不到且會重複觸發的錯誤方法
         if (ACTION_START_CAMERA.equals(action)) {
             startCameraAndSetupPipeline();
         } else if (ACTION_STOP_CAMERA_STREAM.equals(action)) {
@@ -77,80 +73,62 @@ public class PhoneSyncCameraService extends Service implements Camera.PreviewCal
         } else if (ACTION_TRIGGER_SHUTTER.equals(action)) {
             executePhoneShutter();
         }
-        initAndStartCameraPipeline();
+        
         return START_NOT_STICKY;
     }
 
-    /**
-     * 🏁 开启相机并建立跨端数据发射管道
-     */
     private void startCameraAndSetupPipeline() {
         if (isStreaming) return;
         isStreaming = true;
 
         new Thread(() -> {
             try {
-                // 1. 初始化手机本地硬件相机
                 mCamera = Camera.open(Camera.CameraInfo.CAMERA_FACING_BACK);
                 Camera.Parameters parameters = mCamera.getParameters();
-                parameters.setPreviewSize(640, 480); // 专为手表屏幕优化的低带宽分辨率
+                parameters.setPreviewSize(640, 480); 
                 mCamera.setParameters(parameters);
                 mCamera.setPreviewCallback(this);
 
-                // 2. 计算手机当前真实姿态角度，用作方向锁定指令下发
                 int rotationDegrees = calculatePhoneRotation();
-                Log.d(TAG, "📐 手机检测到当前画面旋转角度: " + rotationDegrees + " -> 准备下发锁定");
+                Log.d(TAG, "📐 手機檢測到當前畫面旋轉角度: " + rotationDegrees);
 
-                // 3. 通过 Message 控场通道，向手表发送拉起指令和旋转纠偏参数
                 sendControlMessageToWatch("START_CAMERA", rotationDegrees);
 
-                // 4. 获取连接的手表节点，建立专属大文件预览传输 Channel 管道
                 List<Node> nodes = Tasks.await(Wearable.getNodeClient(this).getConnectedNodes());
                 if (nodes != null && !nodes.isEmpty()) {
                     String watchNodeId = nodes.get(0).getId();
                     
-                    // 创建并显式阻塞等待通道建立
                     mTargetChannel = Tasks.await(Wearable.getChannelClient(this)
                             .openChannel(watchNodeId, CAMERA_PREVIEW_STREAM_PATH));
                     
-                    // 获取流写入句柄，正式打通数据链路
                     mChannelOutputStream = Tasks.await(Wearable.getChannelClient(this)
                             .getOutputStream(mTargetChannel));
                     
-                    Log.d(TAG, "🚀 [管道打通] ChannelClient 传输通道已就绪，开始向手表泵入实时帧。");
+                    Log.d(TAG, "🚀 [管道打通] 開始向手錶泵入實時幀。");
                     mCamera.startPreview();
                 } else {
-                    Log.w(TAG, "⚠️ 找不到可用的手表节点，放弃开启通道。");
+                    Log.w(TAG, "⚠️ 找不到可用手錶節點");
                     releaseCameraAndPipeline();
                 }
-
             } catch (Exception e) {
-                Log.e(TAG, "建立相机流传输管道产生灾难性失败", e);
+                Log.e(TAG, "建立相機管道失敗", e);
                 releaseCameraAndPipeline();
             }
         }).start();
     }
 
-    /**
-     * 🔄 高频帧泵入：手机相机捕获到原始 NV21 帧后的核心数据封装协议（为未来升级H.264留出OutputStream底层）
-     */
     @Override
     public void onPreviewFrame(byte[] data, Camera camera) {
         if (!isStreaming || mChannelOutputStream == null || data == null) return;
 
-        // 在后台线程中高频压缩发送，避免卡死手机主线程
         new Thread(() -> {
             try {
                 Camera.Size size = camera.getParameters().getPreviewSize();
-                
-                // 将原始 YUV/NV21 转换为 JPEG 字节流进行高保真无损压缩
                 YuvImage yuvImage = new YuvImage(data, ImageFormat.NV21, size.width, size.height, null);
                 ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                yuvImage.compressToJpeg(new Rect(0, 0, size.width, size.height), 80, baos); // 80% 质量压缩平衡带宽
+                yuvImage.compressToJpeg(new Rect(0, 0, size.width, size.height), 80, baos); 
                 
                 byte[] jpegBytes = baos.toByteArray();
-
-                // 🌟 数据包协议头定义：[4字节长度占位符] + [实际JPEG数据] -> 确保手表端能够精准分包粘包
                 int packetLength = jpegBytes.length;
                 byte[] header = new byte[]{
                         (byte) ((packetLength >> 24) & 0xFF),
@@ -159,40 +137,32 @@ public class PhoneSyncCameraService extends Service implements Camera.PreviewCal
                         (byte) (packetLength & 0xFF)
                 };
 
-                // 串行写入管道流
                 synchronized (mChannelOutputStream) {
                     mChannelOutputStream.write(header);
                     mChannelOutputStream.write(jpegBytes);
-                    mChannelOutputStream.write(0xFF); // 附加帧尾校验符
-                    mChannelOutputStream.flush(); // 强行刷新冲入蓝牙带宽
+                    mChannelOutputStream.write(0xFF); 
+                    mChannelOutputStream.flush(); 
                 }
-
             } catch (Exception e) {
-                Log.e(TAG, "向通道泵入画面帧失败，可能手表端已主动断开:", e);
+                Log.e(TAG, "泵入畫面幀失敗:", e);
             }
         }).start();
     }
 
-    /**
-     * 🎯 模拟快门动作：代点拍照
-     */
     private void executePhoneShutter() {
         if (mCamera != null) {
-            Log.d(TAG, "📸 [快门联动] 接收到手表手势触发，手机本地代点快门拍照！");
+            Log.d(TAG, "📸 手機本地代點快門拍照！");
             mCamera.takePicture(null, null, (data, camera) -> {
-                Log.d(TAG, "💾 照片资产已成功在手机本地持久化落盘。");
-                if (mCamera != null) mCamera.startPreview(); // 拍照完毕后重新拉起预览流
+                Log.d(TAG, "💾 照片已成功落盤。");
+                if (mCamera != null) mCamera.startPreview(); 
             });
         }
     }
 
-    /**
-     * 🧹 彻底释放程序（Zero-Pollution）：核级清理，不留任何残留，防止全局方向污染
-     */
     private void releaseCameraAndPipeline() {
         if (!isStreaming) return;
         isStreaming = false;
-        Log.d(TAG, "🧹 触发退出协议：开始进行手机端相机与传输管道的彻底销毁释放...");
+        Log.d(TAG, "🧹 釋放手機端相機與傳輸管道...");
 
         try {
             if (mCamera != null) {
@@ -209,19 +179,14 @@ public class PhoneSyncCameraService extends Service implements Camera.PreviewCal
                 Wearable.getChannelClient(this).close(mTargetChannel);
                 mTargetChannel = null;
             }
-            // 顺便通知手表，双端绝对强制对齐彻底退出
             sendControlMessageToWatch("FORCE_QUIT_CAMERA", 0);
-            Log.d(TAG, "🏁 [核级清空完成] 手机本地相机资源全数回收，管道彻底关闭。");
         } catch (Exception e) {
-            Log.e(TAG, "释放相机管道资源时发生异常", e);
+            Log.e(TAG, "釋放資源異常", e);
         } finally {
             stopSelf();
         }
     }
 
-    /**
-     * 🛰️ 控场信令组装器
-     */
     private void sendControlMessageToWatch(String actionStr, int rotation) {
         try {
             JSONObject json = new JSONObject();
@@ -240,9 +205,6 @@ public class PhoneSyncCameraService extends Service implements Camera.PreviewCal
         } catch (Exception ignored) {}
     }
 
-    /**
-     * 根据手机窗口管理器计算当前物理旋转度数
-     */
     private int calculatePhoneRotation() {
         WindowManager wm = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
         if (wm == null) return 0;
