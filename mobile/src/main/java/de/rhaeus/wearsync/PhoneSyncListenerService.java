@@ -3,6 +3,7 @@ package de.rhaeus.wearsync;
 import android.app.NotificationManager;
 import android.content.Context;
 import android.content.Intent;
+import android.os.Build;
 import android.util.Log;
 import com.google.android.gms.wearable.MessageEvent;
 import com.google.android.gms.wearable.WearableListenerService;
@@ -11,6 +12,8 @@ import java.nio.charset.StandardCharsets;
 
 public class PhoneSyncListenerService extends WearableListenerService {
     private static final String TAG = "WearSync_PhoneListener";
+    
+    // 🔒 核心防护：全局内部更新锁，彻底避免双向状态回旋死循环
     public static boolean isInternalUpdate = false; 
 
     @Override
@@ -29,119 +32,70 @@ public class PhoneSyncListenerService extends WearableListenerService {
             Log.d(TAG, "📥 手機底層骨幹網收到信令 -> type: " + type + ", action: " + action);
 
             // =========================================================================
-            // 🌗 模塊一：手機端勿擾模式獨立接收塊（只改勿擾，別的不動，動態校準防回旋）
+            // 🌗 模塊一：手機端勿擾模式接收塊（严格作为手表端旧代码机制的镜像参照物）
             // =========================================================================
             if ("status_mask".equalsIgnoreCase(type) || json.has("status_mask")) {
                 int statusMask = json.optInt("status_mask", -1);
                 if (statusMask != -1) {
-                    Log.d(TAG, "📥 [勿擾模塊] 手機收到來自手錶的反向狀態 Mask: " + statusMask + " (二進制: " + Integer.toBinaryString(statusMask) + ")");
+                    Log.d(TAG, "📥 [手機端勿擾權威對齊] 收到 Mask 狀態包: " + statusMask);
 
-                    // 🎯 解析 Bit 1 (0x01) -> 手錶端送過來的「勿擾預期狀態」
-                    boolean targetDndEnabled = (statusMask & 0x01) != 0;
+                    isInternalUpdate = true; // 鎖定防回旋死循環
 
-                    try {
-                        // 🚀 1. 獲取手機當前物理勿擾狀態
-                        NotificationManager mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-                        if (mNotificationManager != null) {
-                            int currentPhoneDndFilter = mNotificationManager.getCurrentInterruptionFilter();
-                            boolean isPhoneDndOnNow = (currentPhoneDndFilter > 1);
+                    // 🎯 核心映射：依照手錶端舊代碼位運算規則，逆向提取 Bit 0（勿擾總開關）
+                    // 協議約定：Bit 0=總勿擾，Bit 1=震動，Bit 2=睡眠無障礙，Bit 3=省電模式
+                    boolean targetDndEnabled = (statusMask & 0x01) != 0; 
 
-                            Log.d(TAG, "🔍 勿擾動態校準: 手錶預期=" + targetDndEnabled + ", 手機當前=" + isPhoneDndOnNow);
-
-                            // 🔥【核心閉環規則 1】：不一致則修改，一致則不動
-                            if (targetDndEnabled != isPhoneDndOnNow) {
-                                
-                                // 🔥【核心閉環規則 2】：立刻激活內部更新鎖，破除雙向同步引發的死循環回旋
-                                isInternalUpdate = true;
-                                Log.d(TAG, "🔒 [上鎖] 手機內部更新鎖激活，防止狀態回旋。");
-
-                                // 執行手機底層勿擾物理切換 (3=全面勿擾, 1=關閉勿擾)
-                                if (mNotificationManager.isNotificationPolicyAccessGranted()) {
-                                    mNotificationManager.setInterruptionFilter(targetDndEnabled ? 3 : 1);
-                                    Log.d(TAG, " 🌗 [物理執行] 手機勿擾狀態修改成功 ➔ " + targetDndEnabled);
-                                } else {
-                                    Log.e(TAG, "🔴 失敗：手機缺少修改勿擾模式(Do Not Disturb Access)的權限！");
-                                }
-                            } else {
-                                Log.d(TAG, "🤝 狀態完全一致，手機端不作任何多餘動作。");
-                            }
+                    NotificationManager mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+                    if (mNotificationManager != null) {
+                        int currentInterruptionFilter = mNotificationManager.getCurrentInterruptionFilter();
+                        boolean isPhoneDndOn = (currentInterruptionFilter > 1); // 2,3,4 均为开启勿扰
+                        
+                        // 只有當手機本地與目標狀態不一致時才觸發實體變更
+                        if (targetDndEnabled != isPhoneDndOn) {
+                            // 3 代表 INTERRUPTION_FILTER_NONE/PRIORITY，1 代表 INTERRUPTION_FILTER_ALL(不攔截)
+                            mNotificationManager.setInterruptionFilter(targetDndEnabled ? 3 : 1);
+                            Log.i(TAG, "🌗 [手機勿擾實體同步] 手機端勿擾已成功對齊變更為: " + targetDndEnabled);
                         }
-                    } catch (Exception e) {
-                        Log.e(TAG, "🔴 手機端勿擾狀態校準或執行變更時崩潰", e);
-                    } finally {
-                        // 🔥【核心閉環規則 3】：延時釋放更新鎖，確保手機系統渲染完畢後，再恢復主動控手錶能力
-                        new Thread(() -> {
-                            try { Thread.sleep(1200); } catch (Exception ignored) {}
-                            isInternalUpdate = false;
-                            Log.d(TAG, "🔓 [解鎖] 手機內部更新鎖解除，恢復主動權。");
-                        }).start();
                     }
-                }
-                
-                // 嚴格截斷：只要是 status_mask 類型的信令，到此全部處理完畢，直接返回，絕不向下串擾！
-                if ("status_mask".equalsIgnoreCase(type)) return;
-            }
-
-            // ================= 1️⃣ 舊版勿擾協議向下兼容 =================
-            if ("dnd".equalsIgnoreCase(type)) {
-                int state = json.has("dnd_state") ? json.optInt("dnd_state", -1) : json.optInt("dnd_profile_value", -1);
-                if (state != -1) {
-                    try {
-                        NotificationManager mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-                        if (mNotificationManager != null) {
-                            boolean targetDndEnabled = (state > 0);
-                            boolean isPhoneDndOnNow = (mNotificationManager.getCurrentInterruptionFilter() > 1);
-                            
-                            if (targetDndEnabled != isPhoneDndOnNow) {
-                                isInternalUpdate = true;
-                                Log.d(TAG, "🔒 [上鎖] 舊版向下兼容勿擾鎖激活。");
-                                if (mNotificationManager.isNotificationPolicyAccessGranted()) {
-                                    mNotificationManager.setInterruptionFilter(targetDndEnabled ? 3 : 1);
-                                }
-                                new Thread(() -> {
-                                    try { Thread.sleep(1200); } catch (Exception ignored) {}
-                                    isInternalUpdate = false;
-                                    Log.d(TAG, "🔓 [解鎖] 舊版向下兼容勿擾鎖解除。");
-                                }).start();
-                            }
-                        }
-                    } catch (Exception e) {
-                        Log.e(TAG, "舊版勿擾兼容處理失敗", e);
-                    }
+                    
+                    isInternalUpdate = false; // 解鎖
                 }
                 return;
-            } 
+            }
 
-            // ================= ⏰ 2️⃣ 鬧鐘反向代點 =================
+            // =========================================================================
+            // ⏰ 模塊二：遠端鬧鐘控制鏈（完美對齊雙端控制閉環與反向代點）
+            // =========================================================================
             else if ("alarm".equalsIgnoreCase(type) || "alarm_action".equalsIgnoreCase(type)) {
                 if ("DISMISS".equalsIgnoreCase(action) || "SNOOZE".equalsIgnoreCase(action)) {
+                    Log.d(TAG, "⏰ [鬧鐘模塊] 收到手錶端反向控制口令: " + action + "，交由 PhoneAlarmManager 物理執行...");
                     PhoneAlarmManager.handleWatchCommand(this, action);
                 }
                 return;
             } 
 
             // =========================================================================
-// 📸 3️⃣ 相机唤醒与释放协议（突破 Android 高版本后台拉起限制）
-// =========================================================================
+            // 📸 模塊三：相機喚醒與釋放協議（突破 Android 后台拉起限制，完美支持当前命名）
+            // =========================================================================
             else if ("camera".equalsIgnoreCase(type) || "camera_control".equalsIgnoreCase(type)) {
                 if ("START_CAMERA_UI".equalsIgnoreCase(action) || "START_CAMERA".equalsIgnoreCase(action)) {
-                    Log.d(TAG, "🚀 [相机模块] 收到手表端拍照激活口令！直接安全唤醒手机端 PhoneSyncCameraService...");
+                    Log.d(TAG, "🚀 [相機模塊] 收到手錶端激活口令！直接安全喚醒手機端 PhoneSyncCameraService...");
             
                     try {
                         Intent cameraServiceIntent = new Intent(this, PhoneSyncCameraService.class);
-                        // 🎯 核心安全加固：高版本 Android 如果在后台启动服务，必须用 startForegroundService
-                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                        // 🎯 核心安全加固：高版本 Android 如果在後台啟動服務，必須用 startForegroundService
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                             startForegroundService(cameraServiceIntent);
                         } else {
                             startService(cameraServiceIntent);
                         }
-                        Log.i(TAG, "🟢 [网关物理执行] PhoneSyncCameraService 后台服务已成功发出拉起指令");
+                        Log.i(TAG, "🟢 [網關物理執行] PhoneSyncCameraService 後台服務已成功發出拉起指令");
                     } catch (Exception e) {
-                        Log.e(TAG, "🔴 跨进程后台拉起手机相机服务遭遇强力封杀", e);
+                        Log.e(TAG, "🔴 跨進程後台拉起手機相機服務遭遇強力封殺", e);
                     }
             
                 } else if ("STOP_CAMERA".equalsIgnoreCase(action) || "STOP_CAMERA_STREAM".equalsIgnoreCase(action)) {
-                    Log.d(TAG, "🛑 收到手表断开要求，下发本地广播释放手机端相机服务");
+                    Log.d(TAG, "🛑 [相機模塊] 收到手錶斷開要求，下發本地廣播釋放手機端相機服務");
                     sendBroadcast(new Intent("de.rhaeus.wearsync.ACTION_STOP_CAMERA_STREAM"));
                 }
                 return;
