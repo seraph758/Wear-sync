@@ -13,53 +13,41 @@
     </PreferenceCategory>
 
     <PreferenceCategory
-        android:title="系統底層自動化核心權限"
+        android:title="系統自動化與控制"
         app:iconSpaceReserved="false">
         <Preference
             android:key="dnd_permission_key"
             android:title="勿擾讀寫訪問權限"
-            android:summary="勿擾訪問權限"
+            android:summary="正在檢查..."
             app:iconSpaceReserved="false" />
 
         <Preference
             android:key="acc_permission_key"
             android:title="輔助功能防吞權限"
-            android:summary="防吞劇本自動模擬點擊需要此權限"
+            android:summary="正在檢查..."
+            app:iconSpaceReserved="false" />
+
+        <SwitchPreferenceCompat
+            android:key="battery_saver_sync_key"
+            android:title="手錶系統省電模式"
+            android:summary="物理讀寫手錶低功耗省電開關"
+            android:defaultValue="false"
+            app:iconSpaceReserved="false" />
+            
+        <Preference
+            android:key="camera_control_key"
+            android:title="遠端相機控制"
+            android:summary="點擊嘗試喚醒手機相機"
             app:iconSpaceReserved="false" />
     </PreferenceCategory>
 
     <PreferenceCategory
-        android:title="遠端同步控制（已由手機託管）"
-        android:visible="false"
-        app:iconSpaceReserved="false">
-        
-        <SwitchPreferenceCompat
-            android:defaultValue="true"
-            android:key="dnd_sync_key"
-            android:title="同步勿擾模式"
-            android:visible="false"
-            app:iconSpaceReserved="false" />
-        <SwitchPreferenceCompat
-            android:key="battery_saver_sync_key"
-            android:title="系統省電模式"
-            android:summary="物理讀寫手錶低功耗省電開關"
-            android:defaultValue="false"
-            app:iconSpaceReserved="false" />
-        
-        <SwitchPreferenceCompat
-            android:defaultValue="true"
-            android:key="bedtime_key"
-            android:title="就寝模式同步"
-            android:visible="false"
-            app:iconSpaceReserved="false" />
-
-        <SwitchPreferenceCompat
-            android:defaultValue="false"
-            android:key="vibrate_key"
-            android:title="同步震動"
-            android:visible="false"
-            app:iconSpaceReserved="false" />
-            
+        android:key="hidden_category_key"
+        android:title="託管項目"
+        android:visible="false">
+        <SwitchPreferenceCompat android:key="dnd_sync_key" android:visible="false" android:defaultValue="true"/>
+        <SwitchPreferenceCompat android:key="bedtime_key" android:visible="false" android:defaultValue="true"/>
+        <SwitchPreferenceCompat android:key="vibrate_key" android:visible="false" android:defaultValue="false"/>
     </PreferenceCategory>
 
 </PreferenceScreen>
