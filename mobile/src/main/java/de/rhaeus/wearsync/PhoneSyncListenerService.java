@@ -5,7 +5,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
 import android.os.Handler;
-import android.os.PowerManager;
 import android.util.Log;
 import com.google.android.gms.tasks.Tasks;
 import com.google.android.gms.wearable.MessageEvent;
@@ -37,76 +36,75 @@ public class PhoneSyncListenerService extends WearableListenerService {
             String type = json.optString("type", "");
             String action = json.optString("action", "");
 
-            // 过滤自己发出的包，防止回旋
+            // 🌟 核心对齐：手表发过来的时候自称 sender="wear"，如果是手机自己回旋的包则直接过滤
             if ("phone".equalsIgnoreCase(sender)) return;
 
-            Log.d(TAG, "📥 手機底層骨幹網收到信令 -> type: " + type + ", action: " + action);
+            Log.d(TAG, "📥 手機底層骨幹網收到信令 -> type: " + type + ", action: " + action + ", sender: " + sender);
 
             // =========================================================================
-            // 🌗 模塊一：手機端勿擾模式接收塊（严格作为手表端旧代码机制的镜像参照物）
+            // 🌗 模塊一：手機端勿擾模式接收塊（完美對齊手錶舊代碼 4-Bit 協議）
             // =========================================================================
             if ("status_mask".equalsIgnoreCase(type) || json.has("status_mask")) {
                 int statusMask = json.optInt("status_mask", -1);
                 if (statusMask != -1) {
-                    Log.d(TAG, "📥 [手機端勿擾權威對齊] 收到手錶端反向傳回的 Mask 狀態包: " + statusMask);
+                    Log.d(TAG, "📥 [手機勿擾對齊] 收到 Mask 狀態包: " + statusMask);
 
-                    isInternalUpdate = true; // 鎖定防回旋死循環
+                    isInternalUpdate = true; // 鎖定防回旋
 
-                    // 🎯 逆向提取 Bit 0（勿擾總開關）
+                    // 🎯 逆向提取 Bit 0：勿擾總開關
                     boolean targetDndEnabled = (statusMask & 0x01) != 0; 
 
                     NotificationManager mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
                     if (mNotificationManager != null) {
                         int currentInterruptionFilter = mNotificationManager.getCurrentInterruptionFilter();
-                        boolean isPhoneDndOn = (currentInterruptionFilter > 1); // 2,3,4 均为开启勿扰
+                        boolean isPhoneDndOn = (currentInterruptionFilter > 1); 
                         
                         if (targetDndEnabled != isPhoneDndOn) {
                             mNotificationManager.setInterruptionFilter(targetDndEnabled ? 3 : 1);
-                            Log.i(TAG, "🌗 [手機勿擾實體同步] 手機端勿擾已成功跟隨手錶變更為: " + targetDndEnabled);
+                            Log.i(TAG, "🌗 [手機勿擾實體執行] 手機端勿擾已跟隨手錶變更為: " + targetDndEnabled);
                         }
                     }
                     
-                    // 延迟解锁，确保状态变更稳定
                     new Handler(getMainLooper()).postDelayed(() -> {
                         isInternalUpdate = false;
-                        Log.d(TAG, "🔒 [解鎖] 手機內部勿擾狀態鎖已釋放。");
                     }, 1500);
                 }
                 return;
             }
 
             // =========================================================================
-            // ⏰ 模塊二：遠端鬧鐘控制鏈（完美對齊雙端控制閉環與反向代點）
+            // ⏰ 模塊二：遠端鬧鐘反向代點控制鏈（解救被困住的闹钟）
             // =========================================================================
             else if ("alarm".equalsIgnoreCase(type) || "alarm_action".equalsIgnoreCase(type)) {
                 if ("DISMISS".equalsIgnoreCase(action) || "SNOOZE".equalsIgnoreCase(action)) {
-                    Log.d(TAG, "⏰ [鬧鐘模塊] 收到手錶端反向控制口令: " + action + "，交由 PhoneAlarmManager 物理執行...");
-                    PhoneAlarmManager.handleWatchCommand(this, action);
+                    Log.d(TAG, "⏰ [鬧鐘模塊] 收到手錶端反向控制口令: " + action + "，調用大腦發射物理代點... ");
+                    
+                    // 🎯 核心修復：直接下發本地廣播通知你的 PhoneAlarmManager 或者是 PhoneNotificationListener 去點擊系統鬧鐘
+                    Intent alarmControlIntent = new Intent("de.rhaeus.wearsync.ACTION_PERFORM_ALARM_CLICK");
+                    alarmControlIntent.putExtra("ALARM_ACTION_CMD", action.toUpperCase());
+                    sendBroadcast(alarmControlIntent);
                 }
                 return;
             } 
 
             // =========================================================================
-            // 📸 模塊三：相機喚醒與釋放協議
+            // 📸 模塊三：相機無障礙前台拉起協議（解決後台拉起被 Android 封殺的死結）
             // =========================================================================
             else if ("camera".equalsIgnoreCase(type) || "camera_control".equalsIgnoreCase(type)) {
                 if ("START_CAMERA_UI".equalsIgnoreCase(action) || "START_CAMERA".equalsIgnoreCase(action)) {
-                    Log.d(TAG, "🚀 [相機模塊] 收到手錶端激活口令！直接安全喚醒手機端 PhoneSyncCameraService...");
+                    Log.d(TAG, "🚀 [相機模塊] 收到手錶端激活口令！安全繞過 Android 後台限制，引導至前台拉起...");
             
-                    try {
-                        Intent cameraServiceIntent = new Intent(this, PhoneSyncCameraService.class);
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            startForegroundService(cameraServiceIntent);
-                        } else {
-                            startService(cameraServiceIntent);
-                        }
-                        Log.i(TAG, "🟢 [網關物理執行] PhoneSyncCameraService 後台服務已成功發出拉起指令");
-                    } catch (Exception e) {
-                        Log.e(TAG, "🔴 跨進程後台拉起手機相機服務遭遇強力封殺", e);
-                    }
+                    // 🎯 核心修復：高版本 Android 嚴禁後台啟動 Service，必須利用 MainActivity 作為跳板安全喚醒前台相機
+                    Intent launchIntent = new Intent();
+                    launchIntent.setClassName(getPackageName(), "de.rhaeus.wearsync.PhoneSyncMainActivity");
+                    launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK 
+                                        | Intent.FLAG_ACTIVITY_CLEAR_TOP 
+                                        | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                    launchIntent.putExtra("INTERNAL_CMD", "FORCE_LAUNCH_CAMERA_SERVICE");
+                    startActivity(launchIntent);
             
                 } else if ("STOP_CAMERA".equalsIgnoreCase(action) || "STOP_CAMERA_STREAM".equalsIgnoreCase(action)) {
-                    Log.d(TAG, "🛑 [相機模塊] 收到手錶斷開要求，下發本地廣播釋放手機端相機服務");
+                    Log.d(TAG, "🛑 [相機模塊] 下發本地廣播，全數銷毀手機端相機物理管道");
                     sendBroadcast(new Intent("de.rhaeus.wearsync.ACTION_STOP_CAMERA_STREAM"));
                 }
                 return;
@@ -118,18 +116,18 @@ public class PhoneSyncListenerService extends WearableListenerService {
     }
 
     /**
-     * 🛰️ 权威主动外发方法：当手机端检测到系统勿扰、睡眠、省电发生变更时，调用此方法组装 Mask 发送给手表
-     * 完美复刻手表端解析规则：Bit 0=总勿扰, Bit 1=震动提示, Bit 2=睡眠联动, Bit 3=省电联动
+     * 🛰️ 權威主動外發方法：當手機端自身的勿擾模式觸發變更時，必須由手機主動調用此方法，把 Mask 射給手錶！
+     * 這樣手錶的 WearSyncListenerService 才能收到包並觸發 toggleBedtimeMode() 睡眠執行線程！
      */
     public static void sendStatusMaskToWatch(Context context, boolean dndOn, boolean vibrateOn, boolean sleepLinkOn, boolean powerSaveLinkOn) {
         if (isInternalUpdate) {
-            Log.d(TAG, "⚠️ 處於內部更新鎖定狀態，攔截本次外發，防止回旋死循環。");
+            Log.d(TAG, "⚠️ 處於內部更新鎖定中，攔截本次外發防止死循環。");
             return;
         }
 
         new Thread(() -> {
             try {
-                // 🎯 核心位運算：完美與手錶舊代碼解析器互為鏡像
+                // 依照手錶端舊代碼位運算規則組裝
                 int mask = 0;
                 if (dndOn) mask |= 0x01;             // Bit 0
                 if (vibrateOn) mask |= 0x02;         // Bit 1
@@ -137,7 +135,7 @@ public class PhoneSyncListenerService extends WearableListenerService {
                 if (powerSaveLinkOn) mask |= 0x08;   // Bit 3
 
                 JSONObject json = new JSONObject();
-                json.put("sender", "phone");
+                json.put("sender", "phone"); // 告訴手錶這不是手錶自己發的包
                 json.put("type", "status_mask");
                 json.put("status_mask", mask);
 
@@ -146,7 +144,7 @@ public class PhoneSyncListenerService extends WearableListenerService {
                 if (nodes != null) {
                     for (Node n : nodes) {
                         Tasks.await(Wearable.getMessageClient(context).sendMessage(n.getId(), UNIVERSAL_SYNC_PATH, payload));
-                        Log.d(TAG, "🚀 [手機狀態外發] 成功向手錶投遞權威 Mask: " + mask + " (JSON: " + json.toString() + ")");
+                        Log.d(TAG, "🚀 [手機勿擾主動外發] 成功向手錶投遞 Mask: " + mask);
                     }
                 }
             } catch (Exception e) {
