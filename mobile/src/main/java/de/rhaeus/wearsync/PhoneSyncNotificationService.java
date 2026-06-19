@@ -5,7 +5,9 @@ import android.app.NotificationManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.os.Bundle; // 🎯 修正：補上漏掉的 Bundle 導包
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
 import android.util.Log;
@@ -13,14 +15,20 @@ import android.util.Log;
 /**
  * 📲 手机端通知与勿扰模式监听服务（哨兵服务）
  * 核心升级：
- * 1. 完美保留勿扰防死循环拦截机制。
- * 2. 补齐闹钟监听：通过 Ongoing 与不可清除标志，完美过滤预告通知，精准锁定真实响铃事件并抓取闹钟标题、时间。
- * 3. 去服务化解耦：直接直调本地业务 Manager 静态方法，全面绕过 Android 后台 Service 拦截。
+ * 1. 彻底修复勿扰变化回调中的未定义变量编译崩溃。
+ * 2. 独家补齐【闹钟高频核查再次拉起看门狗】：只要手机闹钟在响，每4秒强制激活一次手表，直到真正点灭，彻底解决UI消失后不重新拉起的致命缺陷！
  */
 public class PhoneSyncNotificationService extends NotificationListenerService {
     private static final String TAG = "WearSync_PhoneNotification";
 
     private static PhoneSyncNotificationService instance;
+    
+    // ⏰ 闹钟高频再次拉起看门狗执行器
+    private final Handler alarmWatchdogHandler = new Handler(Looper.getMainLooper());
+    private Runnable alarmWatchdogRunnable = null;
+    private boolean isAlarmCurrentlyRinging = false;
+    private String cachedAlarmTitle = "";
+    private String cachedAlarmText = "";
 
     public static PhoneSyncNotificationService getInstance() {
         return instance;
@@ -34,6 +42,7 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
 
     @Override
     public void onDestroy() {
+        stopAlarmWatchdog();
         if (instance == this) {
             instance = null;
         }
@@ -66,35 +75,38 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
 
             Log.d("PhoneSync_Alarm", "🔥 [放行轟鳴] 檢測到真正的鬧鐘響鈴事件！");
 
-            // ======= 🎯 這裡就是抓取鬧鐘資料並調用新 Manager 的地方 =======
             Bundle extras = notification.extras;
             String alarmTitle = "";
             String alarmText = "";
 
             if (extras != null) {
-                // 抓取通知標題（通常是鬧鐘標籤，如 "起床"）
                 CharSequence titleCharSequence = extras.getCharSequence(Notification.EXTRA_TITLE);
                 if (titleCharSequence != null) {
                     alarmTitle = titleCharSequence.toString();
                 }
-                // 抓取通知內容（有時系統會把時間 "07:30" 放在這裡）
                 CharSequence textCharSequence = extras.getCharSequence(Notification.EXTRA_TEXT);
                 if (textCharSequence != null) {
                     alarmText = textCharSequence.toString();
                 }
             }
 
-            // 如果內容是空的，我們可以用目前系統時間兜底當作顯示時間
             if (alarmText.isEmpty()) {
                 java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault());
                 alarmText = sdf.format(new java.util.Date());
             }
 
-            // 🚀 調用升級後的 Manager 方法，完美把資料發射給手錶！
+            // 缓存当前的闹钟文本，供看门狗高频再次拉起使用
+            cachedAlarmTitle = alarmTitle;
+            cachedAlarmText = alarmText;
+
+            // 🚀 1. 立即触发第一次正向推送拉起手表 UI
             PhoneAlarmManager.notifyWatchAlarmRinging(this, alarmTitle, alarmText);
-            // =========================================================
+            
+            // 🚀 2. 启动/刷新【核查再次拉起机制看门狗】
+            isAlarmCurrentlyRinging = true;
+            startAlarmWatchdog();
         }
-    } // 🎯 修正：將原本錯位的花括号收攏，保證方法邊界正確
+    }
 
     @Override
     public void onNotificationRemoved(StatusBarNotification sbn) {
@@ -102,19 +114,19 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
         if (sbn == null) return;
 
         SharedPreferences prefs = getSharedPreferences("wear_sync_prefs", Context.MODE_PRIVATE);
-        // 優化：這裡動態兼容用戶選中的包名，如果找不到則用谷歌鬧鐘兜底
         String targetPkg = prefs.getString("key_alarm_package_name", "com.google.android.deskclock");
         String currentPkg = sbn.getPackageName();
 
-        // ⏰ 3. 双端操控闭环：如果用户在手机端点击了延后/关闭，通知消失，主动去灭掉手表的 UI 弹窗
-        // 這裡做一個全包名相容判定：只要是目標包名，或者是主流三大時鐘之一，消失了都觸發停震
         if (targetPkg.equalsIgnoreCase(currentPkg) 
             || "com.android.deskclock".equals(currentPkg) 
             || "com.coloros.alarmclock".equals(currentPkg)) {
             
-            Log.d(TAG, "⏰ [哨兵拦截] 手机端目标闹钟通知已消失（由于手机端点灭或代点成功），通知手表彻底停震并销毁...");
+            Log.d(TAG, "⏰ [哨兵拦截] 手机端目标闹钟通知已消失（已点灭/延后成功），通知手表停震并销毁，同时关闭看门狗...");
             
-            // 🌟 干净平移：直接通知手表清除闹钟状态
+            // 🛑 关闭再次拉起轮询器，释放 CPU 资源
+            stopAlarmWatchdog();
+
+            // 🌟 通知手表清除闹钟状态并强行销毁全屏 UI
             PhoneAlarmManager.notifyWatchAlarmDismissed(this);
         }
     }
@@ -122,14 +134,54 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
     @Override
     public void onInterruptionFilterChanged(int interruptionFilter) {
         super.onInterruptionFilterChanged(interruptionFilter);
-        Log.d(TAG, "📲 手机系统自身勿扰触发变更: " + interruptionFilter);
+        Log.d(TAG, "📲 手机系统自身勿扰触发变更回调，接收到的Filter值为: " + interruptionFilter);
 
+        // 🔒 全局防回旋死循环安全拦截
         if (PhoneSyncListenerService.isInternalUpdate) {
-            Log.d(TAG, "🛑 判定为手表引起的内部勿扰修改回调，阻止反向同步回传。");
+            Log.d(TAG, "🛑 判定為手錶引起的內部勿擾修改回調，阻止反向同步回傳，避免死循環。");
             return;
         }
 
-        // 🌟 干净平移修正：直接将系统回调入参的 interruptionFilter 发送给手表
-        PhoneDndManager.syncDndToWear(this, interruptionFilter);
+        // 🎯 核心修正：正确映射本地变量。interruptionFilter 大于 1 (即 2, 3, 4) 代表勿扰开启
+        boolean isPhoneDndOn = (interruptionFilter > 1);
+
+        // 🛰️ 完美调用骨干网的主动外发机制！发送 4-Bit 掩码给手表。使用 `this` 代替未定义的 context
+        Log.d(TAG, "🛰️ [哨兵主動發信] 正向將手機最新勿擾狀態打包為 Mask 發射給手錶...");
+        PhoneSyncListenerService.sendStatusMaskToWatch(this, isPhoneDndOn, true, true, true);
+    }
+
+    /**
+     * ⏰ 启动闹钟状态高频核查轮询器
+     * 如果手表端 UI 被意外划掉、或者因为系统原因熄灭，只要手机通知还在，每 4 秒强行再次拉起，直到彻底掐灭闹钟！
+     */
+    private void startAlarmWatchdog() {
+        if (alarmWatchdogRunnable != null) return; // 已经运行中则不再重复创建
+
+        alarmWatchdogRunnable = new Runnable() {
+            @Override
+            public void run() {
+                if (isAlarmCurrentlyRinging) {
+                    Log.d(TAG, "🕵️ 【鬧鐘再次拉起核查】檢測到手機鬧鐘仍處於轟鳴狀態！強行再次向手錶發射 START_ALARM_UI 確保不漏接...");
+                    // 持续高频轰炸拉起手表，确保万无一失
+                    PhoneAlarmManager.notifyWatchAlarmRinging(PhoneSyncNotificationService.this, cachedAlarmTitle, cachedAlarmText);
+                    
+                    // 每隔 4000 毫秒（4秒）检查并再次拉起一次
+                    alarmWatchdogHandler.postDelayed(this, 4000);
+                }
+            }
+        };
+        alarmWatchdogHandler.postDelayed(alarmWatchdogRunnable, 4000);
+    }
+
+    /**
+     * 🛑 关闭闹钟轮询看门狗
+     */
+    private void stopAlarmWatchdog() {
+        isAlarmCurrentlyRinging = false;
+        if (alarmWatchdogRunnable != null) {
+            alarmWatchdogHandler.removeCallbacks(alarmWatchdogRunnable);
+            alarmWatchdogRunnable = null;
+            Log.d(TAG, "🛑 【鬧鐘看門狗已銷毀】輪詢拉起機制已安全關閉。");
+        }
     }
 }
