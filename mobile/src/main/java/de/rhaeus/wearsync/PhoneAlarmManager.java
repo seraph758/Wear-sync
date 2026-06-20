@@ -9,6 +9,7 @@ import com.google.android.gms.wearable.Wearable;
 import org.json.JSONObject;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import android.content.SharedPreferences; // 🎯 补上这一行
 
 public class PhoneAlarmManager {
     private static final String TAG = "WearSync_PhoneAlarm";
