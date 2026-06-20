@@ -134,27 +134,28 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
      @Override
     public void onInterruptionFilterChanged(int interruptionFilter) {
     super.onInterruptionFilterChanged(interruptionFilter);
-    Log.d(TAG, "📲 手機系統自身勿擾觸發變更回調，Filter值: " + interruptionFilter);
 
-    // 1. 阻斷手錶反向同步引發的回旋死循環
+    // 🔒 联锁防死循环：如果是手表反向同步导致的手机勿扰改变，直接拦截，绝不回传 [cite: 253, 254]
     if (PhoneSyncListenerService.isInternalUpdate) {
-        Log.d(TAG, "🛑 判定為手錶引起的內部修改，阻止反向回傳。");
+        Log.d(TAG, "🛑 判定为手表引起的内部修改，阻止反向回传。");
         return;
     }
 
-    boolean isPhoneDndOn = (interruptionFilter > 1);
-
-    // 2. 動態讀取用戶在手機 UI 上勾選的真實開關狀態（嚴禁寫死 true）
-    SharedPreferences prefs = getSharedPreferences("wear_sync_prefs", Context.MODE_PRIVATE);
-    boolean vibrateSwitch = prefs.getBoolean("key_vibrate_switch", true);      
-    boolean sleepLinkage = prefs.getBoolean("key_sleep_linkage", true);     
-    boolean powerSaveLinkage = prefs.getBoolean("key_powersave_linkage", true); 
-
-    Log.d(TAG, "🛰️ [哨兵主動發信] 正向打包最新勿擾狀態投遞給手錶...");
+    SharedPreferences prefs = getSharedPreferences("wearsync_prefs", Context.MODE_PRIVATE);
+    boolean dndMaster = prefs.getBoolean("dnd_master", true);
     
-    // 3. 統一由這個核心方法輸出，不要再調用 PhoneDndManager.syncDndToWear 造成多包衝突！
+    // 如果总开关没开，手机自身状态变化绝不通知手表
+    if (!dndMaster) return; 
+
+    boolean isPhoneDndOn = (interruptionFilter > 1);
+    boolean vibrateSwitch = prefs.getBoolean("dnd_vibrate", false);
+    boolean sleepLinkage = prefs.getBoolean("wear_sleep", false);     
+    boolean powerSaveLinkage = prefs.getBoolean("wear_power_saving", false); 
+
     PhoneSyncListenerService.sendStatusMaskToWatch(this, isPhoneDndOn, vibrateSwitch, sleepLinkage, powerSaveLinkage);
 }
+    
+ 
 
     /**
      * ⏰ 启动闹钟状态高频核查轮询器
