@@ -38,7 +38,7 @@ public class PhoneAlarmManager {
      * 🎯 協議拉齊：高精準匹配來自手錶的關鍵字 DISMISS 和 SNOOZE 代點請求
      */
     public static void handleWatchCommand(Context context, String commandType) {
-    Log.d(TAG, "⚡ [闹钟核心执行] 收到手表反向口令: " + commandType); [cite: 6]
+    Log.d(TAG, "⚡ [闹钟核心执行] 收到手表反向口令: " + commandType);
     try {
         if ("DISMISS".equalsIgnoreCase(commandType) && PhoneSyncNotificationService.cachedDismissIntent != null) {
             Log.i(TAG, "🚀 物理模拟点击【停止】按钮");
