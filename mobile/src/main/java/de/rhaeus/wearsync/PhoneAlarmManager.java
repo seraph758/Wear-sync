@@ -37,20 +37,39 @@ public class PhoneAlarmManager {
      * 🎯 協議拉齊：高精準匹配來自手錶的關鍵字 DISMISS 和 SNOOZE 代點請求
      */
     public static void handleWatchCommand(Context context, String commandType) {
-        Log.d(TAG, "⚙️ [協議命中] 正在將手表的虛擬代點請求映射到系統底層: " + commandType);
-        
+    Log.d(TAG, "⚡ [大腦核心執行] 正在物理代點手機鬧鐘，指令: " + commandType);
+    if (context == null || commandType == null) return;
+
+    try {
         if ("DISMISS".equalsIgnoreCase(commandType)) {
-            // 完美擊中系統時鐘解散協議
-            context.sendBroadcast(new Intent("com.android.deskclock.ALARM_DISMISS"));
-            context.sendBroadcast(new Intent("android.intent.action.ALARM_DISMISS"));
-            Log.d(TAG, "⏰ 手機系統 [DISMISS] 廣播代點彈射完畢");
+            // 🎯 升級為顯式定向廣播：直擊谷歌時鐘底層的鬧鐘關閉接收器
+            Intent dismissIntent = new Intent("com.android.deskclock.ALARM_DISMISS");
+            dismissIntent.setPackage("com.google.android.deskclock"); // 👈 顯式鎖定谷歌時鐘包名
+            context.sendBroadcast(dismissIntent);
             
+            // 備用線鏈路：同時發射一組 AOSP 標準廣播，確保全面覆蓋
+            Intent dismissIntentAosp = new Intent("com.android.deskclock.ALARM_DISMISS");
+            dismissIntentAosp.setPackage("com.android.deskclock");
+            context.sendBroadcast(dismissIntentAosp);
+            
+            Log.d(TAG, "👋 已向谷歌時鐘發射顯式 DISMISS 銷毀令");
+
         } else if ("SNOOZE".equalsIgnoreCase(commandType)) {
-            // 完美擊中系統時鐘小睡延後協議
-            context.sendBroadcast(new Intent("com.android.deskclock.ALARM_SNOOZE"));
-            Log.d(TAG, "⏰ 手機系統 [SNOOZE] 廣播代點彈射完畢");
+            // 🎯 升級為顯式定向廣播：直擊谷歌時鐘底層的鬧鐘延後接收器
+            Intent snoozeIntent = new Intent("com.android.deskclock.ALARM_SNOOZE");
+            snoozeIntent.setPackage("com.google.android.deskclock"); // 👈 顯式鎖定
+            context.sendBroadcast(snoozeIntent);
+            
+            Intent snoozeIntentAosp = new Intent("com.android.deskclock.ALARM_SNOOZE");
+            snoozeIntentAosp.setPackage("com.android.deskclock");
+            context.sendBroadcast(snoozeIntentAosp);
+            
+            Log.d(TAG, "💤 已向谷歌時鐘發射顯式 SNOOZE 延後令");
         }
+    } catch (Exception e) {
+        Log.e(TAG, "🔴 執行物理代點鬧鐘時發生崩潰", e);
     }
+}
 
     /**
      * 🚀 內部發送核心：封裝全屏提示資料 JSON 並投遞給手錶
