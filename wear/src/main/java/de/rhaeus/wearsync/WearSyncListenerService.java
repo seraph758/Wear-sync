@@ -243,49 +243,25 @@ public class WearSyncListenerService extends WearableListenerService {
     // =========================================================================
     // 📸 相机大数据底层 JPEG 高频接收与缓冲管道
     // =========================================================================
-    @Override
+   @Override
     public void onChannelOpened(@NonNull ChannelClient.Channel channel) {
-        super.onChannelOpened(channel);
         if (!CAMERA_PREVIEW_STREAM_PATH.equalsIgnoreCase(channel.getPath())) return;
-
+    
         new Thread(() -> {
-            InputStream inputStream = null;
-            try {
-                inputStream = Tasks.await(Wearable.getChannelClient(this).getInputStream(channel));
-                byte[] headerBuffer = new byte[4];
-
-                while (true) {
-                    readFully(inputStream, headerBuffer, 4);
-                    int packetLength = ((headerBuffer[0] & 0xFF) << 24) |
-                                       ((headerBuffer[1] & 0xFF) << 16) |
-                                       ((headerBuffer[2] & 0xFF) << 8)  |
-                                       (headerBuffer[3] & 0xFF);
-
-                    if (packetLength <= 0 || packetLength > 1024 * 1024 * 3) break;
-
-                    byte[] jpegPayload = new byte[packetLength];
-                    readFully(inputStream, jpegPayload, packetLength);
-
-                    int trailer = inputStream.read();
-                    if (trailer != 0xFF) continue;
-
-                    WearCameraActivity.updateFrame(jpegPayload);
+            try (InputStream inputStream = Tasks.await(Wearable.getChannelClient(this).getInputStream(channel))) {
+                byte[] buffer = new byte[8192]; // 一次读取一小块
+                int bytesRead;
+                while ((bytesRead = inputStream.read(buffer)) != -1) {
+                    WearCameraActivity activity = WearCameraActivity.sActivityRef.get();
+                    if (activity != null) {
+                        // 直接把拿到的二进制块塞给解码器，解码器会自动寻找帧边界
+                        activity.feedH264Data(buffer, bytesRead);
+                    }
                 }
-            } catch (Exception ignored) {
-            } finally {
-                if (inputStream != null) {
-                    try { inputStream.close(); } catch (Exception ignored) {}
-                }
+            } catch (Exception e) {
+                Log.e(TAG, "H.264 通道读取中断", e);
             }
         }).start();
     }
 
-    private void readFully(InputStream is, byte[] buffer, int length) throws Exception {
-        int totalRead = 0;
-        while (totalRead < length) {
-            int read = is.read(buffer, totalRead, length - totalRead);
-            if (read == -1) throw new EOFException("Stream closed prematurely");
-            totalRead += read;
-        }
-    }
 }
