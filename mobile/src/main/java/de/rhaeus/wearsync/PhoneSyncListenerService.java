@@ -44,44 +44,26 @@ public class PhoneSyncListenerService extends WearableListenerService {
             // =========================================================================
             // 🌗 模塊一：手機端勿擾模式接收塊（兼容 Mask 包與手錶反向發送的 dnd 協議）
             // =========================================================================
-            if ("status_mask".equalsIgnoreCase(type) || json.has("status_mask") || "dnd".equalsIgnoreCase(type)) {
-                boolean targetDndEnabled = false;
+            // 🎯 请替换 PhoneSyncListenerService.java 中接收 "dnd" 类型协议的代码块：
+            if ("dnd".equalsIgnoreCase(type)) {
+                // 💡 协议对齐：优先读取手表发过来的 dnd_profile_value 字段，兼容老版 dnd_state
+                int wearDndVal = json.has("dnd_profile_value") ? json.optInt("dnd_profile_value", -1) : json.optInt("dnd_state", -1);
+                
+                Log.d(TAG, "📥 [骨干网接收] 收到手表反向勿扰指令，解析值: " + wearDndVal);
+                if (wearDndVal == -1) return;
             
-                if ("dnd".equalsIgnoreCase(type)) {
-                    // 🎯 命中手錶發過來的反向包
-                    int dndProfileValue = json.optInt("dnd_profile_value", -1);
-                    Log.d(TAG, "📥 [反向接收] 收到來自手錶的原始 dnd 值: " + dndProfileValue);
-                    if (dndProfileValue == -1) return;
-                    targetDndEnabled = (dndProfileValue > 1); // 系統值 > 1 代表開啟勿擾
-                } else {
-                    // 命中手機自身 UI 變更產生的 Mask 包
-                    int statusMask = json.optInt("status_mask", -1);
-                    if (statusMask == -1) return;
-                    Log.d(TAG, "📥 [正向對齊] 收到 Mask 狀態包: " + statusMask);
-                    targetDndEnabled = (statusMask & 0x01) != 0; 
+                // 激活内部锁，防止手机修改勿扰时再次回传引发死循环
+                isInternalUpdate = true;
+            
+                NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+                if (nm != null && nm.isNotificationPolicyAccessGranted()) {
+                    // 3 代表开启勿扰，1 代表关闭勿扰
+                    int targetFilter = (wearDndVal > 1) ? 3 : 1; 
+                    nm.setInterruptionFilter(targetFilter);
+                    Log.i(TAG, "🌗 [指令执行成功] 手机系统勿扰已变更为: " + targetFilter);
                 }
             
-                // 🔒 激活全局鎖，防止手機修改勿擾後，又觸發哨兵回傳給手錶
-                isInternalUpdate = true; 
-            
-                NotificationManager mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-                if (mNotificationManager != null) {
-                    // 🚨 核心安全檢查：必須手動在手機端授予本 App「勿擾限權」（Notification Policy Access）
-                    if (mNotificationManager.isNotificationPolicyAccessGranted()) {
-                        int currentFilter = mNotificationManager.getCurrentInterruptionFilter();
-                        boolean isPhoneDndOn = (currentFilter > 1); 
-            
-                        if (targetDndEnabled != isPhoneDndOn) {
-                            // 3 代表全局僅限優先打擾(開啟勿擾)，1 代表關閉勿擾
-                            mNotificationManager.setInterruptionFilter(targetDndEnabled ? 3 : 1);
-                            Log.i(TAG, "🌗 [實體執行] 手機本地勿擾已變更為: " + targetDndEnabled);
-                        }
-                    } else {
-                        Log.e(TAG, "❌ 權限缺失！請去手機系統設置中為本應用開啟「勿擾模式訪問權限」，否則系統會拒絕執行！");
-                    }
-                }
-            
-                // 解鎖
+                // 延时解锁
                 new Handler(getMainLooper()).postDelayed(() -> {
                     isInternalUpdate = false;
                 }, 1500);
