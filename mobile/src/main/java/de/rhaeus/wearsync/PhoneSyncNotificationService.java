@@ -131,23 +131,27 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
         }
     }
 
-    @Override
+     @Override
     public void onInterruptionFilterChanged(int interruptionFilter) {
         super.onInterruptionFilterChanged(interruptionFilter);
         Log.d(TAG, "📲 手机系统自身勿扰触发变更回调，接收到的Filter值为: " + interruptionFilter);
-
-        // 🔒 全局防回旋死循环安全拦截
+    
         if (PhoneSyncListenerService.isInternalUpdate) {
             Log.d(TAG, "🛑 判定為手錶引起的內部勿擾修改回調，阻止反向同步回傳，避免死循環。");
             return;
         }
-
-        // 🎯 核心修正：正确映射本地变量。interruptionFilter 大于 1 (即 2, 3, 4) 代表勿扰开启
+    
         boolean isPhoneDndOn = (interruptionFilter > 1);
-
-        // 🛰️ 完美调用骨干网的主动外发机制！发送 4-Bit 掩码给手表。使用 `this` 代替未定义的 context
-        Log.d(TAG, "🛰️ [哨兵主動發信] 正向將手機最新勿擾狀態打包為 Mask 發射給手錶...");
-        PhoneSyncListenerService.sendStatusMaskToWatch(this, isPhoneDndOn, true, true, true);
+    
+        // 🎯 核心修改：动态读取用户在手机界面上真正勾选的 3 个开关状态
+        android.content.SharedPreferences prefs = getSharedPreferences("wear_sync_prefs", Context.MODE_PRIVATE);
+        boolean vibrateSwitch = prefs.getBoolean("key_vibrate_switch", true);      // 默认值根据你UI定
+        boolean sleepLinkage = prefs.getBoolean("key_sleep_linkage", true);     // 默认值根据你UI定
+        boolean powerSaveLinkage = prefs.getBoolean("key_powersave_linkage", true); // 默认值根据你UI定
+    
+        // 🛰️ 拒绝硬编码！动态传入真实的开关状态
+        Log.d(TAG, "🛰️ [哨兵主動發信] 正向將手機最新勿擾狀態动态打包發射給手錶...");
+        PhoneSyncListenerService.sendStatusMaskToWatch(this, isPhoneDndOn, vibrateSwitch, sleepLinkage, powerSaveLinkage);
     }
 
     /**
