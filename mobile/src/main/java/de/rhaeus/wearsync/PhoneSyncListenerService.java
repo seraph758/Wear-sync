@@ -93,7 +93,9 @@ public class PhoneSyncListenerService extends WearableListenerService {
             
                 } else if ("STOP_CAMERA".equalsIgnoreCase(action) || "STOP_CAMERA_STREAM".equalsIgnoreCase(action)) {
                     Log.d(TAG, "🛑 [相機模塊] 下發本地廣播，全數銷毀手機端相機物理管道");
-                    sendBroadcast(new Intent("de.rhaeus.wearsync.ACTION_STOP_CAMERA_STREAM"));
+                    Intent stopIntent = new Intent(this, PhoneSyncCameraService.class);
+                    stopIntent.setAction("de.rhaeus.wearsync.ACTION_STOP_CAMERA_STREAM");
+                    startService(stopIntent);
                 }
                 return;
             }
