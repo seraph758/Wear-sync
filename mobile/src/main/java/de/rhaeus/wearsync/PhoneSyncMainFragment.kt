@@ -153,13 +153,11 @@ class PhoneSyncMainFragment : Fragment() {
                                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                                 Text("1. 同步状态时手表震动", fontSize = 14.sp, color = Color.White)
                                                 Switch(
-                                                    checked = isVibrateEnabled,
-                                                    onCheckedChange = { isChecked ->
-                                                        isVibrateEnabled = isChecked
-                                                        // 🎯 补齐断层：将 UI 状态实时物理写入哨兵指定的 SharedPreference 文件中
-                                                        val prefs = requireContext().getSharedPreferences("wear_sync_prefs", Context.MODE_PRIVATE)
-                                                        prefs.edit().putBoolean("key_vibrate_switch", isChecked).apply()
-                                                        Log.d("WearSync_UI", "💾 振动开关写入成功: $isChecked")
+                                                    checked = dndVibrateSwitch.value, // 🎯 改用你读取好的 dndVibrateSwitch
+                                                    onCheckedChange = { it ->
+                                                        dndVibrateSwitch.value = it
+                                                        val prefs = requireContext().getSharedPreferences("wearsync_prefs", Context.MODE_PRIVATE) // 🎯 确保文件名是 wearsync_prefs
+                                                        prefs.edit().putBoolean("dnd_vibrate", it).apply()
                                                     }
                                                 )
                                             }
@@ -167,11 +165,11 @@ class PhoneSyncMainFragment : Fragment() {
                                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                                 Text("2. 连动睡眠模式", fontSize = 14.sp, color = Color.White)
                                                 Switch(
-                                                    checked = isSleepLinkageEnabled,
-                                                    onCheckedChange = { isChecked ->
-                                                        isSleepLinkageEnabled = isChecked
-                                                        val prefs = requireContext().getSharedPreferences("wear_sync_prefs", Context.MODE_PRIVATE)
-                                                        prefs.edit().putBoolean("key_sleep_linkage", isChecked).apply()
+                                                    checked = wearSleepSwitch.value, // 🎯 改用你读取好的 wearSleepSwitch
+                                                    onCheckedChange = { it ->
+                                                        wearSleepSwitch.value = it
+                                                        val prefs = requireContext().getSharedPreferences("wearsync_prefs", Context.MODE_PRIVATE)
+                                                        prefs.edit().putBoolean("wear_sleep", it).apply()
                                                     }
                                                 )
                                             }
@@ -179,11 +177,11 @@ class PhoneSyncMainFragment : Fragment() {
                                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                                 Text("3. 连动省电模式", fontSize = 14.sp, color = Color.White)
                                                 Switch(
-                                                    checked = isPowerSaveEnabled,
-                                                    onCheckedChange = { isChecked ->
-                                                        isPowerSaveEnabled = isChecked
-                                                        val prefs = requireContext().getSharedPreferences("wear_sync_prefs", Context.MODE_PRIVATE)
-                                                        prefs.edit().putBoolean("key_powersave_linkage", isChecked).apply()
+                                                    checked = wearPowerSavingSwitch.value, // 🎯 改用你读取好的 wearPowerSavingSwitch
+                                                    onCheckedChange = { it ->
+                                                        wearPowerSavingSwitch.value = it
+                                                        val prefs = requireContext().getSharedPreferences("wearsync_prefs", Context.MODE_PRIVATE)
+                                                        prefs.edit().putBoolean("wear_power_saving", it).apply()
                                                     }
                                                 )
                                             }
