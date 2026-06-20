@@ -152,17 +152,40 @@ class PhoneSyncMainFragment : Fragment() {
                                         Column(modifier = Modifier.fillMaxWidth().background(Color(0xFF252525), RoundedCornerShape(12.dp)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                                 Text("1. 同步状态时手表震动", fontSize = 14.sp, color = Color.White)
-                                                Switch(checked = dndVibrateSwitch.value, onCheckedChange = { dndVibrateSwitch.value = it; sp.edit().putBoolean("dnd_vibrate", it).apply(); calculateAndSaveMask() })
+                                                Switch(
+                                                    checked = isVibrateEnabled,
+                                                    onCheckedChange = { isChecked ->
+                                                        isVibrateEnabled = isChecked
+                                                        // 🎯 补齐断层：将 UI 状态实时物理写入哨兵指定的 SharedPreference 文件中
+                                                        val prefs = requireContext().getSharedPreferences("wear_sync_prefs", Context.MODE_PRIVATE)
+                                                        prefs.edit().putBoolean("key_vibrate_switch", isChecked).apply()
+                                                        Log.d("WearSync_UI", "💾 振动开关写入成功: $isChecked")
+                                                    }
+                                                )
                                             }
                                             HorizontalDivider(color = Color(0xFF383838))
                                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                                 Text("2. 连动睡眠模式", fontSize = 14.sp, color = Color.White)
-                                                Switch(checked = wearSleepSwitch.value, onCheckedChange = { wearSleepSwitch.value = it; sp.edit().putBoolean("wear_sleep", it).apply(); calculateAndSaveMask() })
+                                                Switch(
+                                                    checked = isSleepLinkageEnabled,
+                                                    onCheckedChange = { isChecked ->
+                                                        isSleepLinkageEnabled = isChecked
+                                                        val prefs = requireContext().getSharedPreferences("wear_sync_prefs", Context.MODE_PRIVATE)
+                                                        prefs.edit().putBoolean("key_sleep_linkage", isChecked).apply()
+                                                    }
+                                                )
                                             }
                                             HorizontalDivider(color = Color(0xFF383838))
                                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                                 Text("3. 连动省电模式", fontSize = 14.sp, color = Color.White)
-                                                Switch(checked = wearPowerSavingSwitch.value, onCheckedChange = { wearPowerSavingSwitch.value = it; sp.edit().putBoolean("wear_power_saving", it).apply(); calculateAndSaveMask() })
+                                                Switch(
+                                                    checked = isPowerSaveEnabled,
+                                                    onCheckedChange = { isChecked ->
+                                                        isPowerSaveEnabled = isChecked
+                                                        val prefs = requireContext().getSharedPreferences("wear_sync_prefs", Context.MODE_PRIVATE)
+                                                        prefs.edit().putBoolean("key_powersave_linkage", isChecked).apply()
+                                                    }
+                                                )
                                             }
                                         }
                                     }
