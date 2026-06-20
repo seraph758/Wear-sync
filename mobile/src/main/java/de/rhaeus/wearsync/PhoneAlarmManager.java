@@ -38,35 +38,17 @@ public class PhoneAlarmManager {
      * 🎯 協議拉齊：高精準匹配來自手錶的關鍵字 DISMISS 和 SNOOZE 代點請求
      */
     public static void handleWatchCommand(Context context, String commandType) {
-    Log.d(TAG, "⚡ [闹钟核心执行] 收到手表反向口令: " + commandType);
-    if (context == null || commandType == null) return;
-
+    Log.d(TAG, "⚡ [闹钟核心执行] 收到手表反向口令: " + commandType); [cite: 6]
     try {
-        // 🎯 回归最初设计：从 SharedPreferences 动态读取用户自定义的时钟配置（带默认缺省值）
-        SharedPreferences prefs = context.getSharedPreferences("wearsync_prefs", Context.MODE_PRIVATE);
-        
-        // 默认包名：com.google.android.deskclock (谷歌时钟)
-        String clockPackage = prefs.getString("custom_clock_package", "com.google.android.deskclock");
-        
-        // 根据手表点按的类型，动态组装或读取自定义的 Action 字符串
-        String actionConfigKey = "DISMISS".equalsIgnoreCase(commandType) ? "custom_action_dismiss" : "custom_action_snooze";
-        String defaultAction = "DISMISS".equalsIgnoreCase(commandType) ? "com.android.deskclock.ALARM_DISMISS" : "com.android.deskclock.ALARM_SNOOZE";
-        String clockAction = prefs.getString(actionConfigKey, defaultAction);
-
-        Log.i(TAG, "🚀 [发射自定义闹钟广播] 目标包名: " + clockPackage + " | 目标动作: " + clockAction);
-
-        // 组装显式定向广播
-        Intent alarmIntent = new Intent(clockAction);
-        alarmIntent.setPackage(clockPackage);
-        
-        // 🚨 针对 Android 14/15 一加等高版本系统的核心补丁：必须强制加入前台广播标志
-        alarmIntent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND); 
-        context.sendBroadcast(alarmIntent);
-        context.sendBroadcast(alarmIntent);
-        Log.d(TAG, "👋 自定义闹钟广播发送指令已安全送出。");
-
+        if ("DISMISS".equalsIgnoreCase(commandType) && PhoneSyncNotificationService.cachedDismissIntent != null) {
+            Log.i(TAG, "🚀 物理模拟点击【停止】按钮");
+            PhoneSyncNotificationService.cachedDismissIntent.send();
+        } else if ("SNOOZE".equalsIgnoreCase(commandType) && PhoneSyncNotificationService.cachedSnoozeIntent != null) {
+            Log.i(TAG, "🚀 物理模拟点击【延后】按钮");
+            PhoneSyncNotificationService.cachedSnoozeIntent.send();
+        }
     } catch (Exception e) {
-        Log.e(TAG, "🔴 执行自定义代点闹钟时发生崩溃", e);
+        Log.e(TAG, "🔴 执行通知栏代点失败", e);
     }
 }
 
