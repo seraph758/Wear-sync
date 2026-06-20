@@ -63,6 +63,8 @@ public class WearCameraActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_wear_camera);
+
+        btnCapture.setOnClickListener(v -> startCaptureCountdown()); [cite: 325]
     
         sActivityRef = new WeakReference<>(this);
         mRotationDegrees = getIntent().getIntExtra("rotation_degrees", 0);
@@ -132,6 +134,20 @@ public class WearCameraActivity extends Activity {
         }).start();
     }
 
+    private void startCaptureCountdown() {
+    new android.os.CountDownTimer(3000, 1000) {
+        public void onTick(long millisUntilFinished) {
+            // UI 更新倒计时文字 (需在 XML 中添加一个 TextView tvCountdown)
+            // tvCountdown.setText(String.valueOf(millisUntilFinished / 1000 + 1));
+            Log.d(TAG, "📸 倒计时: " + (millisUntilFinished / 1000 + 1));
+        }
+        public void onFinish() {
+            Log.d(TAG, "📸 倒计时结束 ➔ 下发快门");
+            sendControlSignalToPhone("CAPTURE_SHUTTER"); [cite: 331]
+        }
+    }.start();
+}
+
     private void cleanExit(boolean notifyPhone) {
         if (isUserExiting) return;
         isUserExiting = true;
@@ -165,6 +181,7 @@ public class WearCameraActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        sendControlSignalToPhone("STOP_CAMERA");
         cleanExit(true);
         super.onDestroy();
     }
