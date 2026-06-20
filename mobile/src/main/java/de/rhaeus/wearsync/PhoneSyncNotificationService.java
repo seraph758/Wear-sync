@@ -133,26 +133,28 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
 
      @Override
     public void onInterruptionFilterChanged(int interruptionFilter) {
-        super.onInterruptionFilterChanged(interruptionFilter);
-        Log.d(TAG, "📲 手机系统自身勿扰触发变更回调，接收到的Filter值为: " + interruptionFilter);
-    
-        if (PhoneSyncListenerService.isInternalUpdate) {
-            Log.d(TAG, "🛑 判定為手錶引起的內部勿擾修改回調，阻止反向同步回傳，避免死循環。");
-            return;
-        }
-    
-        boolean isPhoneDndOn = (interruptionFilter > 1);
-    
-        // 🎯 核心修改：动态读取用户在手机界面上真正勾选的 3 个开关状态
-        android.content.SharedPreferences prefs = getSharedPreferences("wear_sync_prefs", Context.MODE_PRIVATE);
-        boolean vibrateSwitch = prefs.getBoolean("key_vibrate_switch", true);      // 默认值根据你UI定
-        boolean sleepLinkage = prefs.getBoolean("key_sleep_linkage", true);     // 默认值根据你UI定
-        boolean powerSaveLinkage = prefs.getBoolean("key_powersave_linkage", true); // 默认值根据你UI定
-    
-        // 🛰️ 拒绝硬编码！动态传入真实的开关状态
-        Log.d(TAG, "🛰️ [哨兵主動發信] 正向將手機最新勿擾狀態动态打包發射給手錶...");
-        PhoneSyncListenerService.sendStatusMaskToWatch(this, isPhoneDndOn, vibrateSwitch, sleepLinkage, powerSaveLinkage);
+    super.onInterruptionFilterChanged(interruptionFilter);
+    Log.d(TAG, "📲 手機系統自身勿擾觸發變更回調，Filter值: " + interruptionFilter);
+
+    // 1. 阻斷手錶反向同步引發的回旋死循環
+    if (PhoneSyncListenerService.isInternalUpdate) {
+        Log.d(TAG, "🛑 判定為手錶引起的內部修改，阻止反向回傳。");
+        return;
     }
+
+    boolean isPhoneDndOn = (interruptionFilter > 1);
+
+    // 2. 動態讀取用戶在手機 UI 上勾選的真實開關狀態（嚴禁寫死 true）
+    SharedPreferences prefs = getSharedPreferences("wear_sync_prefs", Context.MODE_PRIVATE);
+    boolean vibrateSwitch = prefs.getBoolean("key_vibrate_switch", true);      
+    boolean sleepLinkage = prefs.getBoolean("key_sleep_linkage", true);     
+    boolean powerSaveLinkage = prefs.getBoolean("key_powersave_linkage", true); 
+
+    Log.d(TAG, "🛰️ [哨兵主動發信] 正向打包最新勿擾狀態投遞給手錶...");
+    
+    // 3. 統一由這個核心方法輸出，不要再調用 PhoneDndManager.syncDndToWear 造成多包衝突！
+    PhoneSyncListenerService.sendStatusMaskToWatch(this, isPhoneDndOn, vibrateSwitch, sleepLinkage, powerSaveLinkage);
+}
 
     /**
      * ⏰ 启动闹钟状态高频核查轮询器
