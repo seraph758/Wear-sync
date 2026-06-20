@@ -46,29 +46,23 @@ public class PhoneSyncListenerService extends WearableListenerService {
             // =========================================================================
             // 🎯 请替换 PhoneSyncListenerService.java 中接收 "dnd" 类型协议的代码块：
             if ("dnd".equalsIgnoreCase(type)) {
-                // 💡 协议对齐：优先读取手表发过来的 dnd_profile_value 字段，兼容老版 dnd_state
-                int wearDndVal = json.has("dnd_profile_value") ? json.optInt("dnd_profile_value", -1) : json.optInt("dnd_state", -1);
-                
-                Log.d(TAG, "📥 [骨干网接收] 收到手表反向勿扰指令，解析值: " + wearDndVal);
-                if (wearDndVal == -1) return;
-            
-                // 激活内部锁，防止手机修改勿扰时再次回传引发死循环
-                isInternalUpdate = true;
-            
-                NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-                if (nm != null && nm.isNotificationPolicyAccessGranted()) {
-                    // 3 代表开启勿扰，1 代表关闭勿扰
-                    int targetFilter = (wearDndVal > 1) ? 3 : 1; 
-                    nm.setInterruptionFilter(targetFilter);
-                    Log.i(TAG, "🌗 [指令执行成功] 手机系统勿扰已变更为: " + targetFilter);
-                }
-            
-                // 延时解锁
-                new Handler(getMainLooper()).postDelayed(() -> {
-                    isInternalUpdate = false;
-                }, 1500);
-                return;
+            int wearDndVal = json.has("dnd_profile_value") ? json.optInt("dnd_profile_value", -1) : json.optInt("dnd_state", -1);
+            Log.d(TAG, "📥 [骨干网接收] 收到手表反向勿扰指令，解析值: " + wearDndVal);
+            if (wearDndVal == -1) return;
+        
+            isInternalUpdate = true;
+            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm != null && nm.isNotificationPolicyAccessGranted()) {
+                // 🎯 修正变量名，直接同步手表的硬过滤器值
+                nm.setInterruptionFilter(wearDndVal); 
+                Log.i(TAG, "🌗 [指令执行成功] 手机系统勿扰已变更为: " + wearDndVal);
             }
+        
+            new Handler(getMainLooper()).postDelayed(() -> {
+                isInternalUpdate = false;
+            }, 1500);
+            return;
+        }    
              // =========================================================================
             // ⏰ 模塊二：遠端鬧鐘反向代點控制鏈（直调 Manager 斩断空放广播）
             // =========================================================================
