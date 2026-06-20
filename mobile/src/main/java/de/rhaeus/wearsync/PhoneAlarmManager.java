@@ -58,9 +58,9 @@ public class PhoneAlarmManager {
         Intent alarmIntent = new Intent(clockAction);
         alarmIntent.setPackage(clockPackage);
         
-        // 🚨 针对 Android 14/15 的核心补丁：必须强制加入前台广播标志，否则系统在后台会挂起该广播
+        // 🚨 针对 Android 14/15 一加等高版本系统的核心补丁：必须强制加入前台广播标志
         alarmIntent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND); 
-        
+        context.sendBroadcast(alarmIntent);
         context.sendBroadcast(alarmIntent);
         Log.d(TAG, "👋 自定义闹钟广播发送指令已安全送出。");
 
