@@ -13,6 +13,10 @@
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <uses-permission android:name="android.permission.CAMERA" />
     
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <application
@@ -21,6 +25,10 @@
         android:label="Wear Sync"
         android:supportsRtl="true"
         android:theme="@style/Theme.WearSync">
+
+        <meta-data
+            android:name="com.google.android.gms.version"
+            android:value="@integer/google_play_services_version" />
 
         <activity
             android:name=".PhoneSyncMainActivity"
@@ -31,7 +39,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-       
              
         <service
             android:name=".PhoneSyncNotificationService"
@@ -43,12 +50,11 @@
         </service>
         
         <service 
-          android:name=".PhoneSyncCameraService"
+            android:name=".PhoneSyncCameraService"
             android:enabled="true"   
             android:foregroundServiceType="camera"
             android:exported="false" />
 
-    
         <service
             android:name=".PhoneSyncListenerService"
             android:enabled="true"
