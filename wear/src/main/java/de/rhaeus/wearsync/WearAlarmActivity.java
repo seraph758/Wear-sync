@@ -81,10 +81,10 @@ public class WearAlarmActivity extends Activity {
         // 停止按鈕
         Button btnDismiss = findViewById(R.id.btn_dismiss);
         if (btnDismiss != null) {
+            // 用户点击后，立刻销毁手表 UI 并停止震动 [cite: 286, 288]
             btnDismiss.setOnClickListener(v -> {
-                Log.d(TAG, "👉 用戶在手錶端點擊了【停止】");
                 sendActionToPhone("DISMISS");
-                cleanExit(); // 把命運交給手機端看門狗：如果手機沒被掐滅，看門狗4秒內會再次把我拽起
+                cleanExit(); // 立刻执行自毁，如果手机没停掉闹钟，手机看门狗会在 4 秒后把它再次拉起
             });
         }
 
