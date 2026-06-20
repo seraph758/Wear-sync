@@ -43,7 +43,7 @@ public class PhoneAlarmManager {
 
     try {
         // 🎯 回归最初设计：从 SharedPreferences 动态读取用户自定义的时钟配置（带默认缺省值）
-        SharedPreferences prefs = context.getSharedPreferences("wear_sync_prefs", Context.MODE_PRIVATE);
+        SharedPreferences prefs = context.getSharedPreferences("wearsync_prefs", Context.MODE_PRIVATE);
         
         // 默认包名：com.google.android.deskclock (谷歌时钟)
         String clockPackage = prefs.getString("custom_clock_package", "com.google.android.deskclock");
