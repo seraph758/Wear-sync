@@ -71,13 +71,19 @@ class PhoneSyncMainFragment : Fragment() {
         alarmSnoozeKeyState.value = sp.getString("alarm_snooze_key", "延后") ?: "延后"
 
         fun calculateAndSaveMask() {
-            var score = 0
-            if (wearSleepSwitch.value) score += 1       
-            if (wearPowerSavingSwitch.value) score += 2 
-            if (dndVibrateSwitch.value) score += 4     
-            sp.edit().putInt("switches_mask", score).apply()
-            Log.d("WearSync_Main", "📊 本地开关实时组合总分数更新为: $score")
-        }
+                var mask = 0
+                // Bit 0: DND 总开关
+                if (dndMasterSwitch.value) mask = mask or 0x01 
+                // Bit 1: 震动开关
+                if (dndVibrateSwitch.value) mask = mask or 0x02 
+                // Bit 2: 睡眠联动
+                if (wearSleepSwitch.value) mask = mask or 0x04 
+                // Bit 3: 省电联动
+                if (wearPowerSavingSwitch.value) mask = mask or 0x08 
+            
+                sp.edit().putInt("switches_mask", mask).apply()
+                Log.d("WearSync_Main", "📊 严格对齐后的 Mask 总值为: $mask")
+            }
 
         return ComposeView(requireContext()).apply {
             setContent {
@@ -145,7 +151,15 @@ class PhoneSyncMainFragment : Fragment() {
                                             Text("同步勿扰状态", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
                                             Text("开启后将双向对齐手表状态(支持开启与联动关闭)", fontSize = 12.sp, color = Color.Gray)
                                         }
-                                        Switch(checked = dndMasterSwitch.value, onCheckedChange = { dndMasterSwitch.value = it; sp.edit().putBoolean("dnd_master", it).apply() })
+                                       Switch(
+                                            checked = dndMasterSwitch.value,
+                                            onCheckedChange = { isChecked -> 
+                                                dndMasterSwitch.value = isChecked
+                                                sp.edit().putBoolean("dnd_master", isChecked).apply()
+                                                // 联动逻辑：总开关关闭时，子开关状态虽保留，但在传输时将被屏蔽
+                                                calculateAndSaveMask() 
+                                            }
+                                        )
                                     }
 
                                     AnimatedVisibility(visible = dndMasterSwitch.value) {
