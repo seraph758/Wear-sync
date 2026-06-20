@@ -42,46 +42,51 @@ public class PhoneSyncListenerService extends WearableListenerService {
             Log.d(TAG, "📥 手機底層骨幹網收到信令 -> type: " + type + ", action: " + action + ", sender: " + sender);
 
             // =========================================================================
-            // 🌗 模塊一：手機端勿擾模式接收塊（完美兼容手機自發 Mask 與手錶反向發送的 dnd 協議）
+            // 🌗 模塊一：手機端勿擾模式接收塊（兼容 Mask 包與手錶反向發送的 dnd 協議）
             // =========================================================================
             if ("status_mask".equalsIgnoreCase(type) || json.has("status_mask") || "dnd".equalsIgnoreCase(type)) {
-                int statusMask = json.optInt("status_mask", -1);
                 boolean targetDndEnabled = false;
             
-                // 🎯 核心補齊：如果判定是手錶反向同步過來的 "dnd" 協議
                 if ("dnd".equalsIgnoreCase(type)) {
+                    // 🎯 命中手錶發過來的反向包
                     int dndProfileValue = json.optInt("dnd_profile_value", -1);
-                    Log.d(TAG, "📥 [手機勿擾反向接收] 收到來自手錶的原始 dnd 值: " + dndProfileValue);
+                    Log.d(TAG, "📥 [反向接收] 收到來自手錶的原始 dnd 值: " + dndProfileValue);
                     if (dndProfileValue == -1) return;
-                    // 在 Android 系統中，Filter 數值大於 1（如 2, 3, 4）代表勿擾開啟，1 代表關閉
-                    targetDndEnabled = (dndProfileValue > 1);
+                    targetDndEnabled = (dndProfileValue > 1); // 系統值 > 1 代表開啟勿擾
                 } else {
-                    // 原有手機本地自旋數據包的 Mask 解析法
+                    // 命中手機自身 UI 變更產生的 Mask 包
+                    int statusMask = json.optInt("status_mask", -1);
                     if (statusMask == -1) return;
-                    Log.d(TAG, "📥 [手機勿擾正向對齊] 收到 Mask 狀態包: " + statusMask);
-                    targetDndEnabled = (statusMask & 0x01) != 0; // 提取 Bit 0
+                    Log.d(TAG, "📥 [正向對齊] 收到 Mask 狀態包: " + statusMask);
+                    targetDndEnabled = (statusMask & 0x01) != 0; 
                 }
             
-                isInternalUpdate = true; // 鎖定防回旋死循環
+                // 🔒 激活全局鎖，防止手機修改勿擾後，又觸發哨兵回傳給手錶
+                isInternalUpdate = true; 
             
                 NotificationManager mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
                 if (mNotificationManager != null) {
-                    int currentInterruptionFilter = mNotificationManager.getCurrentInterruptionFilter();
-                    boolean isPhoneDndOn = (currentInterruptionFilter > 1); 
+                    // 🚨 核心安全檢查：必須手動在手機端授予本 App「勿擾限權」（Notification Policy Access）
+                    if (mNotificationManager.isNotificationPolicyAccessGranted()) {
+                        int currentFilter = mNotificationManager.getCurrentInterruptionFilter();
+                        boolean isPhoneDndOn = (currentFilter > 1); 
             
-                    if (targetDndEnabled != isPhoneDndOn) {
-                        // 實體執行：3 代表全局僅限優先通話，1 代表關閉勿擾
-                        mNotificationManager.setInterruptionFilter(targetDndEnabled ? 3 : 1);
-                        Log.i(TAG, "🌗 [手機勿擾實體執行] 手機本地勿擾已同步變更為: " + targetDndEnabled);
+                        if (targetDndEnabled != isPhoneDndOn) {
+                            // 3 代表全局僅限優先打擾(開啟勿擾)，1 代表關閉勿擾
+                            mNotificationManager.setInterruptionFilter(targetDndEnabled ? 3 : 1);
+                            Log.i(TAG, "🌗 [實體執行] 手機本地勿擾已變更為: " + targetDndEnabled);
+                        }
+                    } else {
+                        Log.e(TAG, "❌ 權限缺失！請去手機系統設置中為本應用開啟「勿擾模式訪問權限」，否則系統會拒絕執行！");
                     }
                 }
             
+                // 解鎖
                 new Handler(getMainLooper()).postDelayed(() -> {
                     isInternalUpdate = false;
                 }, 1500);
                 return;
-            } 
-      
+            }
              // =========================================================================
             // ⏰ 模塊二：遠端鬧鐘反向代點控制鏈（直调 Manager 斩断空放广播）
             // =========================================================================
