@@ -5,12 +5,10 @@
     android:layout_height="match_parent"
     android:background="#000000">
 
-    <ImageView
-        android:id="@+id/img_camera_preview"
+    <SurfaceView
+        android:id="@+id/surface_camera_preview"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:scaleType="centerCrop"
-        android:contentDescription="Remote Camera Preview" />
+        android:layout_height="match_parent" />
 
     <TextView
         android:id="@+id/tvCountdown"
