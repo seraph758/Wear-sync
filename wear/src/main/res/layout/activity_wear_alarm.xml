@@ -21,7 +21,7 @@
             android:layout_height="wrap_content"
             android:text="00:00"
             android:textColor="#FFFFFF"
-            android:textSize="20sp"
+            android:textSize="26sp"
             android:textStyle="bold" />
 
         <!-- 保留 ID 避免 Activity 报错，但不显示 -->
