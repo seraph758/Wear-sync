@@ -2,35 +2,49 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
+
     <PreferenceCategory
         android:title="系统核心权限"
+        android:order="1"
         app:iconSpaceReserved="false">
+
         <Preference
             android:key="dnd_permission_key"
-            android:title="勿扰读写访问权限"
+            android:title="获取通知权限"
             android:summary="正在检查..."
+            android:order="1"
             app:iconSpaceReserved="false" />
 
         <Preference
             android:key="acc_permission_key"
-            android:title="辅助功能防吞权限"
+            android:title="辅助功能权限"
             android:summary="正在检查..."
+            android:order="2"
             app:iconSpaceReserved="false" />
 
         <Preference
             android:key="camera_control_key"
             android:title="远端相机控制"
             android:summary="点击尝试唤醒手机相机"
+            android:order="3"
             app:iconSpaceReserved="false" />
+
     </PreferenceCategory>
+
 
     <PreferenceCategory
         android:title="Wear Sync 连线状态"
+        android:order="2"
         app:iconSpaceReserved="false">
+
         <Preference
             android:key="connectivity_state_key"
             android:title="手机连线状态"
             android:summary="正在检测与手机的连接..."
+            android:order="1"
             app:iconSpaceReserved="false" />
+
     </PreferenceCategory>
+
+
 </PreferenceScreen>
