@@ -32,6 +32,13 @@ public class WearSyncNotificationService extends NotificationListenerService {
                     Log.d(TAG, "📤 手表反向同步勿扰状态到手机成功: " + interruptionFilter);
                 }
             } catch (Exception e) {
+
+    Log.e(
+        TAG,
+        "★★★★ SEND FAIL ★★★★",
+        e
+    );
+} {
                 Log.e(TAG, "手表投递反向勿扰信令失败", e);
             }
         }).start();
@@ -40,7 +47,9 @@ public class WearSyncNotificationService extends NotificationListenerService {
      @Override
     public void onInterruptionFilterChanged(int interruptionFilter) {
         super.onInterruptionFilterChanged(interruptionFilter);
-        
+        Log.e(TAG,
+            "★★★★ DND CHANGE ★★★★ "
+                    + interruptionFilter);
         // 🔒 如果是收到手机指令导致的改变，直接拦截，绝不回传给手机！打破死循环！
         if (isInternalUpdate) {
             Log.d(TAG, "🛑 判定为手机同步引起的内部修改，阻止反向回传。");
