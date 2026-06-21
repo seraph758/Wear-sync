@@ -94,10 +94,14 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
         try {
             MediaFormat format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, 640, 480);
             mDecoder = MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);
-            // 🚀 将解码目标直接指向屏幕的 Surface
             mDecoder.configure(format, holder.getSurface(), null, 0);
             mDecoder.start();
             isDecoderRunning = true;
+            
+            // 🎯 核心补充：当画布准备好后，立刻向手机发射唤醒指令！
+            Log.d(TAG, "📺 画布就绪，正在呼叫手机端...");
+            sendControlSignalToPhone("START_CAMERA_UI");
+
         } catch (Exception e) {
             Log.e(TAG, "解码器初始化失败", e);
         }
