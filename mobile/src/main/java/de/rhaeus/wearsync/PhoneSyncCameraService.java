@@ -1,5 +1,6 @@
 package de.rhaeus.wearsync;
 
+import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.media.MediaCodec;
@@ -18,7 +19,9 @@ import androidx.camera.core.CameraSelector;
 import androidx.camera.core.Preview;
 import androidx.camera.lifecycle.ProcessCameraProvider;
 import androidx.core.content.ContextCompat;
-import androidx.lifecycle.LifecycleService;
+import androidx.lifecycle.Lifecycle;
+import androidx.lifecycle.LifecycleOwner;
+import androidx.lifecycle.LifecycleRegistry;
 
 import com.google.android.gms.tasks.Tasks;
 import com.google.android.gms.wearable.ChannelClient;
@@ -32,7 +35,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
-public class PhoneSyncCameraService extends LifecycleService {
+public class PhoneSyncCameraService extends Service implements LifecycleOwner {
     private static final String TAG = "WearSync_PhoneCamera";
     private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
     private static final String CAMERA_PREVIEW_STREAM_PATH = "/camera-preview-stream";
@@ -46,9 +49,25 @@ public class PhoneSyncCameraService extends LifecycleService {
     private OutputStream mChannelOutputStream;
     private boolean isStreaming = false;
 
+    // 🎯 核心修复 1：手动接管生命周期，完美适配 CameraX
+    private LifecycleRegistry lifecycleRegistry;
+
+    @NonNull
+    @Override
+    public Lifecycle getLifecycle() {
+        return lifecycleRegistry;
+    }
+
+    @Override
+    public void onCreate() {
+        lifecycleRegistry = new LifecycleRegistry(this);
+        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE);
+        super.onCreate();
+    }
+
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        super.onStartCommand(intent, flags, startId); // LifecycleService 必须保留
+        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START); // 激活 CameraX 运行状态
         Log.d(TAG, "🚀 PhoneSyncCameraService 收到触发信令...");
 
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
@@ -91,25 +110,20 @@ public class PhoneSyncCameraService extends LifecycleService {
 
         new Thread(() -> {
             try {
-                // 1. 初始化 H.264 硬件编码器
                 MediaFormat format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, 640, 480);
                 format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
-                format.setInteger(MediaFormat.KEY_BIT_RATE, 1000000); // 1Mbps 足够手表清晰预览
+                format.setInteger(MediaFormat.KEY_BIT_RATE, 1000000); 
                 format.setInteger(MediaFormat.KEY_FRAME_RATE, 24);
                 format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
 
                 mEncoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);
                 mEncoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
-                
-                // 获取编码器的零拷贝输入表面
                 Surface inputSurface = mEncoder.createInputSurface();
                 mEncoder.start();
 
                 int rotationDegrees = calculatePhoneRotation();
-                Log.d(TAG, "📐 手机检测到当前画面旋转角度: " + rotationDegrees);
                 sendControlMessageToWatch("START_CAMERA", rotationDegrees);
 
-                // 2. 建立与手表的 Channel 连接
                 List<Node> nodes = Tasks.await(Wearable.getNodeClient(this).getConnectedNodes());
                 if (nodes != null && !nodes.isEmpty()) {
                     String watchNodeId = nodes.get(0).getId();
@@ -117,12 +131,8 @@ public class PhoneSyncCameraService extends LifecycleService {
                             .openChannel(watchNodeId, CAMERA_PREVIEW_STREAM_PATH));
                     mChannelOutputStream = Tasks.await(Wearable.getChannelClient(this)
                             .getOutputStream(mTargetChannel));
-                    Log.d(TAG, "🚀 [管道打通] 开始向手表泵入 H.264 实时帧。");
-
-                    // 3. 在主线程启动 CameraX，并将画面直通给编码器
+                    
                     new Handler(Looper.getMainLooper()).post(() -> bindCameraXToSurface(inputSurface));
-
-                    // 4. 开启推流死循环
                     pumpEncodedStreamToWatch();
                 } else {
                     Log.w(TAG, "⚠️ 找不到可用的手表节点");
@@ -144,13 +154,10 @@ public class PhoneSyncCameraService extends LifecycleService {
 
                 Preview preview = new Preview.Builder().build();
                 preview.setSurfaceProvider(request -> {
-                    request.provideSurface(encoderInputSurface, ContextCompat.getMainExecutor(PhoneSyncCameraService.this), result -> {
-                        // Surface 释放时的回调处理
-                    });
+                    request.provideSurface(encoderInputSurface, ContextCompat.getMainExecutor(PhoneSyncCameraService.this), result -> {});
                 });
 
                 CameraSelector cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA;
-                // 将 CameraX 生命周期绑定到当前 LifecycleService
                 cameraProvider.bindToLifecycle(this, cameraSelector, preview);
 
             } catch (Exception e) {
@@ -169,7 +176,6 @@ public class PhoneSyncCameraService extends LifecycleService {
                     byte[] outData = new byte[bufferInfo.size];
                     outputBuffer.get(outData);
 
-                    // 纯裸流直写蓝牙管道
                     mChannelOutputStream.write(outData);
                     mChannelOutputStream.flush();
 
@@ -183,22 +189,18 @@ public class PhoneSyncCameraService extends LifecycleService {
     }
 
     private void executePhoneShutter() {
-        Log.d(TAG, "📸 [快门联动] 手机收到快门指令！此处可扩展实际 CameraX 拍照逻辑。");
+        Log.d(TAG, "📸 [快门联动] 手机收到快门指令！");
     }
 
     private void releaseCameraAndPipeline() {
         if (!isStreaming) return;
         isStreaming = false;
-        Log.d(TAG, "🧹 销毁释放手机端相机与传输管道...");
-
         try {
             if (mEncoder != null) {
                 mEncoder.stop();
                 mEncoder.release();
                 mEncoder = null;
             }
-            
-            // 安全解绑 CameraX
             new Handler(Looper.getMainLooper()).post(() -> {
                 try {
                     ProcessCameraProvider cameraProvider = ProcessCameraProvider.getInstance(this).get();
@@ -243,8 +245,7 @@ public class PhoneSyncCameraService extends LifecycleService {
     private int calculatePhoneRotation() {
         WindowManager wm = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
         if (wm == null) return 0;
-        int rotation = wm.getDefaultDisplay().getRotation();
-        switch (rotation) {
+        switch (wm.getDefaultDisplay().getRotation()) {
             case 1: return 90;
             case 2: return 180;
             case 3: return 270;
@@ -255,12 +256,13 @@ public class PhoneSyncCameraService extends LifecycleService {
     @Nullable
     @Override
     public IBinder onBind(Intent intent) {
-        super.onBind(intent); // LifecycleService 必须调用父类
+        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START);
         return null; 
     }
     
     @Override
     public void onDestroy() {
+        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY);
         releaseCameraAndPipeline();
         super.onDestroy();
     }
