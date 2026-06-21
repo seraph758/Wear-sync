@@ -152,7 +152,12 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
                 ProcessCameraProvider cameraProvider = ProcessCameraProvider.getInstance(this).get();
                 cameraProvider.unbindAll();
 
-                Preview preview = new Preview.Builder().build();
+                // 🎯 致命修复 1：强制 CameraX 输出 640x480 画面，与 MediaCodec 完美匹配！
+                // 注意：这里需要 import android.util.Size;
+                Preview preview = new Preview.Builder()
+                        .setTargetResolution(new android.util.Size(640, 480)) 
+                        .build();
+
                 preview.setSurfaceProvider(request -> {
                     request.provideSurface(encoderInputSurface, ContextCompat.getMainExecutor(PhoneSyncCameraService.this), result -> {});
                 });
@@ -171,13 +176,25 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
         while (isStreaming && mEncoder != null && mChannelOutputStream != null) {
             try {
                 int outputBufferIndex = mEncoder.dequeueOutputBuffer(bufferInfo, 10000);
-                if (outputBufferIndex >= 0) {
+                
+                // 忽略格式改变的系统通知
+                if (outputBufferIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                    continue; 
+                } 
+                else if (outputBufferIndex >= 0) {
                     ByteBuffer outputBuffer = mEncoder.getOutputBuffer(outputBufferIndex);
-                    byte[] outData = new byte[bufferInfo.size];
-                    outputBuffer.get(outData);
+                    
+                    if (outputBuffer != null && bufferInfo.size > 0) {
+                        byte[] outData = new byte[bufferInfo.size];
+                        
+                        // 🎯 致命修复 2：必须先定位到 offset 偏移量，再读取精确的 size！否则帧头必烂！
+                        outputBuffer.position(bufferInfo.offset);
+                        outputBuffer.limit(bufferInfo.offset + bufferInfo.size);
+                        outputBuffer.get(outData);
 
-                    mChannelOutputStream.write(outData);
-                    mChannelOutputStream.flush();
+                        mChannelOutputStream.write(outData);
+                        mChannelOutputStream.flush();
+                    }
 
                     mEncoder.releaseOutputBuffer(outputBufferIndex, false);
                 }
