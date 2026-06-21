@@ -109,23 +109,31 @@ public class WearAlarmActivity extends Activity {
     }
 
     private void parseAndRenderIntentData(Intent intent) {
-        if (intent == null) return;
-        String label = intent.getStringExtra("EXTRA_ALARM_LABEL");
-        String time = intent.getStringExtra("EXTRA_ALARM_TIME");
+    if (intent == null) return;
 
-        if (tvAlarmLabel != null && label != null) {
-            tvAlarmLabel.setText(label);
+    String label = intent.getStringExtra("EXTRA_ALARM_LABEL");
+    String time = intent.getStringExtra("EXTRA_ALARM_TIME");
+
+    if (tvAlarmTime != null && time != null) {
+        if (time.contains("·")) {
+            time = time.substring(0, time.indexOf("·")).trim();
         }
-        if (tvAlarmTime != null && time != null) {
-            tvAlarmTime.setText(time);
-        }
+
+        // 周日16:17 -> 周日　16:17
+        time = time.replaceAll(
+                "(周[一二三四五六日天])(\\d{1,2}:\\d{2})",
+                "$1　$2"
+        );
+
+        tvAlarmTime.setText(time);
+    }
     }
 
     private void startInfiniteVibration() {
         if (vibrator == null || !vibrator.hasVibrator()) return;
         try {
             vibrator.cancel(); 
-            long[] pattern = {0, 500, 300};
+            long[] pattern = {0, 800, 600};
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 vibrator.vibrate(VibrationEffect.createWaveform(pattern, 0));
             } else {
