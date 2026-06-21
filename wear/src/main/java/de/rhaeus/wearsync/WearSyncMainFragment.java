@@ -44,15 +44,45 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
             });
         }
 
-        // 📸 綁定相機快捷 Preference 條目
+//拉起手表手机的camera
+
         Preference cameraPref = findPreference("camera_control_key");
-        if (cameraPref != null) {
-            cameraPref.setOnPreferenceClickListener(preference -> {
-                Log.d("WearSync_UI", "👉 用戶在 Preference 列表點擊了【遠端相機控制】");
-                Toast.makeText(getContext(), "正在發送相機喚醒指令...", Toast.LENGTH_SHORT).show();
-                return true;
-            });
-        }
+if (cameraPref != null) {
+    cameraPref.setOnPreferenceClickListener(preference -> {
+        Log.d("WearSync_UI", "👉 用戶點擊【遠端相機控制】");
+        Toast.makeText(getContext(), "正在拉起相機...", Toast.LENGTH_SHORT).show();
+
+        // 1. 立即向手机发送唤醒 CameraService 的信令
+        new Thread(() -> {
+            try {
+                org.json.JSONObject json = new org.json.JSONObject();
+                json.put("sender", "wear");
+                json.put("type", "camera_control");
+                json.put("action", "START_CAMERA");
+                json.put("timestamp", System.currentTimeMillis());
+
+                byte[] payload = json.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                java.util.List<com.google.android.gms.wearable.Node> nodes = 
+                    com.google.android.gms.tasks.Tasks.await(
+                        com.google.android.gms.wearable.Wearable.getNodeClient(getContext()).getConnectedNodes()
+                    );
+                for (com.google.android.gms.wearable.Node n : nodes) {
+                    com.google.android.gms.wearable.Wearable.getMessageClient(getContext())
+                        .sendMessage(n.getId(), "/wear-universal-sync", payload);
+                }
+            } catch (Exception e) {
+                Log.e("WearSync_UI", "发送相机指令给手机失败", e);
+            }
+        }).start();
+
+        // 2. 拉起手表本地的 Camera UI
+        android.content.Intent intent = new android.content.Intent(getContext(), WearCameraActivity.class);
+        startActivity(intent);
+
+        return true;
+    });
+}
+
 
         initConnectivityCheck();
     }
