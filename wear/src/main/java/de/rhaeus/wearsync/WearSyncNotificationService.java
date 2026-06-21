@@ -16,47 +16,93 @@ public class WearSyncNotificationService extends NotificationListenerService {
     private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
     public static boolean isInternalUpdate = false;
 
-    public static void sendDndReverseSyncToPhone(Context context, int interruptionFilter) {
-        new Thread(() -> {
-            try {
-                JSONObject json = new JSONObject();
-                json.put("sender", "wear");
-                json.put("type", "dnd");
-                json.put("dnd_profile_value", interruptionFilter);
-                json.put("timestamp", System.currentTimeMillis());
+public static void sendDndReverseSyncToPhone(Context context, int interruptionFilter) {
+    new Thread(() -> {
+        try {
+            JSONObject json = new JSONObject();
+            json.put("sender", "wear");
+            json.put("type", "dnd");
+            json.put("dnd_profile_value", interruptionFilter);
+            json.put("timestamp", System.currentTimeMillis());
 
-                byte[] data = json.toString().getBytes(StandardCharsets.UTF_8);
-                List<Node> nodes = Tasks.await(Wearable.getNodeClient(context).getConnectedNodes());
-                for (Node node : nodes) {
-                    Wearable.getMessageClient(context).sendMessage(node.getId(), UNIVERSAL_SYNC_PATH, data);
-                    Log.d(TAG, "📤 手表反向同步勿扰状态到手机成功: " + interruptionFilter);
-                }
-            } catch (Exception e) {
+            byte[] data = json.toString().getBytes(StandardCharsets.UTF_8);
+
+            List<Node> nodes =
+                    Tasks.await(
+                            Wearable.getNodeClient(context)
+                                    .getConnectedNodes()
+                    );
+
+            Log.e(
+                    TAG,
+                    "★★★★ NODE COUNT ★★★★ "
+                            + nodes.size()
+            );
+
+            for (Node node : nodes) {
+
+                Log.e(
+                        TAG,
+                        "★★★★ TRY SEND TO PHONE ★★★★ "
+                                + node.getId()
+                );
+
+                Tasks.await(
+                        Wearable.getMessageClient(context)
+                                .sendMessage(
+                                        node.getId(),
+                                        UNIVERSAL_SYNC_PATH,
+                                        data
+                                )
+                );
+
+                Log.e(
+                        TAG,
+                        "★★★★ SEND SUCCESS ★★★★ "
+                                + interruptionFilter
+                );
+            }
+
+        } catch (Exception e) {
+
+            Log.e(
+                    TAG,
+                    "★★★★ SEND FAIL ★★★★",
+                    e
+            );
+
+        }
+    }).start();
+}
+@Override
+public void onInterruptionFilterChanged(int interruptionFilter) {
+    super.onInterruptionFilterChanged(interruptionFilter);
 
     Log.e(
-        TAG,
-        "★★★★ SEND FAIL ★★★★",
-        e
+            TAG,
+            "★★★★ WATCH DND CHANGED ★★★★ "
+                    + interruptionFilter
     );
-} {
-                Log.e(TAG, "手表投递反向勿扰信令失败", e);
-            }
-        }).start();
+
+    if (isInternalUpdate) {
+
+        Log.e(
+                TAG,
+                "★★★★ INTERNAL UPDATE BLOCKED ★★★★"
+        );
+
+        return;
     }
 
-     @Override
-    public void onInterruptionFilterChanged(int interruptionFilter) {
-        super.onInterruptionFilterChanged(interruptionFilter);
-        Log.e(TAG,
-            "★★★★ DND CHANGE ★★★★ "
-                    + interruptionFilter);
-        // 🔒 如果是收到手机指令导致的改变，直接拦截，绝不回传给手机！打破死循环！
-        if (isInternalUpdate) {
-            Log.d(TAG, "🛑 判定为手机同步引起的内部修改，阻止反向回传。");
-            return;
-        }
+    Log.e(
+            TAG,
+            "★★★★ SEND DND TO PHONE ★★★★ "
+                    + interruptionFilter
+    );
 
-        Log.d(TAG, "⌚ 手表系统勿扰触发变更: " + interruptionFilter);
-        sendDndReverseSyncToPhone(this, interruptionFilter);
-    }
+    sendDndReverseSyncToPhone(
+            this,
+            interruptionFilter
+    );
+}
 }
