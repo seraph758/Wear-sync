@@ -14,6 +14,7 @@ import java.util.List;
 public class WearSyncNotificationService extends NotificationListenerService {
     private static final String TAG = "WearSync_WearNotification";
     private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
+    public static boolean isInternalUpdate = false;
 
     public static void sendDndReverseSyncToPhone(Context context, int interruptionFilter) {
         new Thread(() -> {
@@ -36,9 +37,16 @@ public class WearSyncNotificationService extends NotificationListenerService {
         }).start();
     }
 
-    @Override
+     @Override
     public void onInterruptionFilterChanged(int interruptionFilter) {
         super.onInterruptionFilterChanged(interruptionFilter);
+        
+        // 🔒 如果是收到手机指令导致的改变，直接拦截，绝不回传给手机！打破死循环！
+        if (isInternalUpdate) {
+            Log.d(TAG, "🛑 判定为手机同步引起的内部修改，阻止反向回传。");
+            return;
+        }
+
         Log.d(TAG, "⌚ 手表系统勿扰触发变更: " + interruptionFilter);
         sendDndReverseSyncToPhone(this, interruptionFilter);
     }
