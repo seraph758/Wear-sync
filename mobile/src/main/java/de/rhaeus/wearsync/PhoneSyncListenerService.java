@@ -24,7 +24,17 @@ public class PhoneSyncListenerService extends WearableListenerService {
 
 @Override
 public void onMessageReceived(MessageEvent messageEvent) {
-    if (!UNIVERSAL_SYNC_PATH.equals(messageEvent.getPath())) {
+Log.e(
+        TAG,
+        "★★★★ PHONE RECEIVE ★★★★ "
+                + messageEvent.getPath()
+);
+    Log.e(TAG,
+      "PATH=" + messageEvent.getPath());
+
+if (!UNIVERSAL_SYNC_PATH.equals(messageEvent.getPath())) {
+    Log.e(TAG,
+          "PATH不匹配，被丢弃");
         super.onMessageReceived(messageEvent);
         return;
     }
@@ -34,6 +44,11 @@ public void onMessageReceived(MessageEvent messageEvent) {
         JSONObject json = new JSONObject(jsonStr);
         String sender = json.optString("sender", "");
         String type = json.optString("type", "");
+        Log.e(
+        TAG,
+        "★★★★ JSON ★★★★ "
+                + json.toString()
+);
         String action = json.optString("action", "");
 
         if ("phone".equalsIgnoreCase(sender)) return;
@@ -43,6 +58,11 @@ public void onMessageReceived(MessageEvent messageEvent) {
         // =========================================================================
         // 🌗 模塊一：手機端勿擾模式接收塊
         // =========================================================================
+        Log.e(
+        TAG,
+        "★★★★ TYPE ★★★★ "
+                + type
+);
         if ("dnd".equalsIgnoreCase(type)) {
             int wearDndVal = json.has("dnd_profile_value") ? json.optInt("dnd_profile_value", -1) : json.optInt("dnd_state", -1);
             if (wearDndVal == -1) return;
