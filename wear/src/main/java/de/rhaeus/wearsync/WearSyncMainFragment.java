@@ -86,7 +86,7 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
         
         if (dndPref != null) {
             dndPref.setSummary(notificationAllowed 
-                    ? "🟢 通知監聽權限：已獲取 (ADB授權成功)" 
+                    ? "🟢 通知監聽權限：已獲取" 
                     : "🔴 通知監聽權限：未啟用 (請通過 ADB 命令授權)");
         }
 
