@@ -34,14 +34,4 @@
             app:iconSpaceReserved="false" />
     </PreferenceCategory>
 
-    <PreferenceCategory
-        android:key="hidden_category_key"
-        android:title="托管项目"
-        android:visible="false">
-        <SwitchPreferenceCompat android:key="dnd_sync_key" android:visible="false" android:defaultValue="true"/>
-        <SwitchPreferenceCompat android:key="bedtime_key" android:visible="false" android:defaultValue="true"/>
-        <SwitchPreferenceCompat android:key="vibrate_key" android:visible="false" android:defaultValue="false"/>
-        <SwitchPreferenceCompat android:key="battery_saver_sync_key" android:visible="false" android:defaultValue="false" />
-    </PreferenceCategory>
-
 </PreferenceScreen>
