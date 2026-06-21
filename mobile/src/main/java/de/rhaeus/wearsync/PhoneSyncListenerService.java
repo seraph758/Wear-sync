@@ -22,88 +22,88 @@ public class PhoneSyncListenerService extends WearableListenerService {
     // 🔒 核心防护：全局内部更新锁，彻底避免双向状态回旋死循环
     public static boolean isInternalUpdate = false; 
 
-    @Override
-    public void onMessageReceived(MessageEvent messageEvent) {
-        if (!UNIVERSAL_SYNC_PATH.equals(messageEvent.getPath())) {
-            super.onMessageReceived(messageEvent);
-            return;
-        }
+@Override
+public void onMessageReceived(MessageEvent messageEvent) {
+    if (!UNIVERSAL_SYNC_PATH.equals(messageEvent.getPath())) {
+        super.onMessageReceived(messageEvent);
+        return;
+    }
 
-        try {
-            String jsonStr = new String(messageEvent.getData(), StandardCharsets.UTF_8);
-            JSONObject json = new JSONObject(jsonStr);
-            String sender = json.optString("sender", "");
-            String type = json.optString("type", "");
-            String action = json.optString("action", "");
+    try {
+        String jsonStr = new String(messageEvent.getData(), StandardCharsets.UTF_8);
+        JSONObject json = new JSONObject(jsonStr);
+        String sender = json.optString("sender", "");
+        String type = json.optString("type", "");
+        String action = json.optString("action", "");
 
-            // 🌟 核心对齐：手表发过来的时候自称 sender="wear"，如果是手机自己回旋的包则直接过滤
-            if ("phone".equalsIgnoreCase(sender)) return;
+        if ("phone".equalsIgnoreCase(sender)) return;
 
-            Log.d(TAG, "📥 手機底層骨幹網收到信令 -> type: " + type + ", action: " + action + ", sender: " + sender);
+        Log.d(TAG, "📥 手機底層骨幹網收到信令 -> type: " + type + ", action: " + action);
 
-            // =========================================================================
-            // 🌗 模塊一：手機端勿擾模式接收塊（兼容 Mask 包與手錶反向發送的 dnd 協議）
-            // =========================================================================
-            // 🎯 请替换 PhoneSyncListenerService.java 中接收 "dnd" 类型协议的代码块：
-            if ("dnd".equalsIgnoreCase(type)) {
+        // =========================================================================
+        // 🌗 模塊一：手機端勿擾模式接收塊
+        // =========================================================================
+        if ("dnd".equalsIgnoreCase(type)) {
             int wearDndVal = json.has("dnd_profile_value") ? json.optInt("dnd_profile_value", -1) : json.optInt("dnd_state", -1);
-            Log.d(TAG, "📥 [骨干网接收] 收到手表反向勿扰指令，解析值: " + wearDndVal);
             if (wearDndVal == -1) return;
-        
+
             isInternalUpdate = true;
             NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            
+            // 💡 物理规律：改变勿扰状态必须有该权限，否则会 Crash。
             if (nm != null && nm.isNotificationPolicyAccessGranted()) {
-                // 🎯 修正变量名，直接同步手表的硬过滤器值
                 nm.setInterruptionFilter(wearDndVal); 
-                Log.i(TAG, "🌗 [指令执行成功] 手机系统勿扰已变更为: " + wearDndVal);
+                Log.i(TAG, "🌗 [指令執行成功] 手機系統勿擾已變更為: " + wearDndVal);
+            } else {
+                Log.w(TAG, "⚠️ 手機端缺少【勿扰模式权限】，无法执行同步！请在手机设置中授予。");
             }
-        
+
             new Handler(getMainLooper()).postDelayed(() -> {
                 isInternalUpdate = false;
             }, 1500);
             return;
         }    
-             // =========================================================================
-            // ⏰ 模塊二：遠端鬧鐘反向代點控制鏈（直调 Manager 斩断空放广播）
-            // =========================================================================
-            else if ("alarm".equalsIgnoreCase(type) || "alarm_action".equalsIgnoreCase(type)) {
-                if ("DISMISS".equalsIgnoreCase(action) || "SNOOZE".equalsIgnoreCase(action)) {
-                    Log.d(TAG, "⏰ [鬧鐘模塊] 收到手錶端反向控制口令: " + action + "，直调大脑执行物理代点！");
-            
-                    // 🎯 彻底修复：干掉无用的 sendBroadcast 广播，直接调用处理函数，把上下文和口令传进去
-                    PhoneAlarmManager.handleWatchCommand(this, action.toUpperCase());
-                }
-                return;
+        // =========================================================================
+        // ⏰ 模塊二：遠端鬧鐘反向代點
+        // =========================================================================
+        else if ("alarm".equalsIgnoreCase(type) || "alarm_action".equalsIgnoreCase(type)) {
+            if ("DISMISS".equalsIgnoreCase(action) || "SNOOZE".equalsIgnoreCase(action)) {
+                Log.d(TAG, "⏰ 收到手錶控制口令: " + action + "，直调执行！");
+                PhoneAlarmManager.handleWatchCommand(this, action.toUpperCase());
             }
-            // =========================================================================
-            // 📸 模塊三：相機無障礙前台拉起協議（解決後台拉起被 Android 封殺的死結）
-            // =========================================================================
-            else if ("camera".equalsIgnoreCase(type) || "camera_control".equalsIgnoreCase(type)) {
-                if ("START_CAMERA_UI".equalsIgnoreCase(action) || "START_CAMERA".equalsIgnoreCase(action)) {
-                    Log.d(TAG, "🚀 [相機模塊] 收到手錶端激活口令！安全繞過 Android 後台限制，引導至前台拉起...");
-            
-                    // 🎯 核心修復：高版本 Android 嚴禁後台啟動 Service，必須利用 MainActivity 作為跳板安全喚醒前台相機
-                    Intent launchIntent = new Intent();
-                    launchIntent.setClassName(getPackageName(), "de.rhaeus.wearsync.PhoneSyncMainActivity");
-                    launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK 
-                                        | Intent.FLAG_ACTIVITY_CLEAR_TOP 
-                                        | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-                    launchIntent.putExtra("INTERNAL_CMD", "FORCE_LAUNCH_CAMERA_SERVICE");
-                    startActivity(launchIntent);
-            
-                } else if ("STOP_CAMERA".equalsIgnoreCase(action) || "STOP_CAMERA_STREAM".equalsIgnoreCase(action)) {
-                    Log.d(TAG, "🛑 [相機模塊] 下發本地廣播，全數銷毀手機端相機物理管道");
-                    Intent stopIntent = new Intent(this, PhoneSyncCameraService.class);
-                    stopIntent.setAction("de.rhaeus.wearsync.ACTION_STOP_CAMERA_STREAM");
-                    startService(stopIntent);
-                }
-                return;
-            }
-
-        } catch (Exception e) {
-            Log.e(TAG, "骨幹通道解析數據包災難性失敗", e);
+            return;
         }
+        // =========================================================================
+        // 📸 模塊三：相機前台服務直接拉起（修复后台拦截死结）
+        // =========================================================================
+        else if ("camera".equalsIgnoreCase(type) || "camera_control".equalsIgnoreCase(type)) {
+            if ("START_CAMERA_UI".equalsIgnoreCase(action) || "START_CAMERA".equalsIgnoreCase(action)) {
+                Log.d(TAG, "🚀 [相機模塊] 收到手錶端激活口令！突破後台限制，直接喚醒前台相機服務...");
+
+                // 🎯 修复：不再使用 startActivity 跳板，直接拉起已配置好 Foreground 的 Service
+                Intent cameraIntent = new Intent(this, PhoneSyncCameraService.class);
+                cameraIntent.setAction(PhoneSyncCameraService.ACTION_START_CAMERA);
+                androidx.core.content.ContextCompat.startForegroundService(this, cameraIntent);
+
+            } else if ("STOP_CAMERA".equalsIgnoreCase(action) || "STOP_CAMERA_STREAM".equalsIgnoreCase(action)) {
+                Log.d(TAG, "🛑 [相機模塊] 銷毀手機端相機管道");
+                Intent stopIntent = new Intent(this, PhoneSyncCameraService.class);
+                stopIntent.setAction(PhoneSyncCameraService.ACTION_STOP_CAMERA_STREAM);
+                startService(stopIntent);
+            } else if ("CAPTURE_SHUTTER".equalsIgnoreCase(action) || "TRIGGER_SHUTTER".equalsIgnoreCase(action)) {
+                Log.d(TAG, "📸 [相機模塊] 觸發快門");
+                Intent shutterIntent = new Intent(this, PhoneSyncCameraService.class);
+                shutterIntent.setAction(PhoneSyncCameraService.ACTION_TRIGGER_SHUTTER);
+                startService(shutterIntent);
+            }
+            return;
+        }
+
+    } catch (Exception e) {
+        Log.e(TAG, "骨幹通道解析數據包失敗", e);
     }
+}
+
 
     /**
      * 🛰️ 權威主動外發方法：當手機端自身的勿擾模式觸發變更時，必須由手機主動調用此方法，把 Mask 射給手錶！
