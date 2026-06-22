@@ -6,6 +6,7 @@ import android.os.Bundle;
 import android.provider.Settings;
 import android.util.Log;
 import android.widget.Toast;
+import android.net.Uri;
 
 import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
@@ -74,63 +75,70 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
         // ==========================
 
         Preference cameraPref =
-                findPreference("camera_control_key");
+        findPreference("camera_control_key");
 
 
-        if (cameraPref != null) {
+if(cameraPref != null){
+
+    cameraPref.setOnPreferenceClickListener(preference -> {
 
 
-            cameraPref.setOnPreferenceClickListener(preference -> {
+        Log.d(
+                "WearSync_UI",
+                "点击远程相机"
+        );
 
 
-                Log.d(
-                        "WearSync_UI",
-                        "点击远程相机"
+        Intent intent = new Intent(
+                Intent.ACTION_VIEW
+        );
+
+
+        intent.setPackage(
+                "de.rhaeus.wearsync"
+        );
+
+
+        intent.setData(
+                Uri.parse(
+                        "wearsync://camera"
+                )
+        );
+
+
+        intent.putExtra(
+                "INTERNAL_CMD",
+                "LAUNCH_CAMERA_SERVICE_FROM_FOREGROUND"
+        );
+
+
+
+        RemoteActivityHelper helper =
+                new RemoteActivityHelper(
+                        requireContext(),
+                        Executors.newSingleThreadExecutor()
                 );
 
 
-                Intent intent =
-                        new Intent();
+        helper.startRemoteActivity(intent)
+                .addListener(() -> {
 
-                intent.setClassName(
-                        "de.rhaeus.wearsync",
-                        "de.rhaeus.wearsync.PhoneSyncMainActivity"
-                );
+                    Log.d(
+                            "WearSync_UI",
+                            "RemoteActivity请求结束"
+                    );
 
 
-                intent.putExtra(
-                        "INTERNAL_CMD",
-                        "LAUNCH_CAMERA_SERVICE_FROM_FOREGROUND"
-                );
+                },
+                Executors.newSingleThreadExecutor());
 
 
 
-                RemoteActivityHelper helper =
-                        new RemoteActivityHelper(
-                                requireContext(),
-                                Executors.newSingleThreadExecutor()
-                        );
+        return true;
 
+    });
 
-
-                helper.startRemoteActivity(intent)
-        .addListener(() -> {
-
-            Log.d(
-                    "WearSync_UI",
-                    "RemoteActivity执行完成"
-            );
-
-        }, Executors.newSingleThreadExecutor());
-
-
-                return true;
-
-            });
-
-        }
-
-
+}
 
         initConnectivityCheck();
 
