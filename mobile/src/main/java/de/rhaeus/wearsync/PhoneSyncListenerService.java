@@ -210,7 +210,19 @@ public class PhoneSyncListenerService extends WearableListenerService {
                         true
                 );
             
-                startActivity(activityIntent);
+              try {
+
+                    Log.d(TAG, "准备启动Activity");
+                
+                    startActivity(activityIntent);
+                
+                    Log.d(TAG, "startActivity已执行");
+                
+                } catch (Exception e) {
+                
+                    Log.e(TAG, "启动Activity失败", e);
+                
+                }
             
             } else if ("STOP_CAMERA".equalsIgnoreCase(action)
                         || "STOP_CAMERA_STREAM".equalsIgnoreCase(action)) {
