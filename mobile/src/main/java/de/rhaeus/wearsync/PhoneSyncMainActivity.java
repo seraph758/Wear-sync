@@ -36,7 +36,11 @@ public class PhoneSyncMainActivity extends AppCompatActivity {
         com.google.android.material.color.DynamicColors.applyToActivityIfAvailable(this);
         super.onCreate(savedInstanceState);
         instance = this;
-
+        Log.d(
+        "WearSync_Main",
+        "onCreate"
+    );
+        
         if (getSupportActionBar() != null) {
             getSupportActionBar().hide();
         }
@@ -74,7 +78,15 @@ public class PhoneSyncMainActivity extends AppCompatActivity {
             }
         }
     }
-
+    @Override
+    protected void onResume() {
+        super.onResume();
+    
+        Log.d(
+            "WearSync_Main",
+            "onResume"
+    );
+    }
     @Override
     protected void onDestroy() {
         if (instance == this) {
