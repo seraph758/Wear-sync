@@ -32,6 +32,7 @@ public class WearAlarmActivity extends Activity {
     private Vibrator vibrator;
     private boolean isDestroyedBySystem = false;
 
+    private TextView tvAlarmDay;
     private TextView tvAlarmTime;
     private TextView tvAlarmLabel;
 
@@ -63,8 +64,9 @@ public class WearAlarmActivity extends Activity {
 
         setContentView(R.layout.activity_wear_alarm); 
 
-        tvAlarmTime = findViewById(R.id.tv_alarm_time);   
-        tvAlarmLabel = findViewById(R.id.tv_alarm_label); 
+        tvAlarmDay = findViewById(R.id.tv_alarm_day);
+        tvAlarmTime = findViewById(R.id.tv_alarm_time);
+        tvAlarmLabel = findViewById(R.id.tv_alarm_label);
 
         parseAndRenderIntentData(getIntent());
 
@@ -109,14 +111,24 @@ public class WearAlarmActivity extends Activity {
     }
 
   private void parseAndRenderIntentData(Intent intent) {
-    if (tvAlarmTime == null) return;
+
+    String day = new java.text.SimpleDateFormat(
+            "EEEE",
+            java.util.Locale.CHINESE
+    ).format(new java.util.Date());
 
     String time = new java.text.SimpleDateFormat(
-            "EEEE HH:mm",
+            "HH:mm",
             java.util.Locale.getDefault()
     ).format(new java.util.Date());
 
-    tvAlarmTime.setText(time);
+    if (tvAlarmDay != null) {
+        tvAlarmDay.setText(day);
+    }
+
+    if (tvAlarmTime != null) {
+        tvAlarmTime.setText(time);
+    }
 }
 
     private void startInfiniteVibration() {
