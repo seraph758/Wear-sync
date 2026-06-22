@@ -106,10 +106,35 @@ public class PhoneSyncMainActivity extends AppCompatActivity {
 
 
 
-    private void handleIncomingCommand(Intent intent){
+private void handleIncomingCommand(Intent intent){
 
-    if(intent==null)
+    if(intent == null)
         return;
+
+
+    Log.d(
+            TAG,
+            "收到Intent action="
+            + intent.getAction()
+            + " data="
+            + intent.getData()
+    );
+
+
+    boolean isCameraRequest = false;
+
+
+    if(intent.getData()!=null){
+
+        if("wearsync".equals(intent.getData().getScheme())
+                &&
+           "camera".equals(intent.getData().getHost())){
+
+            isCameraRequest = true;
+
+        }
+
+    }
 
 
     String cmd =
@@ -118,20 +143,10 @@ public class PhoneSyncMainActivity extends AppCompatActivity {
             );
 
 
-    Log.d(TAG,
-            "收到Intent: action="
-            + intent.getAction()
-            + " data="
-            + intent.getData()
-    );
-
-
     if(
-            "LAUNCH_CAMERA_SERVICE_FROM_FOREGROUND"
-                    .equals(cmd)
+            isCameraRequest
             ||
-            "de.rhaeus.wearsync.CAMERA"
-                    .equals(intent.getAction())
+            "LAUNCH_CAMERA_SERVICE_FROM_FOREGROUND".equals(cmd)
     ){
 
 
@@ -164,7 +179,6 @@ public class PhoneSyncMainActivity extends AppCompatActivity {
         }
 
     }
-
 }
 
 
