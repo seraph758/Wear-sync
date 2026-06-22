@@ -108,26 +108,16 @@ public class WearAlarmActivity extends Activity {
         startInfiniteVibration();
     }
 
-    private void parseAndRenderIntentData(Intent intent) {
-    if (intent == null) return;
+  private void parseAndRenderIntentData(Intent intent) {
+    if (tvAlarmTime == null) return;
 
-    String label = intent.getStringExtra("EXTRA_ALARM_LABEL");
-    String time = intent.getStringExtra("EXTRA_ALARM_TIME");
+    String time = new java.text.SimpleDateFormat(
+            "EEEE HH:mm",
+            java.util.Locale.getDefault()
+    ).format(new java.util.Date());
 
-    if (tvAlarmTime != null && time != null) {
-        if (time.contains("·")) {
-            time = time.substring(0, time.indexOf("·")).trim();
-        }
-
-        // 周日16:17 -> 周日　16:17
-        time = time.replaceAll(
-                "(周[一二三四五六日天])(\\d{1,2}:\\d{2})",
-                "$1　$2"
-        );
-
-        tvAlarmTime.setText(time);
-    }
-    }
+    tvAlarmTime.setText(time);
+}
 
     private void startInfiniteVibration() {
         if (vibrator == null || !vibrator.hasVibrator()) return;
