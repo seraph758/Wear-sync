@@ -108,71 +108,64 @@ public class PhoneSyncMainActivity extends AppCompatActivity {
 
     private void handleIncomingCommand(Intent intent){
 
+    if(intent==null)
+        return;
 
 
-        if(intent==null)
-            return;
-
-
-
-        String cmd =
-                intent.getStringExtra(
-                        "INTERNAL_CMD"
-                );
-
-
-
-        if(
-                "LAUNCH_CAMERA_SERVICE_FROM_FOREGROUND"
-                        .equals(cmd)
-        ){
-
-
-
-            Log.d(
-                    TAG,
-                    "收到RemoteActivity拍照请求"
+    String cmd =
+            intent.getStringExtra(
+                    "INTERNAL_CMD"
             );
 
 
-
-            Intent serviceIntent =
-                    new Intent(
-                            this,
-                            PhoneSyncCameraService.class
-                    );
-
-
-
-            serviceIntent.setAction(
-                    PhoneSyncCameraService.ACTION_START_CAMERA
-            );
+    Log.d(TAG,
+            "收到Intent: action="
+            + intent.getAction()
+            + " data="
+            + intent.getData()
+    );
 
 
+    if(
+            "LAUNCH_CAMERA_SERVICE_FROM_FOREGROUND"
+                    .equals(cmd)
+            ||
+            "de.rhaeus.wearsync.CAMERA"
+                    .equals(intent.getAction())
+    ){
 
-            if(Build.VERSION.SDK_INT>=26){
+
+        Log.d(
+                TAG,
+                "收到RemoteActivity拍照请求"
+        );
 
 
-                startForegroundService(
-                        serviceIntent
+        Intent serviceIntent =
+                new Intent(
+                        this,
+                        PhoneSyncCameraService.class
                 );
 
 
-            }else{
+        serviceIntent.setAction(
+                PhoneSyncCameraService.ACTION_START_CAMERA
+        );
 
 
-                startService(
-                        serviceIntent
-                );
+        if(Build.VERSION.SDK_INT >= 26){
 
-            }
+            startForegroundService(serviceIntent);
 
+        }else{
+
+            startService(serviceIntent);
 
         }
 
-
-
     }
+
+}
 
 
 
