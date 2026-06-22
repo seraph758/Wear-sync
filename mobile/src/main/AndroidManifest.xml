@@ -32,8 +32,7 @@
 
         <activity
             android:name=".PhoneSyncMainActivity"
-            android:exported="true"
-            android:theme="@style/Theme.WearSync">
+            android:exported="true">
         
         
             <intent-filter>
@@ -42,15 +41,15 @@
         
                 <category android:name="android.intent.category.DEFAULT"/>
         
+                <category android:name="android.intent.category.BROWSABLE"/>
+        
                 <data
-                    android:scheme="wearsync"
-                    android:host="camera"/>
+                    android:scheme="wearsync"/>
         
             </intent-filter>
         
         
-        </activity>
-             
+        </activity>             
         <service
             android:name=".PhoneSyncNotificationService"
             android:exported="true"
