@@ -10,118 +10,324 @@ import android.widget.Toast;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
 
+import androidx.wear.remote.interactions.RemoteActivityHelper;
+
 import com.google.android.gms.wearable.CapabilityClient;
 import com.google.android.gms.wearable.Wearable;
 
+import java.util.concurrent.Executors;
+
+
 public class WearSyncMainFragment extends PreferenceFragmentCompat {
+
     private Preference connectivityPref;
     private Preference dndPref;
     private Preference accPref;
+
     private CapabilityClient.OnCapabilityChangedListener capabilityChangedListener;
+
 
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
+
         setPreferencesFromResource(R.xml.root_preferences, rootKey);
+
 
         connectivityPref = findPreference("connectivity_state_key");
         dndPref = findPreference("dnd_permission_key");
         accPref = findPreference("acc_permission_key");
 
-        // 🎯 遵照核心規則：手錶無法自開通知監聽，此條目僅做 ADB 狀態展示，徹底鎖死不可點擊
+
         if (dndPref != null) {
-            dndPref.setSelectable(false); 
+            dndPref.setSelectable(false);
         }
 
-        // 🟢 遵照核心規則：只有無障礙可以引導用戶去手錶系統頁面手動授權
+
         if (accPref != null) {
+
             accPref.setOnPreferenceClickListener(preference -> {
+
                 try {
-                    startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
+
+                    startActivity(
+                            new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                    );
+
                 } catch (Exception e) {
-                    Toast.makeText(getContext(), "無法跳轉，請在手錶系統設置中手動開啟無障礙", Toast.LENGTH_SHORT).show();
+
+                    Toast.makeText(
+                            getContext(),
+                            "无法打开辅助功能设置",
+                            Toast.LENGTH_SHORT
+                    ).show();
+
                 }
+
                 return true;
             });
         }
 
-//拉起手表手机的camera
 
-        Preference cameraPref = findPreference("camera_control_key");
+
+        // ==========================
+        // RemoteActivityHelper 测试入口
+        // ==========================
+
+        Preference cameraPref =
+                findPreference("camera_control_key");
+
+
         if (cameraPref != null) {
+
+
             cameraPref.setOnPreferenceClickListener(preference -> {
-                Log.d("WearSync_UI", "👉 用戶點擊【遠端相機控制】");
-                // 仅仅是拉起手表本地的相机界面
-                startActivity(new Intent(getContext(), WearCameraActivity.class));
+
+
+                Log.d(
+                        "WearSync_UI",
+                        "点击远程相机"
+                );
+
+
+                Intent intent =
+                        new Intent();
+
+                intent.setClassName(
+                        "de.rhaeus.wearsync",
+                        "de.rhaeus.wearsync.PhoneSyncMainActivity"
+                );
+
+
+                intent.putExtra(
+                        "INTERNAL_CMD",
+                        "LAUNCH_CAMERA_SERVICE_FROM_FOREGROUND"
+                );
+
+
+
+                RemoteActivityHelper helper =
+                        new RemoteActivityHelper(
+                                requireContext(),
+                                Executors.newSingleThreadExecutor()
+                        );
+
+
+
+                helper.startRemoteActivity(intent)
+                        .addOnSuccessListener(result -> {
+
+                            Log.d(
+                                    "WearSync_UI",
+                                    "手机Activity启动成功"
+                            );
+
+
+                        })
+                        .addOnFailureListener(e -> {
+
+
+                            Log.e(
+                                    "WearSync_UI",
+                                    "RemoteActivity启动失败",
+                                    e
+                            );
+
+
+                        });
+
+
                 return true;
+
             });
+
         }
+
 
 
         initConnectivityCheck();
+
     }
 
+
+
+
+
     @Override
-    public void onResume() {
+    public void onResume(){
+
         super.onResume();
-        updatePermissionStatus(); // 🎯 精準動態核查本地底層權限
+
+        updatePermissionStatus();
+
         registerConnectivityListener();
+
     }
+
+
+
 
     @Override
-    public void onPause() {
+    public void onPause(){
+
         super.onPause();
+
         unregisterConnectivityListener();
+
     }
 
-    /**
-     * 🎯 精準權限核查矩陣（徹底剔除 NotificationManager 誤區）
-     */
-    private void updatePermissionStatus() {
-        Context ctx = getContext();
-        if (ctx == null) return;
 
-        // 1. 🔍 通過安全設置數據庫，精準核查手錶端是否已獲取 [通知監聽權限 (ADB授權)]
-        String enabledListeners = Settings.Secure.getString(ctx.getContentResolver(), "enabled_notification_listeners");
-        boolean notificationAllowed = enabledListeners != null && enabledListeners.contains(ctx.getPackageName());
-        
-        if (dndPref != null) {
-            dndPref.setSummary(notificationAllowed 
-                    ? "🟢 通知監聽權限：已獲取" 
-                    : "🔴 通知監聽權限：未啟用 (請通過 ADB 命令授權)");
+
+
+
+    private void updatePermissionStatus(){
+
+
+        Context ctx=getContext();
+
+        if(ctx==null)return;
+
+
+
+        String enabledListeners =
+                Settings.Secure.getString(
+                        ctx.getContentResolver(),
+                        "enabled_notification_listeners"
+                );
+
+
+        boolean notificationAllowed =
+                enabledListeners != null &&
+                enabledListeners.contains(
+                        ctx.getPackageName()
+                );
+
+
+
+        if(dndPref!=null){
+
+            dndPref.setSummary(
+                    notificationAllowed ?
+                            "🟢通知监听已启用" :
+                            "🔴未启用"
+            );
+
         }
 
-        // 2. 🔍 核查 [輔助無障礙核心開關] 是否激活
-        boolean accAllowed = WearSyncAccessService.getSharedInstance() != null;
-        if (accPref != null) {
-            accPref.setSummary(accAllowed 
-                    ? "🟢 輔助無障礙核心：已激活" 
-                    : "🔴 輔助無障礙核心：未激活 (點擊前往授權)");
+
+
+        boolean accAllowed =
+                WearSyncAccessService.getSharedInstance()!=null;
+
+
+
+        if(accPref!=null){
+
+            accPref.setSummary(
+                    accAllowed ?
+                            "🟢辅助功能已激活" :
+                            "🔴未激活"
+            );
+
         }
+
+
     }
 
-    private void initConnectivityCheck() {
-        if (getContext() == null) return;
-        Wearable.getCapabilityClient(getContext())
-                .getCapability("dnd_sync", CapabilityClient.FILTER_REACHABLE)
-                .addOnSuccessListener(capabilityInfo -> updateConnectionUI(!capabilityInfo.getNodes().isEmpty()));
-        capabilityChangedListener = capabilityInfo -> updateConnectionUI(!capabilityInfo.getNodes().isEmpty());
+
+
+
+
+    private void initConnectivityCheck(){
+
+
+        if(getContext()==null)return;
+
+
+
+        Wearable
+                .getCapabilityClient(getContext())
+                .getCapability(
+                        "dnd_sync",
+                        CapabilityClient.FILTER_REACHABLE
+                )
+                .addOnSuccessListener(
+                        capabilityInfo -> {
+
+                            updateConnectionUI(
+                                    !capabilityInfo.getNodes().isEmpty()
+                            );
+
+                        }
+                );
+
+
+
+        capabilityChangedListener =
+                capabilityInfo -> updateConnectionUI(
+                        !capabilityInfo.getNodes().isEmpty()
+                );
+
     }
 
-    private void registerConnectivityListener() {
-        if (getContext() != null && capabilityChangedListener != null) {
-            Wearable.getCapabilityClient(getContext()).addListener(capabilityChangedListener, "dnd_sync");
+
+
+
+
+    private void registerConnectivityListener(){
+
+        if(getContext()!=null &&
+                capabilityChangedListener!=null){
+
+            Wearable
+                    .getCapabilityClient(getContext())
+                    .addListener(
+                            capabilityChangedListener,
+                            "dnd_sync"
+                    );
+
         }
+
     }
 
-    private void unregisterConnectivityListener() {
-        if (getContext() != null && capabilityChangedListener != null) {
-            Wearable.getCapabilityClient(getContext()).removeListener(capabilityChangedListener);
+
+
+
+
+    private void unregisterConnectivityListener(){
+
+
+        if(getContext()!=null &&
+                capabilityChangedListener!=null){
+
+
+            Wearable
+                    .getCapabilityClient(getContext())
+                    .removeListener(
+                            capabilityChangedListener
+                    );
+
         }
+
     }
 
-    private void updateConnectionUI(boolean isConnected) {
-        if (connectivityPref != null) {
-            connectivityPref.setSummary(isConnected ? "🟢 離線狀態：已成功連線至手機" : "🔴 離線狀態：未連通 (請檢查手錶藍牙)");
+
+
+
+
+    private void updateConnectionUI(boolean connected){
+
+
+        if(connectivityPref!=null){
+
+            connectivityPref.setSummary(
+                    connected ?
+                            "🟢已连接手机" :
+                            "🔴未连接"
+            );
+
         }
+
     }
+
+
 }
