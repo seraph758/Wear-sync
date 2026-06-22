@@ -114,26 +114,14 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
 
 
                 helper.startRemoteActivity(intent)
-                        .addOnSuccessListener(result -> {
+        .addListener(() -> {
 
-                            Log.d(
-                                    "WearSync_UI",
-                                    "手机Activity启动成功"
-                            );
+            Log.d(
+                    "WearSync_UI",
+                    "RemoteActivity执行完成"
+            );
 
-
-                        })
-                        .addOnFailureListener(e -> {
-
-
-                            Log.e(
-                                    "WearSync_UI",
-                                    "RemoteActivity启动失败",
-                                    e
-                            );
-
-
-                        });
+        }, Executors.newSingleThreadExecutor());
 
 
                 return true;
