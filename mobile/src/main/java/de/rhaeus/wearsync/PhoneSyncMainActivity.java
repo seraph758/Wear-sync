@@ -70,13 +70,25 @@ public class PhoneSyncMainActivity extends AppCompatActivity {
             Log.d(TAG, "🟢 应用已安全立足于前台！现在名正言顺启动拍照服务与混合协议传输。");
             
             // 🎯 这里去调起负责开启相机和建立 Channel Client 通道的服务
-            Intent cameraServiceIntent = new Intent(this, PhoneSyncCameraService.class);
+     /*     Intent cameraServiceIntent = new Intent(this, PhoneSyncCameraService.class);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 startForegroundService(cameraServiceIntent);
             } else {
                 startService(cameraServiceIntent);
-            }
-        }
+            } */
+            Intent cameraServiceIntent =
+                        new Intent(this, PhoneSyncCameraService.class);
+                
+                cameraServiceIntent.setAction(
+                        PhoneSyncCameraService.ACTION_START_CAMERA
+                );
+                
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    startForegroundService(cameraServiceIntent);
+                } else {
+                    startService(cameraServiceIntent);
+                }
+                        }
     }
     @Override
     protected void onResume() {
