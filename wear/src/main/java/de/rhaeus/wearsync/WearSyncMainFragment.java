@@ -88,10 +88,9 @@ if(cameraPref != null){
                 "点击远程相机"
         );
 
-
-        Intent intent = new Intent(
-                Intent.ACTION_VIEW
-        );
+Intent intent = new Intent(
+        "de.rhaeus.wearsync.CAMERA"
+);
 
 
         intent.setPackage(
