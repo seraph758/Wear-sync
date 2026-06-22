@@ -167,37 +167,52 @@ public class PhoneSyncListenerService extends WearableListenerService {
                     || "camera_control".equalsIgnoreCase(type)) {
 
 
-                if ("START_CAMERA_UI".equalsIgnoreCase(action)
-                        || "START_CAMERA".equalsIgnoreCase(action)) {
-
-
+               if ("START_CAMERA_UI".equalsIgnoreCase(action)
+                    || "START_CAMERA".equalsIgnoreCase(action)) {
+            
+            
                     Log.d(
-                            TAG,
-                            "启动手机相机服务"
-                    );
-
-
-                    Intent cameraIntent =
-                            new Intent(
-                                    this,
-                                    PhoneSyncCameraService.class
-                            );
-
-
-                    cameraIntent.setAction(
-                            PhoneSyncCameraService.ACTION_START_CAMERA
-                    );
-
-
-                    androidx.core.content.ContextCompat
-                            .startForegroundService(
-                                    this,
-                                    cameraIntent
-                            );
-
-
-
-                } else if ("STOP_CAMERA".equalsIgnoreCase(action)
+                        TAG,
+                        "收到手表拍照请求，启动PhoneSyncMainActivity"
+                );
+            
+            
+            //    Intent cameraIntent =
+            //            new Intent(
+            //                    this,
+            //                    PhoneSyncCameraService.class
+            //            );
+            //
+            //
+            //    cameraIntent.setAction(
+            //            PhoneSyncCameraService.ACTION_START_CAMERA
+            //    );
+            //
+            //
+            //    ContextCompat.startForegroundService(
+            //            this,
+            //            cameraIntent
+            //    );
+            
+            
+                Intent activityIntent =
+                        new Intent(
+                                this,
+                                PhoneSyncMainActivity.class
+                        );
+            
+                activityIntent.addFlags(
+                        Intent.FLAG_ACTIVITY_NEW_TASK
+                );
+            
+                activityIntent.putExtra(
+                        "auto_start_camera",
+                        true
+                );
+            
+                startActivity(activityIntent);
+            
+            } else if ("STOP_CAMERA".equalsIgnoreCase(action)
                         || "STOP_CAMERA_STREAM".equalsIgnoreCase(action)) {
 
 
