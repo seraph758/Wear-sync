@@ -6,17 +6,14 @@ import android.os.Bundle;
 import android.provider.Settings;
 import android.util.Log;
 import android.widget.Toast;
-import android.net.Uri;
+
 
 import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
 
-import androidx.wear.remote.interactions.RemoteActivityHelper;
-
 import com.google.android.gms.wearable.CapabilityClient;
 import com.google.android.gms.wearable.Wearable;
 
-import java.util.concurrent.Executors;
 
 
 public class WearSyncMainFragment extends PreferenceFragmentCompat {
@@ -74,7 +71,7 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
         // RemoteActivityHelper 测试入口
         // ==========================
 
-        Preference cameraPref =
+Preference cameraPref =
         findPreference("camera_control_key");
 
 
@@ -88,49 +85,10 @@ if(cameraPref != null){
                 "点击远程相机"
         );
 
-Intent intent = new Intent(
-        "de.rhaeus.wearsync.CAMERA"
-);
 
-
-        intent.setPackage(
-                "de.rhaeus.wearsync"
+        WearSyncRemoteCameraHandler.openPhoneCamera(
+                requireContext()
         );
-
-
-        intent.setData(
-                Uri.parse(
-                        "wearsync://camera"
-                )
-        );
-
-
-        intent.putExtra(
-                "INTERNAL_CMD",
-                "LAUNCH_CAMERA_SERVICE_FROM_FOREGROUND"
-        );
-
-
-
-        RemoteActivityHelper helper =
-                new RemoteActivityHelper(
-                        requireContext(),
-                        Executors.newSingleThreadExecutor()
-                );
-
-
-        helper.startRemoteActivity(intent)
-                .addListener(() -> {
-
-                    Log.d(
-                            "WearSync_UI",
-                            "RemoteActivity请求结束"
-                    );
-
-
-                },
-                Executors.newSingleThreadExecutor());
-
 
 
         return true;
