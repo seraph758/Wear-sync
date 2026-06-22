@@ -200,27 +200,27 @@ public class PhoneSyncListenerService extends WearableListenerService {
                                 this,
                                 PhoneSyncMainActivity.class
                         );
-            
+                
                 activityIntent.addFlags(
                         Intent.FLAG_ACTIVITY_NEW_TASK
                 );
-            
+                
                 activityIntent.putExtra(
-                        "auto_start_camera",
-                        true
+                        "INTERNAL_CMD",
+                        "LAUNCH_CAMERA_SERVICE_FROM_FOREGROUND"
                 );
-            
-              try {
-
+                
+                try {
+                
                     Log.d(TAG, "准备启动Activity");
                 
                     startActivity(activityIntent);
                 
-                    Log.d(TAG, "startActivity已执行");
+                    Log.d(TAG, "startActivity执行完成");
                 
                 } catch (Exception e) {
                 
-                    Log.e(TAG, "启动Activity失败", e);
+                    Log.e(TAG, "启动Activity异常", e);
                 
                 }
             
