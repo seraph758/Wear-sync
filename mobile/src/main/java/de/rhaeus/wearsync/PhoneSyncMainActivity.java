@@ -106,80 +106,106 @@ public class PhoneSyncMainActivity extends AppCompatActivity {
 
 
 
-private void handleIncomingCommand(Intent intent){
-
-    if(intent == null)
-        return;
+    private void handleIncomingCommand(Intent intent){
 
 
-    Log.d(
-            TAG,
-            "收到Intent action="
-            + intent.getAction()
-            + " data="
-            + intent.getData()
-    );
+        if(intent == null){
 
-
-    boolean isCameraRequest = false;
-
-
-    if(intent.getData()!=null){
-
-        if("wearsync".equals(intent.getData().getScheme())
-                &&
-           "camera".equals(intent.getData().getHost())){
-
-            isCameraRequest = true;
+            return;
 
         }
 
-    }
-
-
-    String cmd =
-            intent.getStringExtra(
-                    "INTERNAL_CMD"
-            );
-
-
-    if(
-            isCameraRequest
-            ||
-            "LAUNCH_CAMERA_SERVICE_FROM_FOREGROUND".equals(cmd)
-    ){
 
 
         Log.d(
                 TAG,
-                "收到RemoteActivity拍照请求"
+                "收到Intent action="
+                        + intent.getAction()
+                        + " data="
+                        + intent.getData()
         );
 
 
-        Intent serviceIntent =
-                new Intent(
-                        this,
-                        PhoneSyncCameraService.class
+
+        boolean isCameraRequest = false;
+
+
+
+        if(intent.getData()!=null){
+
+
+            if("wearsync".equals(
+                    intent.getData().getScheme()
+            )
+            &&
+            "camera".equals(
+                    intent.getData().getHost()
+            )){
+
+
+                isCameraRequest = true;
+
+
+
+                Log.d(
+                        TAG,
+                        "检测到 RemoteActivity camera 请求"
                 );
 
-
-        serviceIntent.setAction(
-                PhoneSyncCameraService.ACTION_START_CAMERA
-        );
-
-
-        if(Build.VERSION.SDK_INT >= 26){
-
-            startForegroundService(serviceIntent);
-
-        }else{
-
-            startService(serviceIntent);
+            }
 
         }
 
+
+
+        if(isCameraRequest){
+
+
+
+            Log.d(
+                    TAG,
+                    "收到RemoteActivity拍照请求，启动相机服务"
+            );
+
+
+
+            Intent serviceIntent =
+                    new Intent(
+                            this,
+                            PhoneSyncCameraService.class
+                    );
+
+
+
+            serviceIntent.setAction(
+                    PhoneSyncCameraService.ACTION_START_CAMERA
+            );
+
+
+
+            if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O){
+
+
+                startForegroundService(
+                        serviceIntent
+                );
+
+
+            }else{
+
+
+                startService(
+                        serviceIntent
+                );
+
+
+            }
+
+
+        }
+
+
     }
-}
 
 
 
@@ -190,8 +216,11 @@ private void handleIncomingCommand(Intent intent){
     protected void onDestroy(){
 
 
-        if(instance==this)
+        if(instance==this){
+
             instance=null;
+
+        }
 
 
         super.onDestroy();
