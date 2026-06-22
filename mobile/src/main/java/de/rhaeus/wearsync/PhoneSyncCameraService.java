@@ -70,39 +70,71 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START); // 激活 CameraX 运行状态
         Log.d(TAG, "🚀 PhoneSyncCameraService 收到触发信令...");
 
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            String channelId = "camera_sync_channel";
-            android.app.NotificationChannel channel = new android.app.NotificationChannel(
-                    channelId, "相机远端同步", android.app.NotificationManager.IMPORTANCE_LOW);
-            android.app.NotificationManager nm = (android.app.NotificationManager) getSystemService(NOTIFICATION_SERVICE);
-            if (nm != null) nm.createNotificationChannel(channel);
-
-            android.app.Notification notification = new android.app.Notification.Builder(this, channelId)
-                    .setContentTitle("WearSync")
-                    .setContentText("远端相机流同步交互中...")
-                    .setSmallIcon(android.R.drawable.ic_menu_camera)
-                    .build();
-            startForeground(8899, notification);
-        }
-
-        if (intent == null || intent.getAction() == null) {
-            stopSelf();
-            return START_NOT_STICKY;
-        }
-
-        String action = intent.getAction();
-        Log.d(TAG, "⚙️ 手机相机服务收到动作: " + action);
-
+//        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+ //           String channelId = "camera_sync_channel";
+ //           android.app.NotificationChannel channel = new android.app.NotificationChannel(
+ //                   channelId, "相机远端同步", android.app.NotificationManager.IMPORTANCE_LOW);
+ //           android.app.NotificationManager nm = (android.app.NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+ //          if (nm != null) nm.createNotificationChannel(channel);
+//
+  ////          android.app.Notification notification = new android.app.Notification.Builder(this, channelId)
+ //                   .setContentTitle("WearSync")
+  //                  .setContentText("远端相机流同步交互中...")
+  //                  .setSmallIcon(android.R.drawable.ic_menu_camera)
+  //                  .build();
+   //         startForeground(8899, notification);
+   //     }
         if (ACTION_START_CAMERA.equals(action)) {
-            startCameraAndSetupPipeline();
-        } else if (ACTION_STOP_CAMERA_STREAM.equals(action)) {
-            releaseCameraAndPipeline();
-        } else if (ACTION_TRIGGER_SHUTTER.equals(action)) {
-            executePhoneShutter();
+
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+
+        String channelId = "camera_sync_channel";
+
+        android.app.NotificationChannel channel =
+                new android.app.NotificationChannel(
+                        channelId,
+                        "相机远端同步",
+                        android.app.NotificationManager.IMPORTANCE_LOW
+                );
+
+        android.app.NotificationManager nm =
+                (android.app.NotificationManager)
+                        getSystemService(NOTIFICATION_SERVICE);
+
+        if (nm != null) {
+            nm.createNotificationChannel(channel);
         }
 
-        return START_NOT_STICKY;
+        android.app.Notification notification =
+                new android.app.Notification.Builder(this, channelId)
+                        .setContentTitle("WearSync")
+                        .setContentText("远端相机流同步交互中...")
+                        .setSmallIcon(android.R.drawable.ic_menu_camera)
+                        .build();
+
+        startForeground(8899, notification);
     }
+
+    startCameraAndSetupPipeline();
+}
+    //    if (intent == null || intent.getAction() == null) {
+   //         stopSelf();
+  //          return START_NOT_STICKY;
+   //     }
+//
+   //     String action = intent.getAction();
+   //     Log.d(TAG, "⚙️ 手机相机服务收到动作: " + action);
+
+   //     if (ACTION_START_CAMERA.equals(action)) {
+    //        startCameraAndSetupPipeline();
+    //    } else if (ACTION_STOP_CAMERA_STREAM.equals(action)) {
+    //        releaseCameraAndPipeline();
+    //    } else if (ACTION_TRIGGER_SHUTTER.equals(action)) {
+     //       executePhoneShutter();
+    //    }
+//
+  //      return START_NOT_STICKY;
+  //  }
 
     private void startCameraAndSetupPipeline() {
         if (isStreaming) return;
