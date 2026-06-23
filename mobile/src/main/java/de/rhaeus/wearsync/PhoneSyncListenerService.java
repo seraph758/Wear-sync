@@ -19,37 +19,56 @@ import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
+
 public class PhoneSyncListenerService extends WearableListenerService {
 
-    private static final String TAG = "WearSync_PhoneListener";
-    private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
+
+    private static final String TAG =
+            "WearSync_PhoneListener";
+
+
+    private static final String UNIVERSAL_SYNC_PATH =
+            "/wear-universal-sync";
+
 
     private static final Executor REMOTE_EXECUTOR =
             Executors.newSingleThreadExecutor();
 
+
+
     public static boolean isInternalUpdate = false;
+
 
 
     @Override
     public void onMessageReceived(MessageEvent messageEvent) {
 
+
+
         if (messageEvent != null
                 && messageEvent.getSourceNodeId() != null) {
+
 
             WearSyncState.setNodeId(
                     this,
                     messageEvent.getSourceNodeId()
             );
+
         }
+
 
 
         if (!UNIVERSAL_SYNC_PATH.equals(messageEvent.getPath())) {
+
             super.onMessageReceived(messageEvent);
             return;
+
         }
 
 
+
         try {
+
 
             String jsonStr =
                     new String(
@@ -57,23 +76,34 @@ public class PhoneSyncListenerService extends WearableListenerService {
                             StandardCharsets.UTF_8
                     );
 
+
+
             JSONObject json =
                     new JSONObject(jsonStr);
+
 
 
             String sender =
                     json.optString("sender", "");
 
+
+
             String type =
                     json.optString("type", "");
+
+
 
             String action =
                     json.optString("action", "");
 
 
+
             if ("phone".equalsIgnoreCase(sender)) {
+
                 return;
+
             }
+
 
 
             Log.d(
@@ -85,11 +115,16 @@ public class PhoneSyncListenerService extends WearableListenerService {
             );
 
 
-            // ===============================
-            // 勿扰
-            // ===============================
+
+
+
+            // =========================
+            // 勿扰同步
+            // =========================
 
             if ("dnd".equalsIgnoreCase(type)) {
+
+
 
                 int value =
                         json.has("dnd_profile_value")
@@ -105,12 +140,17 @@ public class PhoneSyncListenerService extends WearableListenerService {
                                 );
 
 
+
                 if (value == -1) {
+
                     return;
+
                 }
 
 
+
                 isInternalUpdate = true;
+
 
 
                 NotificationManager nm =
@@ -120,33 +160,43 @@ public class PhoneSyncListenerService extends WearableListenerService {
                                 );
 
 
+
                 if (nm != null
                         && nm.isNotificationPolicyAccessGranted()) {
+
 
                     nm.setInterruptionFilter(value);
 
                 }
 
 
+
                 new Handler(getMainLooper())
                         .postDelayed(
-                                () -> isInternalUpdate = false,
+                                () ->
+                                        isInternalUpdate = false,
                                 1500
                         );
 
 
+
                 return;
+
             }
 
 
 
-            // ===============================
+
+
+            // =========================
             // 闹钟
-            // ===============================
+            // =========================
+
 
             if ("alarm".equalsIgnoreCase(type)
                     ||
                     "alarm_action".equalsIgnoreCase(type)) {
+
 
 
                 if ("DISMISS".equalsIgnoreCase(action)
@@ -154,49 +204,67 @@ public class PhoneSyncListenerService extends WearableListenerService {
                         "SNOOZE".equalsIgnoreCase(action)) {
 
 
+
                     PhoneAlarmManager.handleWatchCommand(
                             this,
                             action
                     );
+
                 }
 
 
+
                 return;
+
             }
 
 
 
-            // ===============================
+
+
+
+            // =========================
             // 相机
-            // ===============================
+            // =========================
+
 
             if ("camera".equalsIgnoreCase(type)
                     ||
                     "camera_control".equalsIgnoreCase(type)) {
 
 
-                if ("START_CAMERA_UI".equalsIgnoreCase(action)
+
+                // 启动手机相机服务
+                if ("START_CAMERA".equalsIgnoreCase(action)
                         ||
-                        "START_CAMERA".equalsIgnoreCase(action)) {
+                        "START_CAMERA_UI".equalsIgnoreCase(action)) {
+
 
 
                     String nodeId =
                             WearSyncState.getNodeId(this);
 
 
+
                     if (nodeId == null
                             || nodeId.isEmpty()) {
 
 
+
                         Log.w(
                                 TAG,
-                                "NodeId为空，查询连接节点"
+                                "NodeId为空，重新查询"
                         );
+
 
 
                         new Thread(() -> {
 
+
+
                             try {
+
+
 
                                 List<Node> nodes =
                                         Tasks.await(
@@ -205,13 +273,16 @@ public class PhoneSyncListenerService extends WearableListenerService {
                                         );
 
 
+
                                 if (nodes != null
                                         && !nodes.isEmpty()) {
+
 
 
                                     String id =
                                             nodes.get(0)
                                                     .getId();
+
 
 
                                     WearSyncState.setNodeId(
@@ -220,19 +291,17 @@ public class PhoneSyncListenerService extends WearableListenerService {
                                     );
 
 
+
                                     executeRemoteActivityLaunch(id);
 
-                                } else {
-
-                                    Log.e(
-                                            TAG,
-                                            "没有发现手表节点"
-                                    );
 
                                 }
 
 
-                            } catch (Exception e) {
+
+                            } catch(Exception e) {
+
+
 
                                 Log.e(
                                         TAG,
@@ -240,24 +309,72 @@ public class PhoneSyncListenerService extends WearableListenerService {
                                         e
                                 );
 
+
                             }
+
 
 
                         }).start();
 
 
+
                     } else {
+
 
 
                         executeRemoteActivityLaunch(nodeId);
 
+
                     }
+
+
+
 
                 }
 
 
+
+                // 停止手机相机
+                else if ("STOP_CAMERA".equalsIgnoreCase(action)
+                        ||
+                        "FORCE_QUIT_CAMERA".equalsIgnoreCase(action)) {
+
+
+
+                    Intent stopIntent =
+                            new Intent(
+                                    this,
+                                    PhoneSyncCameraService.class
+                            );
+
+
+
+                    stopIntent.setAction(
+                            PhoneSyncCameraService.ACTION_STOP_CAMERA
+                    );
+
+
+
+                    startService(stopIntent);
+
+
+
+                    Log.d(
+                            TAG,
+                            "停止手机相机服务"
+                    );
+
+
+                }
+
+
+
                 return;
+
             }
+
+
+
 
 
         } catch(Exception e) {
@@ -269,75 +386,97 @@ public class PhoneSyncListenerService extends WearableListenerService {
                     e
             );
 
+
         }
 
+
     }
 
 
 
 
-private void executeRemoteActivityLaunch(
-        String nodeId
-) {
 
 
-    try {
+    private void executeRemoteActivityLaunch(String nodeId) {
 
 
-        androidx.wear.remote.interactions.RemoteActivityHelper helper =
-                new androidx.wear.remote.interactions.RemoteActivityHelper(
-                        this,
-                        REMOTE_EXECUTOR
-                );
+
+        try {
 
 
-        Intent intent =
-                new Intent(
-                        Intent.ACTION_VIEW
-                );
 
-
-        intent.setData(
-                android.net.Uri.parse(
-                        "wearsync://camera"
-                )
-        );
-
-
-        intent.addFlags(
-                Intent.FLAG_ACTIVITY_NEW_TASK
-        );
-
-
-        helper.startRemoteActivity(
-                intent,
-                nodeId
-        )
-        .addListener(
-                () -> {
-
-                    Log.d(
-                            TAG,
-                            "🚀 RemoteActivity发送完成"
+            androidx.wear.remote.interactions.RemoteActivityHelper helper =
+                    new androidx.wear.remote.interactions.RemoteActivityHelper(
+                            this,
+                            REMOTE_EXECUTOR
                     );
 
-                },
-                REMOTE_EXECUTOR
-        );
 
 
-    } catch(Exception e) {
+            Intent intent =
+                    new Intent(
+                            Intent.ACTION_VIEW
+                    );
 
 
-        Log.e(
-                TAG,
-                "启动RemoteActivity失败",
-                e
-        );
+
+            intent.setData(
+                    android.net.Uri.parse(
+                            "wearsync://camera"
+                    )
+            );
+
+
+
+            intent.addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK
+                            |
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP
+                            |
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP
+            );
+
+
+
+            helper.startRemoteActivity(
+                    intent,
+                    nodeId
+            )
+            .addListener(
+                    () -> {
+
+
+                        Log.d(
+                                TAG,
+                                "🚀 RemoteActivity发送完成"
+                        );
+
+
+                    },
+                    REMOTE_EXECUTOR
+            );
+
+
+
+
+        } catch(Exception e) {
+
+
+
+            Log.e(
+                    TAG,
+                    "启动RemoteActivity失败",
+                    e
+            );
+
+
+        }
+
+
 
     }
 
-}
+
 
 
     public static void sendStatusMaskToWatch(
@@ -349,18 +488,26 @@ private void executeRemoteActivityLaunch(
     ) {
 
 
+
         if (isInternalUpdate) {
+
             return;
+
         }
+
 
 
         new Thread(() -> {
 
+
+
             try {
+
 
 
                 JSONObject json =
                         new JSONObject();
+
 
 
                 json.put(
@@ -369,10 +516,12 @@ private void executeRemoteActivityLaunch(
                 );
 
 
+
                 json.put(
                         "type",
                         "status_mask"
                 );
+
 
 
                 byte[] data =
@@ -392,6 +541,7 @@ private void executeRemoteActivityLaunch(
                         && !nodeId.isEmpty()) {
 
 
+
                     Tasks.await(
                             Wearable.getMessageClient(context)
                                     .sendMessage(
@@ -401,10 +551,13 @@ private void executeRemoteActivityLaunch(
                                     )
                     );
 
+
                 }
 
 
+
             } catch(Exception e) {
+
 
 
                 Log.e(
@@ -413,11 +566,15 @@ private void executeRemoteActivityLaunch(
                         e
                 );
 
+
             }
+
 
 
         }).start();
 
+
     }
+
 
 }
