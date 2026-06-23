@@ -25,12 +25,12 @@ public class PhoneSyncListenerService extends WearableListenerService {
     // 防止手机执行手表同步后再次反向触发
     public static boolean isInternalUpdate = false;
     
-    // 🎯 全局緩存：隨時記錄當前活躍連接的手錶車牌號（NodeId）
-    private static String cachedWatchNodeId = null;
+    // 🎯 全局公共緩存：隨時記錄當前活躍連接的手錶車牌號（NodeId），供所有模組共享
+    public static String cachedWatchNodeId = null;
 
     @Override
     public void onMessageReceived(MessageEvent messageEvent) {
-        // 📥 每一條飄過來的消息，都順手把它的發射源 ID 更新到緩存裡
+        // 📥 緩存保鮮：每一條飄過來的消息，都順手把它的發射源 ID 更新到緩存裡
         if (messageEvent != null && messageEvent.getSourceNodeId() != null) {
             cachedWatchNodeId = messageEvent.getSourceNodeId();
         }
@@ -54,9 +54,9 @@ public class PhoneSyncListenerService extends WearableListenerService {
 
             Log.d(TAG, "收到信令 type=" + type + " action=" + action);
 
-            // ==========================
-            // 勿扰同步
-            // ==========================
+            // ==========================================
+            // 1. 勿扰同步（接收端：手錶 ➔ 手機）
+            // ==========================================
             if ("dnd".equalsIgnoreCase(type)) {
                 int wearDndVal = json.has("dnd_profile_value")
                                 ? json.optInt("dnd_profile_value", -1)
@@ -80,9 +80,9 @@ public class PhoneSyncListenerService extends WearableListenerService {
                 return;
             }
 
-            // ==========================
-            // 闹钟控制
-            // ==========================
+            // ==========================================
+            // 2. 闹钟控制（接收端：手錶 ➔ 手機）
+            // ==========================================
             if ("alarm".equalsIgnoreCase(type) || "alarm_action".equalsIgnoreCase(type)) {
                 if ("DISMISS".equalsIgnoreCase(action) || "SNOOZE".equalsIgnoreCase(action)) {
                     Log.d(TAG, "收到闹钟控制: " + action);
@@ -91,20 +91,18 @@ public class PhoneSyncListenerService extends WearableListenerService {
                 return;
             }
 
-            // ==========================
-            // 相机控制
-            // ==========================
+            // ==========================================
+            // 3. 相机控制（接收端：手錶 ➔ 手機，觸發特權彈窗）
+            // ==========================================
             if ("camera".equalsIgnoreCase(type) || "camera_control".equalsIgnoreCase(type)) {
                 if ("START_CAMERA_UI".equalsIgnoreCase(action) || "START_CAMERA".equalsIgnoreCase(action)) {
                     Log.d(TAG, "收到手表拍照请求，準備透過全局緩存 NodeId 啟動 WearSyncRemoteCameraActivity");
 
-                    // 🎯 1. 優先嘗試從全局變量中直接讀取手錶 ID（零延遲）
+                    // 🎯 核心：優先嘗試從全局變量中直接讀取手錶 ID（零延遲）
                     String targetNodeId = cachedWatchNodeId;
 
-                    // 🎯 2. 防禦性編程：如果變量是空的（比如剛開機），立刻啟動線程主動去拿一次並補寫進緩存
                     if (targetNodeId == null || targetNodeId.isEmpty()) {
                         Log.w(TAG, "⚠️ 全局緩存為空，啟動背景線程實時追溯並刷新緩存...");
-                        
                         new Thread(() -> {
                             try {
                                 com.google.android.gms.tasks.Task<List<Node>> nodeTask = 
@@ -124,9 +122,8 @@ public class PhoneSyncListenerService extends WearableListenerService {
                                 executeRemoteActivityLaunch(null);
                             }
                         }).start();
-                        
                     } else {
-                        // 🎯 3. 緩存命中！直接秒級發射
+                        // ⚡ 緩存命中！直接秒級特權發射
                         Log.d(TAG, "⚡ 全局緩存命中！直接提取 NodeId 發射免死金牌: " + targetNodeId);
                         executeRemoteActivityLaunch(targetNodeId);
                     }
@@ -140,7 +137,7 @@ public class PhoneSyncListenerService extends WearableListenerService {
     }
 
     /**
-     * 🛰️ 封裝：執行帶有免死金牌特權的 Activity 發射（獨立方法，嚴禁嵌套）
+     * 🛰️ 封裝：執行帶有免死金牌特權的 Activity 發射（相機模組專用）
      */
     private void executeRemoteActivityLaunch(String nodeId) {
         try {
@@ -151,23 +148,19 @@ public class PhoneSyncListenerService extends WearableListenerService {
             activityIntent.setData(android.net.Uri.parse("wearsync://camera/")); 
             activityIntent.setPackage(getPackageName()); 
 
-            // 注入穿透後台與鎖屏限制的強力 Flags 組合
             activityIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK 
                     | Intent.FLAG_ACTIVITY_CLEAR_TOP 
                     | Intent.FLAG_ACTIVITY_SINGLE_TOP);
 
             if (nodeId != null) {
-                // 帶有精確車牌號的最高優先級發射
                 remoteHelper.startRemoteActivity(activityIntent, nodeId).addListener(() -> {
                     Log.d(TAG, "🚀 [特權穿透成功] 成功借道谷歌 GMS 服務拉起相機界面！");
                 }, java.util.concurrent.Executors.newSingleThreadExecutor());
             } else {
-                // 盲發降級方案
                 remoteHelper.startRemoteActivity(activityIntent).addListener(() -> {
                     Log.d(TAG, "🚀 RemoteActivityHelper 普通發射成功（無 NodeId 備用）");
                 }, java.util.concurrent.Executors.newSingleThreadExecutor());
             }
-            
             Log.d(TAG, "URI启动WearSyncRemoteCameraActivity指令已递交给谷歌服务");
         } catch (Exception e) {
             Log.e(TAG, "調用 RemoteActivityHelper 失敗", e);
@@ -175,7 +168,7 @@ public class PhoneSyncListenerService extends WearableListenerService {
     }
 
     /**
-     * 手机主动发送状态到手表（獨立方法，嚴禁嵌套）
+     * 🛰️ 勿扰模式核心優化：手機主動發送狀態到手表（全面切換至全局變量獲取 ID 架構）
      */
     public static void sendStatusMaskToWatch(
             Context context,
@@ -184,7 +177,6 @@ public class PhoneSyncListenerService extends WearableListenerService {
             boolean sleepLinkOn,
             boolean powerSaveLinkOn
     ) {
-
         if (isInternalUpdate) {
             return;
         }
@@ -204,20 +196,22 @@ public class PhoneSyncListenerService extends WearableListenerService {
 
                 byte[] payload = json.toString().getBytes(StandardCharsets.UTF_8);
 
-                List<Node> nodes = Tasks.await(Wearable.getNodeClient(context).getConnectedNodes());
+                // 🎯 【從變量裡獲取 ID】：跳過高耗電的藍牙掃描
+                String targetNodeId = cachedWatchNodeId;
 
-                if (nodes != null) {
-                    for (Node node : nodes) {
-                        Tasks.await(
-                                Wearable.getMessageClient(context).sendMessage(
-                                        node.getId(),
-                                        UNIVERSAL_SYNC_PATH,
-                                        payload
-                                        )
-                        );
+                if (targetNodeId != null && !targetNodeId.isEmpty()) {
+                    Log.d(TAG, "⚡ 勿擾同步命中全局緩存，直接秒發給手錶: " + targetNodeId);
+                    Tasks.await(Wearable.getMessageClient(context).sendMessage(targetNodeId, UNIVERSAL_SYNC_PATH, payload));
+                } else {
+                    Log.w(TAG, "⚠️ 勿擾同步時全局緩存為空，降級走常規連線檢查...");
+                    List<Node> nodes = Tasks.await(Wearable.getNodeClient(context).getConnectedNodes());
+                    if (nodes != null) {
+                        for (Node node : nodes) {
+                            cachedWatchNodeId = node.getId(); // 順手逆向刷新緩存
+                            Tasks.await(Wearable.getMessageClient(context).sendMessage(node.getId(), UNIVERSAL_SYNC_PATH, payload));
+                        }
                     }
                 }
-
             } catch (Exception e) {
                 Log.e(TAG, "同步状态到手表失败", e);
             }
