@@ -178,33 +178,44 @@ Log.d(
 
 Intent activityIntent =
         new Intent(
-                this,
-                WearSyncRemoteCameraActivity.class
+                "android.intent.action.VIEW"
         );
+
+
+activityIntent.setData(
+        android.net.Uri.parse(
+                "wearsync://camera"
+        )
+);
+
 
 activityIntent.addFlags(
         Intent.FLAG_ACTIVITY_NEW_TASK
 );
 
+
 try {
 
     Log.d(
-            TAG,
-            "准备启动WearSyncRemoteCameraActivity"
+        TAG,
+        "准备通过URI启动WearSyncRemoteCameraActivity"
     );
+
 
     startActivity(activityIntent);
 
+
     Log.d(
-            TAG,
-            "WearSyncRemoteCameraActivity启动完成"
+        TAG,
+        "URI启动WearSyncRemoteCameraActivity完成"
     );
 
-} catch (Exception e) {
+
+} catch(Exception e){
 
     Log.e(
             TAG,
-            "启动WearSyncRemoteCameraActivity异常",
+            "启动RemoteCameraActivity失败",
             e
     );
 
