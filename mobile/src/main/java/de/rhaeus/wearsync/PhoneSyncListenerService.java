@@ -415,7 +415,7 @@ public class PhoneSyncListenerService extends WearableListenerService {
 
             intent.setData(
                     android.net.Uri.parse(
-                            "wearsync://camera"
+                            "wearsync://camera/"
                     )
             );
 
