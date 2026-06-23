@@ -11,8 +11,11 @@ import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.util.Log;
 import android.view.WindowManager;
+import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
+import android.widget.LinearLayout;
+import android.widget.RelativeLayout;
 
 import com.google.android.gms.tasks.Tasks;
 import com.google.android.gms.wearable.Node;
@@ -36,7 +39,7 @@ public class WearAlarmActivity extends Activity {
     private TextView tvAlarmTime;
     private TextView tvAlarmLabel;
 
-    // 📥 核心強退看門狗監聽器：一旦收到手機的 FORCE_STOP_WEAR_ALARM 觸發的本地廣播，手錶立刻停震自毀退出！
+    // 📥 核心強退看門狗監聽器
     private final BroadcastReceiver forceStopReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -62,15 +65,33 @@ public class WearAlarmActivity extends Activity {
         }
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
-        setContentView(R.layout.activity_wear_alarm); 
+        // 🚀 載入美化後的圓形表盤布局（44mm 專用）
+        View alarmView = getLayoutInflater().inflate(R.layout.alarm_layout, null);
 
-        tvAlarmDay = findViewById(R.id.tv_alarm_day);
-        tvAlarmTime = findViewById(R.id.tv_alarm_time);
-        tvAlarmLabel = findViewById(R.id.tv_alarm_label);
+        // 找到控件
+        tvAlarmDay = alarmView.findViewById(R.id.tv_alarm_day);
+        tvAlarmTime = alarmView.findViewById(R.id.tv_alarm_time);
+        tvAlarmLabel = alarmView.findViewById(R.id.tv_alarm_label);
 
-        parseAndRenderIntentData(getIntent());
+        // 設置按鈕點擊事件
+        Button btnDismiss = alarmView.findViewById(R.id.btn_dismiss);
+        if (btnDismiss != null) {
+            btnDismiss.setOnClickListener(v -> {
+                sendActionToPhone("DISMISS");
+                cleanExit();
+            });
+        }
 
-        // 🛰️ 安全註冊強退看門狗廣播（解決你原本代碼錯位放置在方法外的致命語法錯誤）
+        Button btnSnooze = alarmView.findViewById(R.id.btn_snooze);
+        if (btnSnooze != null) {
+            btnSnooze.setOnClickListener(v -> {
+                Log.d(TAG, "👉 用戶在手錶端點擊了【延後】");
+                sendActionToPhone("SNOOZE");
+                cleanExit();
+            });
+        }
+
+        // 註冊強退廣播
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(forceStopReceiver, new IntentFilter(ACTION_INTERNAL_FORCE_STOP), Context.RECEIVER_EXPORTED);
         } else {
@@ -80,33 +101,96 @@ public class WearAlarmActivity extends Activity {
         vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
         startInfiniteVibration();
 
-        // 停止按鈕
-        Button btnDismiss = findViewById(R.id.btn_dismiss);
-        if (btnDismiss != null) {
-            // 用户点击后，立刻销毁手表 UI 并停止震动 [cite: 286, 288]
-            btnDismiss.setOnClickListener(v -> {
-                sendActionToPhone("DISMISS");
-                cleanExit(); // 立刻执行自毁，如果手机没停掉闹钟，手机看门狗会在 4 秒后把它再次拉起
-            });
-        }
+        // 設置動態內容（星期 + 時間）
+        parseAndRenderIntentData(getIntent());
 
-        // 延後按鈕
-        Button btnSnooze = findViewById(R.id.btn_snooze);
-        if (btnSnooze != null) {
-            btnSnooze.setOnClickListener(v -> {
-                Log.d(TAG, "👉 用戶在手錶端點擊了【延後】");
-                sendActionToPhone("SNOOZE");
-                cleanExit();
-            });
-        }
+        setContentView(alarmView);
     }
 
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
-        Log.w(TAG, "⚠️ [再次拉起核查警告]：手機端依舊在轟鳴！說明代點未成功，重新刷新全屏提示並加強震動！");
+        Log.w(TAG, "⚠️ [再次拉起核查警告]：手機端依舊在轟鳴！重新刷新全屏提示並加強震動！");
         parseAndRenderIntentData(intent);
+        startInfiniteVibration();
+    }
+
+    private void parseAndRenderIntentData(Intent intent) {
+        String day = new java.text.SimpleDateFormat(
+                "EEEE",
+                java.util.Locale.CHINESE
+        ).format(new java.util.Date());
+
+        String time = new java.text.SimpleDateFormat(
+                "HH:mm",
+                java.util.Locale.getDefault()
+        ).format(new java.util.Date());
+
+        if (tvAlarmDay != null) {
+            tvAlarmDay.setText(day);
+        }
+        if (tvAlarmTime != null) {
+            tvAlarmTime.setText(time);
+        }
+    }
+
+    private void startInfiniteVibration() {
+        if (vibrator == null || !vibrator.hasVibrator()) return;
+        try {
+            vibrator.cancel();
+            long[] pattern = {0, 800, 600};
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator.vibrate(VibrationEffect.createWaveform(pattern, 0));
+            } else {
+                vibrator.vibrate(pattern, 0);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "啟動手錶核心震動失敗", e);
+        }
+    }
+
+    private void sendActionToPhone(String actionCommand) {
+        new Thread(() -> {
+            try {
+                JSONObject json = new JSONObject();
+                json.put("sender", "wear");
+                json.put("type", "alarm_action");
+                json.put("action", actionCommand);
+                json.put("timestamp", System.currentTimeMillis());
+
+                byte[] payload = json.toString().getBytes(StandardCharsets.UTF_8);
+                List<Node> nodes = Tasks.await(Wearable.getNodeClient(this).getConnectedNodes());
+                if (nodes != null) {
+                    for (Node n : nodes) {
+                        Tasks.await(Wearable.getMessageClient(this).sendMessage(n.getId(), UNIVERSAL_SYNC_PATH, payload));
+                        Log.d(TAG, "🚀 [鬧鐘反向代點] 成功向手機投遞口令: " + actionCommand);
+                    }
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "手錶向手機反向推送代點指令失敗", e);
+            }
+        }).start();
+    }
+
+    private void cleanExit() {
+        isDestroyedBySystem = true;
+        try {
+            if (vibrator != null) vibrator.cancel();
+            unregisterReceiver(forceStopReceiver);
+        } catch (Exception ignored) {}
+        finishAndRemoveTask();
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (!isDestroyedBySystem) {
+            if (vibrator != null) vibrator.cancel();
+            try { unregisterReceiver(forceStopReceiver); } catch (Exception ignored) {}
+        }
+        super.onDestroy();
+    }
+}        parseAndRenderIntentData(intent);
         startInfiniteVibration();
     }
 
