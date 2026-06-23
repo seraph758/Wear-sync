@@ -23,16 +23,20 @@ public class WearSyncState {
                 Context.MODE_PRIVATE
         )
         .edit()
-        .putString(KEY_NODE_ID, nodeId)
+        .putString(
+                KEY_NODE_ID,
+                nodeId
+        )
         .apply();
     }
 
 
     public static String getNodeId(Context context) {
 
-        if (activeNodeId != null && !activeNodeId.isEmpty()) {
+        if (activeNodeId != null) {
             return activeNodeId;
         }
+
 
         activeNodeId =
                 context.getSharedPreferences(
@@ -57,7 +61,9 @@ public class WearSyncState {
                 Context.MODE_PRIVATE
         )
         .edit()
-        .remove(KEY_NODE_ID)
+        .remove(
+                KEY_NODE_ID
+        )
         .apply();
     }
 }
