@@ -6,13 +6,13 @@
     android:padding="16dp"
     android:background="#000000">
 
-    <!-- 时间区域 -->
+    <!-- 时间区域 - 居中上移 -->
     <LinearLayout
         android:id="@+id/layout_time"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_above="@id/layout_buttons"
-        android:layout_centerVertical="true"
+        android:layout_marginTop="48dp"   <!-- 大间距，拉开距离 -->
         android:gravity="center"
         android:orientation="vertical">
 
@@ -20,10 +20,10 @@
             android:id="@+id/tv_alarm_day"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="4dp"
+            android:layout_marginBottom="12dp"
             android:text="星期一"
             android:textColor="#A98C3A"
-            android:textSize="18sp"
+            android:textSize="22sp"
             android:textStyle="bold"
             android:fontFamily="sans-serif-medium" />
 
@@ -31,19 +31,17 @@
             android:id="@+id/tv_alarm_time"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="21:41"
+            android:text="23:58"
             android:textColor="#D4AF37"
-            android:textSize="44sp"
+            android:textSize="68sp"   <!-- 44mm 专属大字号 -->
             android:textStyle="bold"
             android:fontFamily="sans-serif-medium" />
 
-        <!-- 保留ID，避免findViewById报错 -->
         <TextView
             android:id="@+id/tv_alarm_label"
             android:layout_width="0dp"
             android:layout_height="0dp"
             android:visibility="gone" />
-
     </LinearLayout>
 
     <!-- 按钮区域 -->
@@ -52,37 +50,49 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_alignParentBottom="true"
-        android:layout_marginBottom="24dp"
+        android:layout_marginBottom="28dp"   <!-- 屏幕底部留白 -->
         android:gravity="center"
         android:orientation="horizontal">
 
         <Button
             android:id="@+id/btn_snooze"
             android:layout_width="0dp"
-            android:layout_height="92dp"
+            android:layout_height="108dp"   <!-- 按钮更大，更明显 -->
             android:layout_weight="1"
-            android:layout_marginEnd="10dp"
+            android:layout_marginEnd="16dp"
+            android:radius="18dp"          <!-- 圆角更柔和，更圆形友好 -->
             android:backgroundTint="#A88C2C"
             android:text="延后"
             android:textAllCaps="false"
             android:textColor="#3A3A3A"
-            android:textSize="24sp"
+            android:textSize="32sp"        <!-- 加大按钮文字 -->
             android:textStyle="bold"
-            android:fontFamily="sans-serif-medium" />
+            android:fontFamily="sans-serif-medium"
+            android:elevation="16dp"       <!-- 阴影更强，更高级 -->
+            android:shadowColor="#A98C3A"
+            android:shadowDx="0"
+            android:shadowDy="6"
+            android:shadowRadius="10" />
 
         <Button
             android:id="@+id/btn_dismiss"
             android:layout_width="0dp"
-            android:layout_height="92dp"
+            android:layout_height="108dp"
             android:layout_weight="1"
-            android:layout_marginStart="10dp"
+            android:layout_marginStart="16dp"
+            android:radius="18dp"
             android:backgroundTint="#8A3C3C"
             android:text="停止"
             android:textAllCaps="false"
             android:textColor="#D8D8D8"
-            android:textSize="24sp"
+            android:textSize="32sp"
             android:textStyle="bold"
-            android:fontFamily="sans-serif-medium" />
+            android:fontFamily="sans-serif-medium"
+            android:elevation="16dp"
+            android:shadowColor="#8A3C3C"
+            android:shadowDx="0"
+            android:shadowDy="6"
+            android:shadowRadius="10" />
 
     </LinearLayout>
 
