@@ -67,9 +67,9 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
 
 
 
-        // ==========================
-        // RemoteActivityHelper 测试入口
-        // ==========================
+  // ==========================
+// RemoteActivityHelper 测试入口
+// ==========================
 
 Preference cameraPref =
         findPreference("camera_control_key");
@@ -86,12 +86,32 @@ if(cameraPref != null){
         );
 
 
-        WearSyncRemoteCameraHandler handler =
-        new WearSyncRemoteCameraHandler(
-                requireContext()
+        // 1. 启动手表自己的 Camera UI
+        Intent cameraIntent =
+                new Intent(
+                        requireContext(),
+                        WearCameraActivity.class
+                );
+
+
+        cameraIntent.addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK
         );
 
-handler.openPhoneCamera();
+
+        startActivity(cameraIntent);
+
+
+
+        // 2. 通知手机启动远程相机
+        WearSyncRemoteCameraHandler handler =
+                new WearSyncRemoteCameraHandler(
+                        requireContext()
+                );
+
+
+        handler.openPhoneCamera();
+
 
 
         return true;
@@ -100,7 +120,10 @@ handler.openPhoneCamera();
 
 }
 
-        initConnectivityCheck();
+
+
+// 初始化手机连接状态检测
+initConnectivityCheck();
 
     }
 
