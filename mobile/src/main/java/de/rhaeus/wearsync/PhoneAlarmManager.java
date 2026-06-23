@@ -1,7 +1,6 @@
 package de.rhaeus.wearsync;
 
 import android.content.Context;
-import android.content.Intent;
 import android.util.Log;
 import com.google.android.gms.tasks.Tasks;
 import com.google.android.gms.wearable.Node;
@@ -9,7 +8,6 @@ import com.google.android.gms.wearable.Wearable;
 import org.json.JSONObject;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import android.content.SharedPreferences;
 
 public class PhoneAlarmManager {
     private static final String TAG = "WearSync_PhoneAlarm";
@@ -68,7 +66,7 @@ public class PhoneAlarmManager {
                 byte[] data = json.toString().getBytes(StandardCharsets.UTF_8);
 
                 // 🎯 【從變量裡獲取 ID】：跨類別秒讀共享的活躍手錶 ID
-                String targetNodeId = PhoneSyncListenerService.cachedWatchNodeId;
+                String targetNodeId = WearSyncState.getNodeId(context);
 
                 if (targetNodeId != null && !targetNodeId.isEmpty()) {
                     // ⚡ 緩存命中：秒級推送到手錶
@@ -79,12 +77,27 @@ public class PhoneAlarmManager {
                     // 🔍 防禦性降級方案
                     Log.w(TAG, "⚠️ 鬧鐘發射時全局緩存為空，降級走常規連線檢查...");
                     List<Node> nodes = Tasks.await(Wearable.getNodeClient(context).getConnectedNodes());
-                    
+
                     if (nodes != null && !nodes.isEmpty()) {
                         for (Node node : nodes) {
-                            PhoneSyncListenerService.cachedWatchNodeId = node.getId(); // 刷新緩存
-                            Tasks.await(Wearable.getMessageClient(context).sendMessage(node.getId(), "/wear-universal-sync", data));
-                        }
+
+
+    WearSyncState.setNodeId(
+            context,
+            node.getId()
+    );
+
+
+    Tasks.await(
+            Wearable.getMessageClient(context)
+            .sendMessage(
+                    node.getId(),
+                    "/wear-universal-sync",
+                    data
+            )
+    );
+
+}
                         Log.d(TAG, "🚀 鬧鐘狀態流 [" + actionStr + "] 通過連線輪詢推送到手錶成功。");
                     } else {
                         Log.w(TAG, "❌ 傳輸失敗：當前未發現任何已連接的手錶節點！");
