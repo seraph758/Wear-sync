@@ -16,58 +16,36 @@ import org.json.JSONObject;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-
+import java.util.concurrent.Executors;
 
 public class PhoneSyncListenerService extends WearableListenerService {
 
+    private static final String TAG = "WearSync_PhoneListener";
+    private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
 
-    private static final String TAG =
-            "WearSync_PhoneListener";
-
-
-    private static final String UNIVERSAL_SYNC_PATH =
-            "/wear-universal-sync";
-
-
-
-    // 防止手机执行同步后反向触发
     public static boolean isInternalUpdate = false;
 
 
-
     @Override
-    public void onMessageReceived(
-            MessageEvent messageEvent
-    ) {
+    public void onMessageReceived(MessageEvent messageEvent) {
 
-
-        // 每次收到手表消息，刷新NodeId
         if (messageEvent != null
                 && messageEvent.getSourceNodeId() != null) {
-
 
             WearSyncState.setNodeId(
                     this,
                     messageEvent.getSourceNodeId()
             );
-
         }
 
 
-
-        if (!UNIVERSAL_SYNC_PATH.equals(
-                messageEvent.getPath())) {
-
-
+        if (!UNIVERSAL_SYNC_PATH.equals(messageEvent.getPath())) {
             super.onMessageReceived(messageEvent);
             return;
-
         }
-
 
 
         try {
-
 
             String jsonStr =
                     new String(
@@ -75,10 +53,8 @@ public class PhoneSyncListenerService extends WearableListenerService {
                             StandardCharsets.UTF_8
                     );
 
-
             JSONObject json =
                     new JSONObject(jsonStr);
-
 
 
             String sender =
@@ -87,13 +63,11 @@ public class PhoneSyncListenerService extends WearableListenerService {
                             ""
                     );
 
-
             String type =
                     json.optString(
                             "type",
                             ""
                     );
-
 
             String action =
                     json.optString(
@@ -102,13 +76,9 @@ public class PhoneSyncListenerService extends WearableListenerService {
                     );
 
 
-
             if ("phone".equalsIgnoreCase(sender)) {
-
                 return;
-
             }
-
 
 
             Log.d(
@@ -121,11 +91,7 @@ public class PhoneSyncListenerService extends WearableListenerService {
 
 
 
-
-
-            // ===============================
             // 勿扰
-            // ===============================
 
             if ("dnd".equalsIgnoreCase(type)) {
 
@@ -145,15 +111,11 @@ public class PhoneSyncListenerService extends WearableListenerService {
 
 
                 if (value == -1) {
-
                     return;
-
                 }
 
 
-
                 isInternalUpdate = true;
-
 
 
                 NotificationManager nm =
@@ -163,22 +125,19 @@ public class PhoneSyncListenerService extends WearableListenerService {
                                 );
 
 
-
                 if (nm != null
                         && nm.isNotificationPolicyAccessGranted()) {
 
-
                     nm.setInterruptionFilter(value);
-
 
                 }
 
 
-
                 new Handler(
                         getMainLooper()
-                ).postDelayed(
-                        () -> isInternalUpdate=false,
+                )
+                .postDelayed(
+                        () -> isInternalUpdate = false,
                         1500
                 );
 
@@ -189,11 +148,7 @@ public class PhoneSyncListenerService extends WearableListenerService {
 
 
 
-
-
-            // ===============================
             // 闹钟
-            // ===============================
 
             if ("alarm".equalsIgnoreCase(type)
                     ||
@@ -219,25 +174,16 @@ public class PhoneSyncListenerService extends WearableListenerService {
 
 
 
-
-
-
-
-            // ===============================
             // 相机
-            // ===============================
-
 
             if ("camera".equalsIgnoreCase(type)
                     ||
                     "camera_control".equalsIgnoreCase(type)) {
 
 
-
                 if ("START_CAMERA_UI".equalsIgnoreCase(action)
                         ||
                         "START_CAMERA".equalsIgnoreCase(action)) {
-
 
 
                     String nodeId =
@@ -250,16 +196,13 @@ public class PhoneSyncListenerService extends WearableListenerService {
                             nodeId.isEmpty()) {
 
 
-
                         Log.w(
                                 TAG,
                                 "NodeId为空，重新查询"
                         );
 
 
-
                         new Thread(() -> {
-
 
                             try {
 
@@ -269,7 +212,6 @@ public class PhoneSyncListenerService extends WearableListenerService {
                                                 Wearable.getNodeClient(this)
                                                         .getConnectedNodes()
                                         );
-
 
 
                                 if (nodes != null
@@ -282,22 +224,18 @@ public class PhoneSyncListenerService extends WearableListenerService {
                                                     .getId();
 
 
-
                                     WearSyncState.setNodeId(
                                             this,
                                             id
                                     );
 
 
-
                                     executeRemoteActivityLaunch(id);
-
 
                                 }
 
 
-
-                            } catch(Exception e){
+                            } catch(Exception e) {
 
 
                                 Log.e(
@@ -305,7 +243,6 @@ public class PhoneSyncListenerService extends WearableListenerService {
                                         "Node查询失败",
                                         e
                                 );
-
 
                             }
 
@@ -322,8 +259,6 @@ public class PhoneSyncListenerService extends WearableListenerService {
 
                     }
 
-
-
                 }
 
 
@@ -333,9 +268,7 @@ public class PhoneSyncListenerService extends WearableListenerService {
 
 
 
-
-
-        } catch(Exception e){
+        } catch(Exception e) {
 
 
             Log.e(
@@ -343,7 +276,6 @@ public class PhoneSyncListenerService extends WearableListenerService {
                     "解析失败",
                     e
             );
-
 
         }
 
@@ -353,10 +285,9 @@ public class PhoneSyncListenerService extends WearableListenerService {
 
 
 
-
     private void executeRemoteActivityLaunch(
             String nodeId
-    ){
+    ) {
 
 
         try {
@@ -365,7 +296,7 @@ public class PhoneSyncListenerService extends WearableListenerService {
             androidx.wear.remote.interactions.RemoteActivityHelper helper =
                     new androidx.wear.remote.interactions.RemoteActivityHelper(
                             this,
-                            java.util.concurrent.Executors.newSingleThreadExecutor()
+                            Executors.newSingleThreadExecutor()
                     );
 
 
@@ -388,7 +319,6 @@ public class PhoneSyncListenerService extends WearableListenerService {
             );
 
 
-
             intent.addFlags(
                     Intent.FLAG_ACTIVITY_NEW_TASK
                             |
@@ -402,8 +332,28 @@ public class PhoneSyncListenerService extends WearableListenerService {
             helper.startRemoteActivity(
                     intent,
                     nodeId
-            );
+            )
+            .addOnSuccessListener(
+                    result -> {
 
+                        Log.d(
+                                TAG,
+                                "🚀 RemoteActivity启动成功"
+                        );
+
+                    }
+            )
+            .addOnFailureListener(
+                    e -> {
+
+                        Log.e(
+                                TAG,
+                                "❌ RemoteActivity启动失败",
+                                e
+                        );
+
+                    }
+            );
 
 
             Log.d(
@@ -412,8 +362,7 @@ public class PhoneSyncListenerService extends WearableListenerService {
             );
 
 
-
-        } catch(Exception e){
+        } catch(Exception e) {
 
 
             Log.e(
@@ -422,12 +371,9 @@ public class PhoneSyncListenerService extends WearableListenerService {
                     e
             );
 
-
         }
 
-
     }
-
 
 
 
@@ -439,10 +385,10 @@ public class PhoneSyncListenerService extends WearableListenerService {
             boolean vibrateOn,
             boolean sleepLinkOn,
             boolean powerSaveLinkOn
-    ){
+    ) {
 
 
-        if(isInternalUpdate){
+        if (isInternalUpdate) {
 
             return;
 
@@ -453,7 +399,7 @@ public class PhoneSyncListenerService extends WearableListenerService {
         new Thread(() -> {
 
 
-            try{
+            try {
 
 
                 JSONObject json =
@@ -481,7 +427,6 @@ public class PhoneSyncListenerService extends WearableListenerService {
 
 
 
-
                 String nodeId =
                         WearSyncState.getNodeId(
                                 context
@@ -489,9 +434,9 @@ public class PhoneSyncListenerService extends WearableListenerService {
 
 
 
-                if(nodeId != null
+                if (nodeId != null
                         &&
-                        !nodeId.isEmpty()){
+                        !nodeId.isEmpty()) {
 
 
 
@@ -505,12 +450,11 @@ public class PhoneSyncListenerService extends WearableListenerService {
                     );
 
 
-
                 }
 
 
 
-            }catch(Exception e){
+            } catch(Exception e) {
 
 
                 Log.e(
@@ -519,15 +463,11 @@ public class PhoneSyncListenerService extends WearableListenerService {
                         e
                 );
 
-
             }
-
 
 
         }).start();
 
-
     }
-
 
 }
