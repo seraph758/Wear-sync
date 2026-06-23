@@ -336,39 +336,32 @@ public class PhoneSyncListenerService extends WearableListenerService {
 
                 // 停止手机相机
                 else if ("STOP_CAMERA".equalsIgnoreCase(action)
-                        ||
-                        "FORCE_QUIT_CAMERA".equalsIgnoreCase(action)) {
+        ||
+        "FORCE_QUIT_CAMERA".equalsIgnoreCase(action)) {
 
 
-
-                    Intent stopIntent =
-                            new Intent(
-                                    this,
-                                    PhoneSyncCameraService.class
-                            );
-
+    Intent stopIntent =
+            new Intent(
+                    this,
+                    PhoneSyncCameraService.class
+            );
 
 
-                    stopIntent.setAction(
-                            PhoneSyncCameraService.ACTION_STOP_CAMERA
-                    );
+    stopIntent.setAction(
+            "de.rhaeus.wearsync.ACTION_STOP_CAMERA"
+    );
 
 
-
-                    startService(stopIntent);
-
+    startService(stopIntent);
 
 
-                    Log.d(
-                            TAG,
-                            "停止手机相机服务"
-                    );
+    Log.d(
+            TAG,
+            "停止手机相机服务"
+    );
 
 
-                }
-
-
-
+}
                 return;
 
             }
