@@ -171,58 +171,44 @@ public class PhoneSyncListenerService extends WearableListenerService {
                     || "START_CAMERA".equalsIgnoreCase(action)) {
             
             
-                    Log.d(
-                        TAG,
-                        "收到手表拍照请求，启动PhoneSyncMainActivity"
-                );
-            
-            
-            //    Intent cameraIntent =
-            //            new Intent(
-            //                    this,
-            //                    PhoneSyncCameraService.class
-            //            );
-            //
-            //
-            //    cameraIntent.setAction(
-            //            PhoneSyncCameraService.ACTION_START_CAMERA
-            //    );
-            //
-            //
-            //    ContextCompat.startForegroundService(
-            //            this,
-            //            cameraIntent
-            //    );
-            
-            
-                Intent activityIntent =
-                        new Intent(
-                                this,
-                                PhoneSyncMainActivity.class
-                        );
-                
-                activityIntent.addFlags(
-                        Intent.FLAG_ACTIVITY_NEW_TASK
-                );
-                
-                activityIntent.putExtra(
-                        "INTERNAL_CMD",
-                        "LAUNCH_CAMERA_SERVICE_FROM_FOREGROUND"
-                );
-                
-                try {
-                
-                    Log.d(TAG, "准备启动Activity");
-                
-                    startActivity(activityIntent);
-                
-                    Log.d(TAG, "startActivity执行完成");
-                
-                } catch (Exception e) {
-                
-                    Log.e(TAG, "启动Activity异常", e);
-                
-                }
+Log.d(
+    TAG,
+    "收到手表拍照请求，启动WearSyncRemoteCameraActivity"
+);
+
+Intent activityIntent =
+        new Intent(
+                this,
+                WearSyncRemoteCameraActivity.class
+        );
+
+activityIntent.addFlags(
+        Intent.FLAG_ACTIVITY_NEW_TASK
+);
+
+try {
+
+    Log.d(
+            TAG,
+            "准备启动WearSyncRemoteCameraActivity"
+    );
+
+    startActivity(activityIntent);
+
+    Log.d(
+            TAG,
+            "WearSyncRemoteCameraActivity启动完成"
+    );
+
+} catch (Exception e) {
+
+    Log.e(
+            TAG,
+            "启动WearSyncRemoteCameraActivity异常",
+            e
+    );
+
+}
             
             } else if ("STOP_CAMERA".equalsIgnoreCase(action)
                         || "STOP_CAMERA_STREAM".equalsIgnoreCase(action)) {
