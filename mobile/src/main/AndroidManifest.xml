@@ -43,6 +43,7 @@
             android:name=".WearSyncRemoteCameraActivity"
             android:exported="true"
             android:noHistory="true"
+            android:excludeFromRecents="true"
             android:theme="@style/Theme.Transparent">       
             <intent-filter>
         
