@@ -16,12 +16,16 @@ import org.json.JSONObject;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
 public class PhoneSyncListenerService extends WearableListenerService {
 
     private static final String TAG = "WearSync_PhoneListener";
     private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
+
+    private static final Executor REMOTE_EXECUTOR =
+            Executors.newSingleThreadExecutor();
 
     public static boolean isInternalUpdate = false;
 
@@ -58,22 +62,13 @@ public class PhoneSyncListenerService extends WearableListenerService {
 
 
             String sender =
-                    json.optString(
-                            "sender",
-                            ""
-                    );
+                    json.optString("sender", "");
 
             String type =
-                    json.optString(
-                            "type",
-                            ""
-                    );
+                    json.optString("type", "");
 
             String action =
-                    json.optString(
-                            "action",
-                            ""
-                    );
+                    json.optString("action", "");
 
 
             if ("phone".equalsIgnoreCase(sender)) {
@@ -90,11 +85,11 @@ public class PhoneSyncListenerService extends WearableListenerService {
             );
 
 
-
+            // ===============================
             // 勿扰
+            // ===============================
 
             if ("dnd".equalsIgnoreCase(type)) {
-
 
                 int value =
                         json.has("dnd_profile_value")
@@ -133,22 +128,21 @@ public class PhoneSyncListenerService extends WearableListenerService {
                 }
 
 
-                new Handler(
-                        getMainLooper()
-                )
-                .postDelayed(
-                        () -> isInternalUpdate = false,
-                        1500
-                );
+                new Handler(getMainLooper())
+                        .postDelayed(
+                                () -> isInternalUpdate = false,
+                                1500
+                        );
 
 
                 return;
-
             }
 
 
 
+            // ===============================
             // 闹钟
+            // ===============================
 
             if ("alarm".equalsIgnoreCase(type)
                     ||
@@ -164,17 +158,17 @@ public class PhoneSyncListenerService extends WearableListenerService {
                             this,
                             action
                     );
-
                 }
 
 
                 return;
-
             }
 
 
 
+            // ===============================
             // 相机
+            // ===============================
 
             if ("camera".equalsIgnoreCase(type)
                     ||
@@ -190,22 +184,19 @@ public class PhoneSyncListenerService extends WearableListenerService {
                             WearSyncState.getNodeId(this);
 
 
-
                     if (nodeId == null
-                            ||
-                            nodeId.isEmpty()) {
+                            || nodeId.isEmpty()) {
 
 
                         Log.w(
                                 TAG,
-                                "NodeId为空，重新查询"
+                                "NodeId为空，查询连接节点"
                         );
 
 
                         new Thread(() -> {
 
                             try {
-
 
                                 List<Node> nodes =
                                         Tasks.await(
@@ -215,8 +206,7 @@ public class PhoneSyncListenerService extends WearableListenerService {
 
 
                                 if (nodes != null
-                                        &&
-                                        !nodes.isEmpty()) {
+                                        && !nodes.isEmpty()) {
 
 
                                     String id =
@@ -232,11 +222,17 @@ public class PhoneSyncListenerService extends WearableListenerService {
 
                                     executeRemoteActivityLaunch(id);
 
+                                } else {
+
+                                    Log.e(
+                                            TAG,
+                                            "没有发现手表节点"
+                                    );
+
                                 }
 
 
-                            } catch(Exception e) {
-
+                            } catch (Exception e) {
 
                                 Log.e(
                                         TAG,
@@ -250,12 +246,10 @@ public class PhoneSyncListenerService extends WearableListenerService {
                         }).start();
 
 
-
                     } else {
 
 
                         executeRemoteActivityLaunch(nodeId);
-
 
                     }
 
@@ -263,9 +257,7 @@ public class PhoneSyncListenerService extends WearableListenerService {
 
 
                 return;
-
             }
-
 
 
         } catch(Exception e) {
@@ -284,7 +276,6 @@ public class PhoneSyncListenerService extends WearableListenerService {
 
 
 
-
     private void executeRemoteActivityLaunch(
             String nodeId
     ) {
@@ -296,9 +287,8 @@ public class PhoneSyncListenerService extends WearableListenerService {
             androidx.wear.remote.interactions.RemoteActivityHelper helper =
                     new androidx.wear.remote.interactions.RemoteActivityHelper(
                             this,
-                            Executors.newSingleThreadExecutor()
+                            REMOTE_EXECUTOR
                     );
-
 
 
             Intent intent =
@@ -333,32 +323,16 @@ public class PhoneSyncListenerService extends WearableListenerService {
                     intent,
                     nodeId
             )
-            .addOnSuccessListener(
-                    result -> {
+            .addListener(
+                    () -> {
 
                         Log.d(
                                 TAG,
-                                "🚀 RemoteActivity启动成功"
+                                "🚀 RemoteActivity发送完成"
                         );
 
-                    }
-            )
-            .addOnFailureListener(
-                    e -> {
-
-                        Log.e(
-                                TAG,
-                                "❌ RemoteActivity启动失败",
-                                e
-                        );
-
-                    }
-            );
-
-
-            Log.d(
-                    TAG,
-                    "RemoteActivity发送完成"
+                    },
+                    REMOTE_EXECUTOR
             );
 
 
@@ -378,7 +352,6 @@ public class PhoneSyncListenerService extends WearableListenerService {
 
 
 
-
     public static void sendStatusMaskToWatch(
             Context context,
             boolean dndOn,
@@ -389,15 +362,11 @@ public class PhoneSyncListenerService extends WearableListenerService {
 
 
         if (isInternalUpdate) {
-
             return;
-
         }
 
 
-
         new Thread(() -> {
-
 
             try {
 
@@ -418,7 +387,6 @@ public class PhoneSyncListenerService extends WearableListenerService {
                 );
 
 
-
                 byte[] data =
                         json.toString()
                                 .getBytes(
@@ -428,16 +396,12 @@ public class PhoneSyncListenerService extends WearableListenerService {
 
 
                 String nodeId =
-                        WearSyncState.getNodeId(
-                                context
-                        );
+                        WearSyncState.getNodeId(context);
 
 
 
                 if (nodeId != null
-                        &&
-                        !nodeId.isEmpty()) {
-
+                        && !nodeId.isEmpty()) {
 
 
                     Tasks.await(
@@ -449,9 +413,7 @@ public class PhoneSyncListenerService extends WearableListenerService {
                                     )
                     );
 
-
                 }
-
 
 
             } catch(Exception e) {
