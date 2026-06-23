@@ -159,129 +159,75 @@ public class PhoneSyncListenerService extends WearableListenerService {
 
 
 
-            // ==========================
+        
+
+                        // ==========================
             // 相机控制
             // ==========================
-
             if ("camera".equalsIgnoreCase(type)
                     || "camera_control".equalsIgnoreCase(type)) {
 
+                if ("START_CAMERA_UI".equalsIgnoreCase(action)
+                        || "START_CAMERA".equalsIgnoreCase(action)) {
 
-               if ("START_CAMERA_UI".equalsIgnoreCase(action)
-                    || "START_CAMERA".equalsIgnoreCase(action)) {
-            
-            
-Log.d(
-    TAG,
-    "收到手表拍照请求，启动WearSyncRemoteCameraActivity"
-);
+                    Log.d(TAG, "收到手表拍照请求，准备通过 RemoteActivityHelper 启动 WearSyncRemoteCameraActivity");
 
-Intent activityIntent =
-        new Intent(
-                "android.intent.action.VIEW"
-        );
+                    try {
+                        // 🎯 1. 实例化特权发射器
+                        androidx.wear.remote.interactions.RemoteActivityHelper remoteHelper = 
+                                new androidx.wear.remote.interactions.RemoteActivityHelper(this, java.util.concurrent.Executors.newSingleThreadExecutor());
 
+                        // 🎯 2. 构建专属的特权 Intent（统一声明，修复变量重复定义的错误）
+                        Intent activityIntent = new Intent(Intent.ACTION_VIEW);
+                        activityIntent.setData(android.net.Uri.parse("wearsync://camera"));
+                        activityIntent.setPackage(getPackageName()); // 明确指定包名，确保精准定向
+                        activityIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); // 确保在 Service 环境下能合法拉起
 
-activityIntent.setData(
-        android.net.Uri.parse(
-                "wearsync://camera"
-        )
-);
+                        // 🎯 3. 使用 remoteHelper 发射系统级特权调用
+                        remoteHelper.startRemoteActivity(activityIntent).addListener(() -> {
+                            Log.d(TAG, "🚀 RemoteActivityHelper 特权发射成功！");
+                        }, java.util.concurrent.Executors.newSingleThreadExecutor());
 
+                        Log.d(TAG, "URI启动WearSyncRemoteCameraActivity指令已递交给谷歌服务");
 
-activityIntent.addFlags(
-        Intent.FLAG_ACTIVITY_NEW_TASK
-);
+                    } catch (Exception e) {
+                        Log.e(TAG, "启动RemoteCameraActivity失败", e);
+                    }
 
+                } else if ("STOP_CAMERA".equalsIgnoreCase(action)
+                            || "STOP_CAMERA_STREAM".equalsIgnoreCase(action)) {
 
-try {
-    Log.d(TAG, "准备通过 RemoteActivityHelper 启动 WearSyncRemoteCameraActivity");
-
-    // 🎯 1. 真正请出 RemoteActivityHelper 尊神
-    androidx.wear.remote.interactions.RemoteActivityHelper remoteHelper = 
-            new androidx.wear.remote.interactions.RemoteActivityHelper(this, java.util.concurrent.Executors.newSingleThreadExecutor());
-
-    // 🎯 2. 构建专属的特权 Intent
-    Intent activityIntent = new Intent(Intent.ACTION_VIEW);
-    activityIntent.setData(android.net.Uri.parse("wearsync://camera"));
-    // 明确指定包名，确保谷歌服务能精准定向
-    activityIntent.setPackage(getPackageName()); 
-
-    // 🎯 3. 使用 remoteHelper 发射！这才是真正能破防的系统级特权调用
-    remoteHelper.startRemoteActivity(activityIntent).addListener(() -> {
-        Log.d(TAG, "🚀 RemoteActivityHelper 特权发射成功！");
-    }, java.util.concurrent.Executors.newSingleThreadExecutor());
-
-    Log.d(TAG, "URI启动WearSyncRemoteCameraActivity指令已递交给谷歌服务");
-
-} catch(Exception e){
-    Log.e(TAG, "启动RemoteCameraActivity失败", e);
-}
-
-            
-            } else if ("STOP_CAMERA".equalsIgnoreCase(action)
-                        || "STOP_CAMERA_STREAM".equalsIgnoreCase(action)) {
-
-
-                    Log.d(
-                            TAG,
-                            "停止手机相机服务"
-                    );
-
+                    Log.d(TAG, "停止手机相机服务");
 
                     Intent stopIntent =
-                            new Intent(
-                                    this,
-                                    PhoneSyncCameraService.class
-                            );
-
+                            new Intent(this, PhoneSyncCameraService.class);
 
                     stopIntent.setAction(
                             PhoneSyncCameraService.ACTION_STOP_CAMERA_STREAM
                     );
 
-
                     startService(stopIntent);
 
-
-
                 } else if ("CAPTURE_SHUTTER".equalsIgnoreCase(action)
-                        || "TRIGGER_SHUTTER".equalsIgnoreCase(action)) {
+                            || "TRIGGER_SHUTTER".equalsIgnoreCase(action)) {
 
-
-                    Log.d(
-                            TAG,
-                            "触发相机快门"
-                    );
-
+                    Log.d(TAG, "触发相机快门");
 
                     Intent shutterIntent =
-                            new Intent(
-                                    this,
-                                    PhoneSyncCameraService.class
-                            );
-
+                            new Intent(this, PhoneSyncCameraService.class);
 
                     shutterIntent.setAction(
                             PhoneSyncCameraService.ACTION_TRIGGER_SHUTTER
                     );
 
-
                     startService(shutterIntent);
                 }
-
 
                 return;
             }
 
-
         } catch (Exception e) {
-
-            Log.e(
-                    TAG,
-                    "解析信令失败",
-                    e
-            );
+            Log.e(TAG, "解析信令失败", e);
         }
     }
 
