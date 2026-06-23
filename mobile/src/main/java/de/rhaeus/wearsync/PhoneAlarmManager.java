@@ -15,10 +15,7 @@ public class PhoneAlarmManager {
     private static final String TAG = "WearSync_PhoneAlarm";
 
     /**
-     * 🎯 升級：當手機端系統鬧鐘響起時調用（由通知攔截哨兵服務觸發）
-     * @param context 上下文
-     * @param label   鬧鐘標題（例如 "起床上班"）
-     * @param time    鬧鐘響鈴時間（例如 "07:30"）
+     * 當手機端系統鬧鐘響起時調用（由通知攔截哨兵服務觸發）
      */
     public static void notifyWatchAlarmRinging(Context context, String label, String time) {
         Log.d(TAG, "🔔 偵測到手機鬧鐘轟鳴，準備注入全屏提示資料 ➔ 標題: " + label + ", 時間: " + time);
@@ -26,8 +23,7 @@ public class PhoneAlarmManager {
     }
 
     /**
-     * 🤝 當用戶主動在手機端關閉/延後鬧鐘，導致手機通知消失時，由哨兵調用此處。
-     * 職責：發射強退信號，遠程同步銷毀手錶端的全屏 AlarmActivity。
+     * 當用戶主動在手機端關閉/延後鬧鐘，導致手機通知消失時，遠端銷毀手錶鬧鐘 UI
      */
     public static void notifyWatchAlarmDismissed(Context context) {
         Log.d(TAG, "⏰ [雙端控制閉環] 手機端鬧鐘通知已消失，正在命令手錶端強行銷毀 UI 並停震...");
@@ -35,7 +31,7 @@ public class PhoneAlarmManager {
     }
 
     /**
-     * 🎯 協議拉齊：高精準匹配來自手錶的關鍵字 DISMISS 和 SNOOZE 代點請求
+     * 接收並執行來自手錶的代點請求
      */
     public static void handleWatchCommand(Context context, String commandType) {
         Log.d(TAG, "⚡ [闹钟核心执行] 收到手表反向口令: " + commandType);
@@ -53,7 +49,7 @@ public class PhoneAlarmManager {
     }
 
     /**
-     * 🚀 內部發送核心：封裝全屏提示資料 JSON 並投遞給手錶（融入全局緩存優化架構）
+     * 🚀 內部發送核心：全面拉齊至【從變量獲取 ID】的高效架構
      */
     private static void sendAlarmSignalToWatch(Context context, String actionStr, String label, String time) {
         new Thread(() -> {
@@ -64,7 +60,6 @@ public class PhoneAlarmManager {
                 json.put("action", actionStr);
                 json.put("timestamp", System.currentTimeMillis());
 
-                // 🎯 核心：只有在拉起 UI 時，才塞入鬧鐘資料文字
                 if ("START_ALARM_UI".equalsIgnoreCase(actionStr)) {
                     json.put("alarm_label", (label == null || label.isEmpty()) ? "鬧鐘響鈴中" : label);
                     json.put("alarm_time", (time == null) ? "" : time);
@@ -72,29 +67,27 @@ public class PhoneAlarmManager {
 
                 byte[] data = json.toString().getBytes(StandardCharsets.UTF_8);
 
-                // 🎯 【向變量裡找 ID】：跨類別直接抓取 ListenerService 裡實時維護的車牌號
-                // 這裡不需要任何權限審查，純內存提取，速度極快！
+                // 🎯 【從變量裡獲取 ID】：跨類別秒讀共享的活躍手錶 ID
                 String targetNodeId = PhoneSyncListenerService.cachedWatchNodeId;
 
                 if (targetNodeId != null && !targetNodeId.isEmpty()) {
-                    // ⚡ 全局緩存命中：手機響鈴時，手錶 UI 會在「零點幾毫秒」內瞬間亮屏震動，不再有藍牙延遲
+                    // ⚡ 緩存命中：秒級推送到手錶
                     Log.d(TAG, "⚡ 鬧鐘同步 [" + actionStr + "] 命中全局緩存，直接發射給指定手錶: " + targetNodeId);
                     Tasks.await(Wearable.getMessageClient(context).sendMessage(targetNodeId, "/wear-universal-sync", data));
-                    Log.d(TAG, "🚀 鬧鐘狀態流 [" + actionStr + "] 精準推送成功。資料包: " + json.toString());
+                    Log.d(TAG, "🚀 鬧鐘狀態流 [" + actionStr + "] 精準推送成功。");
                 } else {
-                    // 🔍 防禦性降級方案：如果變量正好為空（比如刚開機），走原本的舊邏輯現場去查藍牙列表
+                    // 🔍 防禦性降級方案
                     Log.w(TAG, "⚠️ 鬧鐘發射時全局緩存為空，降級走常規連線檢查...");
                     List<Node> nodes = Tasks.await(Wearable.getNodeClient(context).getConnectedNodes());
                     
                     if (nodes != null && !nodes.isEmpty()) {
                         for (Node node : nodes) {
-                            // 順手把查到的最新 ID 還原回全局緩存，幫下一次發射（或者關閉鬧鐘）鋪路
-                            PhoneSyncListenerService.cachedWatchNodeId = node.getId();
+                            PhoneSyncListenerService.cachedWatchNodeId = node.getId(); // 刷新緩存
                             Tasks.await(Wearable.getMessageClient(context).sendMessage(node.getId(), "/wear-universal-sync", data));
                         }
                         Log.d(TAG, "🚀 鬧鐘狀態流 [" + actionStr + "] 通過連線輪詢推送到手錶成功。");
                     } else {
-                        Log.w(TAG, "❌ 傳輸失敗：當前藍牙和谷歌服務未發現任何已連接的手錶節點！");
+                        Log.w(TAG, "❌ 傳輸失敗：當前未發現任何已連接的手錶節點！");
                     }
                 }
             } catch (Exception e) {
