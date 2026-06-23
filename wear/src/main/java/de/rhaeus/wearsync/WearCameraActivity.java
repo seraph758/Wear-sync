@@ -100,7 +100,7 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
             
             // 🎯 核心补充：当画布准备好后，立刻向手机发射唤醒指令！
             Log.d(TAG, "📺 画布就绪，正在呼叫手机端...");
-            sendControlSignalToPhone("START_CAMERA_UI");
+            sendControlSignalToPhone("START_CAMERA");
 
         } catch (Exception e) {
             Log.e(TAG, "解码器初始化失败", e);
