@@ -86,9 +86,12 @@ if(cameraPref != null){
         );
 
 
-        WearSyncRemoteCameraHandler.openPhoneCamera(
+        WearSyncRemoteCameraHandler handler =
+        new WearSyncRemoteCameraHandler(
                 requireContext()
         );
+
+handler.openPhoneCamera();
 
 
         return true;
