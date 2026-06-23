@@ -276,80 +276,68 @@ public class PhoneSyncListenerService extends WearableListenerService {
 
 
 
-    private void executeRemoteActivityLaunch(
-            String nodeId
-    ) {
+private void executeRemoteActivityLaunch(
+        String nodeId
+) {
 
 
-        try {
+    try {
 
 
-            androidx.wear.remote.interactions.RemoteActivityHelper helper =
-                    new androidx.wear.remote.interactions.RemoteActivityHelper(
-                            this,
-                            REMOTE_EXECUTOR
+        androidx.wear.remote.interactions.RemoteActivityHelper helper =
+                new androidx.wear.remote.interactions.RemoteActivityHelper(
+                        this,
+                        REMOTE_EXECUTOR
+                );
+
+
+        Intent intent =
+                new Intent(
+                        Intent.ACTION_VIEW
+                );
+
+
+        intent.setData(
+                android.net.Uri.parse(
+                        "wearsync://camera"
+                )
+        );
+
+
+        intent.addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK
+        );
+
+
+        helper.startRemoteActivity(
+                intent,
+                nodeId
+        )
+        .addListener(
+                () -> {
+
+                    Log.d(
+                            TAG,
+                            "🚀 RemoteActivity发送完成"
                     );
 
-
-            Intent intent =
-                    new Intent(
-                            Intent.ACTION_VIEW
-                    );
+                },
+                REMOTE_EXECUTOR
+        );
 
 
-            intent.setData(
-                    android.net.Uri.parse(
-                            "wearsync://camera/"
-                    )
-            );
+    } catch(Exception e) {
 
 
-            intent.setPackage(
-                    getPackageName()
-            );
-
-
-            intent.addFlags(
-                    Intent.FLAG_ACTIVITY_NEW_TASK
-                            |
-                    Intent.FLAG_ACTIVITY_CLEAR_TOP
-                            |
-                    Intent.FLAG_ACTIVITY_SINGLE_TOP
-            );
-
-
-
-            helper.startRemoteActivity(
-                    intent,
-                    nodeId
-            )
-            .addListener(
-                    () -> {
-
-                        Log.d(
-                                TAG,
-                                "🚀 RemoteActivity发送完成"
-                        );
-
-                    },
-                    REMOTE_EXECUTOR
-            );
-
-
-        } catch(Exception e) {
-
-
-            Log.e(
-                    TAG,
-                    "启动RemoteActivity失败",
-                    e
-            );
-
-        }
+        Log.e(
+                TAG,
+                "启动RemoteActivity失败",
+                e
+        );
 
     }
 
-
+}
 
 
     public static void sendStatusMaskToWatch(
