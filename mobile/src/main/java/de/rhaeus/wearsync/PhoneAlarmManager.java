@@ -9,7 +9,7 @@ import com.google.android.gms.wearable.Wearable;
 import org.json.JSONObject;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import android.content.SharedPreferences; // 🎯 补上这一行
+import android.content.SharedPreferences;
 
 public class PhoneAlarmManager {
     private static final String TAG = "WearSync_PhoneAlarm";
@@ -38,22 +38,22 @@ public class PhoneAlarmManager {
      * 🎯 協議拉齊：高精準匹配來自手錶的關鍵字 DISMISS 和 SNOOZE 代點請求
      */
     public static void handleWatchCommand(Context context, String commandType) {
-    Log.d(TAG, "⚡ [闹钟核心执行] 收到手表反向口令: " + commandType);
-    try {
-        if ("DISMISS".equalsIgnoreCase(commandType) && PhoneSyncNotificationService.cachedDismissIntent != null) {
-            Log.i(TAG, "🚀 物理模拟点击【停止】按钮");
-            PhoneSyncNotificationService.cachedDismissIntent.send();
-        } else if ("SNOOZE".equalsIgnoreCase(commandType) && PhoneSyncNotificationService.cachedSnoozeIntent != null) {
-            Log.i(TAG, "🚀 物理模拟点击【延后】按钮");
-            PhoneSyncNotificationService.cachedSnoozeIntent.send();
+        Log.d(TAG, "⚡ [闹钟核心执行] 收到手表反向口令: " + commandType);
+        try {
+            if ("DISMISS".equalsIgnoreCase(commandType) && PhoneSyncNotificationService.cachedDismissIntent != null) {
+                Log.i(TAG, "🚀 物理模拟点击【停止】按钮");
+                PhoneSyncNotificationService.cachedDismissIntent.send();
+            } else if ("SNOOZE".equalsIgnoreCase(commandType) && PhoneSyncNotificationService.cachedSnoozeIntent != null) {
+                Log.i(TAG, "🚀 物理模拟点击【延后】按钮");
+                PhoneSyncNotificationService.cachedSnoozeIntent.send();
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "🔴 执行通知栏代点失败", e);
         }
-    } catch (Exception e) {
-        Log.e(TAG, "🔴 执行通知栏代点失败", e);
     }
-}
 
     /**
-     * 🚀 內部發送核心：封裝全屏提示資料 JSON 並投遞給手錶
+     * 🚀 內部發送核心：封裝全屏提示資料 JSON 並投遞給手錶（融入全局緩存優化架構）
      */
     private static void sendAlarmSignalToWatch(Context context, String actionStr, String label, String time) {
         new Thread(() -> {
@@ -71,15 +71,31 @@ public class PhoneAlarmManager {
                 }
 
                 byte[] data = json.toString().getBytes(StandardCharsets.UTF_8);
-                List<Node> nodes = Tasks.await(Wearable.getNodeClient(context).getConnectedNodes());
-                
-                if (nodes != null && !nodes.isEmpty()) {
-                    for (Node node : nodes) {
-                        Tasks.await(Wearable.getMessageClient(context).sendMessage(node.getId(), "/wear-universal-sync", data));
-                    }
-                    Log.d(TAG, "🚀 鬧鐘狀態流 [" + actionStr + "] 正向推送到手錶成功。資料包: " + json.toString());
+
+                // 🎯 【向變量裡找 ID】：跨類別直接抓取 ListenerService 裡實時維護的車牌號
+                // 這裡不需要任何權限審查，純內存提取，速度極快！
+                String targetNodeId = PhoneSyncListenerService.cachedWatchNodeId;
+
+                if (targetNodeId != null && !targetNodeId.isEmpty()) {
+                    // ⚡ 全局緩存命中：手機響鈴時，手錶 UI 會在「零點幾毫秒」內瞬間亮屏震動，不再有藍牙延遲
+                    Log.d(TAG, "⚡ 鬧鐘同步 [" + actionStr + "] 命中全局緩存，直接發射給指定手錶: " + targetNodeId);
+                    Tasks.await(Wearable.getMessageClient(context).sendMessage(targetNodeId, "/wear-universal-sync", data));
+                    Log.d(TAG, "🚀 鬧鐘狀態流 [" + actionStr + "] 精準推送成功。資料包: " + json.toString());
                 } else {
-                    Log.w(TAG, "⚠️ 傳輸失敗：當前沒有任何已連接的手錶節點！");
+                    // 🔍 防禦性降級方案：如果變量正好為空（比如刚開機），走原本的舊邏輯現場去查藍牙列表
+                    Log.w(TAG, "⚠️ 鬧鐘發射時全局緩存為空，降級走常規連線檢查...");
+                    List<Node> nodes = Tasks.await(Wearable.getNodeClient(context).getConnectedNodes());
+                    
+                    if (nodes != null && !nodes.isEmpty()) {
+                        for (Node node : nodes) {
+                            // 順手把查到的最新 ID 還原回全局緩存，幫下一次發射（或者關閉鬧鐘）鋪路
+                            PhoneSyncListenerService.cachedWatchNodeId = node.getId();
+                            Tasks.await(Wearable.getMessageClient(context).sendMessage(node.getId(), "/wear-universal-sync", data));
+                        }
+                        Log.d(TAG, "🚀 鬧鐘狀態流 [" + actionStr + "] 通過連線輪詢推送到手錶成功。");
+                    } else {
+                        Log.w(TAG, "❌ 傳輸失敗：當前藍牙和谷歌服務未發現任何已連接的手錶節點！");
+                    }
                 }
             } catch (Exception e) {
                 Log.e(TAG, "🔴 向手錶發送鬧鐘狀態或封裝資料失敗", e);
