@@ -1,0 +1,59 @@
+package de.rhaeus.wearsync;
+
+
+import android.app.Activity;
+import android.content.Intent;
+import android.os.Build;
+import android.os.Bundle;
+import android.util.Log;
+
+
+public class WearSyncRemoteCameraActivity extends Activity {
+
+
+    private static final String TAG =
+            "WearSync_RemoteActivity";
+
+
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState){
+
+        super.onCreate(savedInstanceState);
+
+
+        Log.d(
+                TAG,
+                "收到RemoteActivity相机请求"
+        );
+
+
+        Intent serviceIntent =
+                new Intent(
+                        this,
+                        PhoneSyncCameraService.class
+                );
+
+
+        serviceIntent.setAction(
+                PhoneSyncCameraService.ACTION_START_CAMERA
+        );
+
+
+        if(Build.VERSION.SDK_INT >= 26){
+
+            startForegroundService(serviceIntent);
+
+        }else{
+
+            startService(serviceIntent);
+
+        }
+
+
+
+        finish();
+
+    }
+
+}
