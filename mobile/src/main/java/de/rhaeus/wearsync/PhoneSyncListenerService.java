@@ -164,7 +164,7 @@ public class PhoneSyncListenerService extends WearableListenerService {
                         // ==========================
             // 相机控制
             // ==========================
-            if ("camera".equalsIgnoreCase(type)
+if ("camera".equalsIgnoreCase(type)
                     || "camera_control".equalsIgnoreCase(type)) {
 
                 if ("START_CAMERA_UI".equalsIgnoreCase(action)
@@ -173,32 +173,63 @@ public class PhoneSyncListenerService extends WearableListenerService {
                     Log.d(TAG, "收到手表拍照请求，准备通过 RemoteActivityHelper 启动 WearSyncRemoteCameraActivity");
 
                     try {
-    Log.d(TAG, "收到手表拍照请求，准备通过 RemoteActivityHelper 启动 WearSyncRemoteCameraActivity");
+                        // 🎯 1. 实例化特权发射器
+                        androidx.wear.remote.interactions.RemoteActivityHelper remoteHelper = 
+                                new androidx.wear.remote.interactions.RemoteActivityHelper(this, java.util.concurrent.Executors.newSingleThreadExecutor());
 
-    androidx.wear.remote.interactions.RemoteActivityHelper remoteHelper = 
-            new androidx.wear.remote.interactions.RemoteActivityHelper(this, java.util.concurrent.Executors.newSingleThreadExecutor());
+                        // 🎯 2. 构建符合标准 URL 规范的精确特权 Intent
+                        Intent activityIntent = new Intent(Intent.ACTION_VIEW);
+                        activityIntent.setData(android.net.Uri.parse("wearsync://camera/")); // 🎯 精确匹配 AndroidManifest.xml
+                        activityIntent.setPackage(getPackageName()); 
+                        activityIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); 
 
-    Intent activityIntent = new Intent(Intent.ACTION_VIEW);
-    
-    // 🎯 核心修改點：在 camera 後面加上「/」或者「/start」，顯式聲明 camera 就是主機名 (Host)
-    // 這樣既符合標準網址規範，又能 100% 被 Manifest 裡的 android:host="camera" 攔截到！
-    activityIntent.setData(android.net.Uri.parse("wearsync://camera/"));
-    
-    activityIntent.setPackage(getPackageName()); 
-    activityIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); 
+                        // 🎯 3. 使用 remoteHelper 发射系统级特权调用
+                        remoteHelper.startRemoteActivity(activityIntent).addListener(() -> {
+                            Log.d(TAG, "🚀 RemoteActivityHelper 特权发射成功！");
+                        }, java.util.concurrent.Executors.newSingleThreadExecutor());
 
-    remoteHelper.startRemoteActivity(activityIntent).addListener(() -> {
-        Log.d(TAG, "🚀 RemoteActivityHelper 特权发射成功！");
-    }, java.util.concurrent.Executors.newSingleThreadExecutor());
+                        Log.d(TAG, "URI启动WearSyncRemoteCameraActivity指令已递交给谷歌服务");
 
-    Log.d(TAG, "URI启动WearSyncRemoteCameraActivity指令已递交给谷歌服务");
+                    } catch (Exception e) {
+                        Log.e(TAG, "启动RemoteCameraActivity失败", e);
+                    }
 
-} catch (Exception e) {
-    Log.e(TAG, "启动RemoteCameraActivity失败", e);
-}
+                } else if ("STOP_CAMERA".equalsIgnoreCase(action)
+                            || "STOP_CAMERA_STREAM".equalsIgnoreCase(action)) {
 
+                    Log.d(TAG, "停止手机相机服务");
+
+                    Intent stopIntent =
+                            new Intent(this, PhoneSyncCameraService.class);
+
+                    stopIntent.setAction(
+                            PhoneSyncCameraService.ACTION_STOP_CAMERA_STREAM
+                    );
+
+                    startService(stopIntent);
+
+                } else if ("CAPTURE_SHUTTER".equalsIgnoreCase(action)
+                            || "TRIGGER_SHUTTER".equalsIgnoreCase(action)) {
+
+                    Log.d(TAG, "触发相机快门");
+
+                    Intent shutterIntent =
+                            new Intent(this, PhoneSyncCameraService.class);
+
+                    shutterIntent.setAction(
+                            PhoneSyncCameraService.ACTION_TRIGGER_SHUTTER
+                    );
+
+                    startService(shutterIntent);
                 }
 
+                return;
+            }
+
+        } catch (Exception e) {
+            Log.e(TAG, "解析信令失败", e);
+        }
+    } // 🎯 onMessageReceived 方法闭合右括号
     /**
      * 手机主动发送状态到手表
      */
