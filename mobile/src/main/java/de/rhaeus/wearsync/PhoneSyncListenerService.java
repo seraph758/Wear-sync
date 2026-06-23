@@ -195,31 +195,29 @@ activityIntent.addFlags(
 
 
 try {
+    Log.d(TAG, "准备通过 RemoteActivityHelper 启动 WearSyncRemoteCameraActivity");
 
-    Log.d(
-        TAG,
-        "准备通过URI启动WearSyncRemoteCameraActivity"
-    );
+    // 🎯 1. 真正请出 RemoteActivityHelper 尊神
+    androidx.wear.remote.interactions.RemoteActivityHelper remoteHelper = 
+            new androidx.wear.remote.interactions.RemoteActivityHelper(this, java.util.concurrent.Executors.newSingleThreadExecutor());
 
+    // 🎯 2. 构建专属的特权 Intent
+    Intent activityIntent = new Intent(Intent.ACTION_VIEW);
+    activityIntent.setData(android.net.Uri.parse("wearsync://camera"));
+    // 明确指定包名，确保谷歌服务能精准定向
+    activityIntent.setPackage(getPackageName()); 
 
-    startActivity(activityIntent);
+    // 🎯 3. 使用 remoteHelper 发射！这才是真正能破防的系统级特权调用
+    remoteHelper.startRemoteActivity(activityIntent).addListener(() -> {
+        Log.d(TAG, "🚀 RemoteActivityHelper 特权发射成功！");
+    }, java.util.concurrent.Executors.newSingleThreadExecutor());
 
-
-    Log.d(
-        TAG,
-        "URI启动WearSyncRemoteCameraActivity完成"
-    );
-
+    Log.d(TAG, "URI启动WearSyncRemoteCameraActivity指令已递交给谷歌服务");
 
 } catch(Exception e){
-
-    Log.e(
-            TAG,
-            "启动RemoteCameraActivity失败",
-            e
-    );
-
+    Log.e(TAG, "启动RemoteCameraActivity失败", e);
 }
+
             
             } else if ("STOP_CAMERA".equalsIgnoreCase(action)
                         || "STOP_CAMERA_STREAM".equalsIgnoreCase(action)) {
