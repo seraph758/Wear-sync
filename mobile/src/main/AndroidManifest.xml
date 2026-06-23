@@ -12,9 +12,9 @@
     <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <uses-permission android:name="android.permission.CAMERA" />
-    
+
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    
+
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <uses-feature android:name="android.hardware.camera" android:required="false" />
@@ -32,9 +32,18 @@
 
         <activity
             android:name=".PhoneSyncMainActivity"
-            android:exported="true">
-        
-        
+            android:exported="true"
+            android:launchMode="singleTop">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".WearSyncRemoteCameraActivity"
+            android:exported="true"
+            android:noHistory="true"
+            android:theme="@style/Theme.Transparent">       
             <intent-filter>
         
                 <action android:name="android.intent.action.VIEW"/>
@@ -44,7 +53,8 @@
                 <category android:name="android.intent.category.BROWSABLE"/>
         
                 <data
-                    android:scheme="wearsync"/>
+    android:scheme="wearsync"
+    android:host="camera"/>
         
             </intent-filter>
         
@@ -58,7 +68,7 @@
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
-        
+
         <service 
             android:name=".PhoneSyncCameraService"
             android:enabled="true"   
