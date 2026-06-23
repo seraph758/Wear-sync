@@ -17,48 +17,50 @@ public class WearSyncRemoteCameraHandler {
     public static void openPhoneCamera(Context context) {
 
 
-        Log.d(TAG, "准备通过 RemoteActivityHelper 拉起手机 Camera");
+    Log.d(TAG,"开始调用 RemoteActivityHelper");
 
 
-        Intent intent = new Intent(
-                Intent.ACTION_VIEW
-        );
+    Intent intent = new Intent(
+            Intent.ACTION_VIEW
+    );
 
 
-        // 让手机端识别
-        intent.setPackage(
-                "de.rhaeus.wearsync"
-        );
+    intent.setPackage(
+            "de.rhaeus.wearsync"
+    );
 
 
-        // 手机端解析这个
-        intent.setData(
-                Uri.parse(
-                        "wearsync://camera"
-                )
-        );
+    intent.setData(
+            Uri.parse(
+                    "wearsync://camera"
+            )
+    );
 
 
-        RemoteActivityHelper helper =
-                new RemoteActivityHelper(
-                        context,
-                        Executors.newSingleThreadExecutor()
+    Log.d(
+            TAG,
+            "Intent="
+            + intent.toUri(0)
+    );
+
+
+    RemoteActivityHelper helper =
+            new RemoteActivityHelper(
+                    context
+            );
+
+
+    helper.startRemoteActivity(intent)
+            .addListener(() -> {
+
+                Log.d(
+                        TAG,
+                        "RemoteActivity finished"
                 );
 
-
-        helper.startRemoteActivity(intent)
-                .addListener(() -> {
-
-
-                    Log.d(
-                            TAG,
-                            "RemoteActivity 请求完成"
-                    );
+            },
+            Executors.newSingleThreadExecutor());
 
 
-                },
-                Executors.newSingleThreadExecutor());
-
-    }
-
+}
 }
