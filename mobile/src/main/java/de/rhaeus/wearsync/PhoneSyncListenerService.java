@@ -55,7 +55,7 @@ public class PhoneSyncListenerService extends WearableListenerService {
             PhoneLog.d(TAG, "📥 [信令到港] 收到来自手表的底层信令 ➔ type=[" + type + "], action=[" + action + "]");
 
             // ==========================================
-            // 🔋 模组一：勿扰状态逆向同步
+            // 🔋 模组一：勿扰状态逆向同步 (托管至 PhoneDndManager)
             // ==========================================
             if ("dnd".equalsIgnoreCase(type)) {
                 int value = json.has("dnd_profile_value") 
@@ -67,22 +67,18 @@ public class PhoneSyncListenerService extends WearableListenerService {
                     return;
                 }
 
-                PhoneLog.d(TAG, "🌓 [勿扰核心流转] 手表请求同步勿扰状态 ➔ 目标系统值: " + value);
+                PhoneLog.d(TAG, "🌓 [勿扰核心流转] 收到手表逆向同步请求 ➔ 目标系统值: " + value + "，正在移交 PhoneDndManager...");
+                
+                // 1. 开启防循环锁
                 isInternalUpdate = true;
 
-                NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-                if (nm != null && nm.isNotificationPolicyAccessGranted()) {
-                    nm.setInterruptionFilter(value);
-                    PhoneLog.d(TAG, "✨ [勿扰核心流转] 手机系统勿扰成功变更为: " + value);
-                } else {
-                    PhoneLog.w(TAG, "⚠️ [勿扰核心流转] 更改失败：手机端缺乏 NotificationPolicyAccess 权限！");
-                }
+                // 2. 🔥 移交专属管理器处理手机勿扰的修改
+                PhoneDndManager.handleIncomingAction(this, value);
 
-                // 延迟 1.5 秒解锁，防止双向回环激荡
+                // 3. 延迟 1.5 秒解锁，防止双向回环激荡
                 new Handler(getMainLooper()).postDelayed(() -> isInternalUpdate = false, 1500);
                 return;
             }
-
             // ==========================================
             // ⏰ 模组二：闹钟远端代点控制
             // ==========================================
@@ -163,35 +159,5 @@ public class PhoneSyncListenerService extends WearableListenerService {
         } catch (Exception e) {
             PhoneLog.e(TAG, "🔴 [穿透失败] 调用 RemoteActivityHelper 发生致命阻断: " + e.getMessage(), e);
         }
-    }
-
-    /**
-     * 🛰️ 同步系统配置掩码至手表
-     */
-    public static void sendStatusMaskToWatch(Context context, boolean dndOn, boolean vibrateOn, boolean sleepLinkOn, boolean powerSaveLinkOn) {
-        if (isInternalUpdate) {
-            return;
-        }
-
-        PhoneLog.d(TAG, "🛰️ [掩码广播启动] 准备异步打包当前面板状态掩码并发送至手表...");
-        new Thread(() -> {
-            try {
-                JSONObject json = new JSONObject();
-                json.put("sender", "phone");
-                json.put("type", "status_mask");
-                
-                byte[] data = json.toString().getBytes(StandardCharsets.UTF_8);
-                String nodeId = WearSyncState.getNodeId(context);
-
-                if (nodeId != null && !nodeId.isEmpty()) {
-                    Tasks.await(Wearable.getMessageClient(context).sendMessage(nodeId, UNIVERSAL_SYNC_PATH, data));
-                    PhoneLog.d(TAG, "🚀 [掩码广播成功] 状态掩码已精准推送到手表节点: " + nodeId);
-                } else {
-                    PhoneLog.w(TAG, "⚠️ [掩码广播失败] 活跃手表車牌號緩存為空，放弃本次狀態掩碼推送");
-                }
-            } catch (Exception e) {
-                PhoneLog.e(TAG, "🔴 [掩码广播异常] 异步向通道推送当前面板掩码失败: " + e.getMessage(), e);
-            }
-        }).start();
     }
 }
