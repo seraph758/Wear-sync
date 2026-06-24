@@ -62,48 +62,35 @@ public class PhoneAlarmManager {
      * 🚀 内部发送核心
      */
     private static void sendAlarmSignalToWatch(Context context, String actionStr, String label, String time) {
-        PhoneLog.d(TAG, "📦 [闹钟线头发射] 启动异步发信线流 ➔ 动作: " + actionStr);
         new Thread(() -> {
             try {
                 JSONObject json = new JSONObject();
                 json.put("sender", "phone");
                 json.put("type", "alarm");
                 json.put("action", actionStr);
+                
+                // 🔥 🔥 🔥 严格对齐手表端：手表只读取 "title" 和 "content"
+                json.put("title", (label == null || label.isEmpty()) ? "闹钟" : label);
+                json.put("content", (time == null) ? "" : time);
                 json.put("timestamp", System.currentTimeMillis());
 
-                if ("START_ALARM_UI".equalsIgnoreCase(actionStr)) {
-                    json.put("alarm_label", (label == null || label.isEmpty()) ? "鬧鐘響鈴中" : label);
-                    json.put("alarm_time", (time == null) ? "" : time);
-                }
-
                 byte[] data = json.toString().getBytes(StandardCharsets.UTF_8);
-                PhoneLog.d(TAG, "📦 [闹钟封包完毕] 负载JSON: " + json.toString());
-
-                // 🎯 跨类别秒读共享的活跃手表 ID
                 String targetNodeId = WearSyncState.getNodeId(context);
 
                 if (targetNodeId != null && !targetNodeId.isEmpty()) {
-                    PhoneLog.d(TAG, "⚡ [闹钟发信] 命中全局车牌号缓存: " + targetNodeId + "，直接推至通道...");
                     Tasks.await(Wearable.getMessageClient(context).sendMessage(targetNodeId, "/wear-universal-sync", data));
-                    PhoneLog.d(TAG, "🚀 [闹钟发信成功] 精准流控状态 [" + actionStr + "] 已送达。");
+                    PhoneLog.d(TAG, "🚀 [闹钟发信成功] 已按手表新协议送达。");
                 } else {
-                    PhoneLog.w(TAG, "⚠️ [闹钟发信降级] 缓存中无可用节点，触发在线扫描...");
                     List<Node> nodes = Tasks.await(Wearable.getNodeClient(context).getConnectedNodes());
-
                     if (nodes != null && !nodes.isEmpty()) {
-                        PhoneLog.d(TAG, "🔍 [闹钟发信降级] 在线发现 " + nodes.size() + " 个手表设备");
                         for (Node node : nodes) {
-                            PhoneLog.d(TAG, "  └─ 正在激活并写入节点缓存: " + node.getId());
                             WearSyncState.setNodeId(context, node.getId());
                             Tasks.await(Wearable.getMessageClient(context).sendMessage(node.getId(), "/wear-universal-sync", data));
                         }
-                        PhoneLog.d(TAG, "🚀 [闹钟发信成功] 降级广播流 [" + actionStr + "] 发射完成。");
-                    } else {
-                        PhoneLog.w(TAG, "❌ [闹钟发信断联] 传输失败：没有发现任何可通信的手表，放弃本次发射。");
                     }
                 }
             } catch (Exception e) {
-                PhoneLog.e(TAG, "🔴 [闹钟线头异常] 向手表传递或封包时发生线程内部崩溃: " + e.getMessage(), e);
+                PhoneLog.e(TAG, "🔴 [闹钟发信失败] 协议打包异常", e);
             }
         }).start();
     }
