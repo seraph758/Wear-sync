@@ -10,6 +10,9 @@ import androidx.preference.PreferenceFragmentCompat;
 import com.google.android.gms.wearable.CapabilityClient;
 import com.google.android.gms.wearable.Wearable;
 
+import android.app.NotificationManager;
+import android.content.Context; // 確保有這個
+
 public class WearSyncMainFragment extends PreferenceFragmentCompat {
     private static final String TAG = "WearSync_MainFragment";
     private Preference connectivityPref;
