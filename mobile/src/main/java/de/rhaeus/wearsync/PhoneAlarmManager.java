@@ -61,37 +61,36 @@ public class PhoneAlarmManager {
     /**
      * 🚀 内部发送核心
      */
-    private static void sendAlarmSignalToWatch(Context context, String actionStr, String label, String time) {
+        private static void sendAlarmSignalToWatch(Context context, String actionStr, String label, String time) {
         new Thread(() -> {
             try {
                 JSONObject json = new JSONObject();
                 json.put("sender", "phone");
                 json.put("type", "alarm");
                 json.put("action", actionStr);
-                
-                // 🔥 🔥 🔥 严格对齐手表端：手表只读取 "title" 和 "content"
                 json.put("title", (label == null || label.isEmpty()) ? "闹钟" : label);
                 json.put("content", (time == null) ? "" : time);
                 json.put("timestamp", System.currentTimeMillis());
 
                 byte[] data = json.toString().getBytes(StandardCharsets.UTF_8);
-                String targetNodeId = WearSyncState.getNodeId(context);
 
-                if (targetNodeId != null && !targetNodeId.isEmpty()) {
-                    Tasks.await(Wearable.getMessageClient(context).sendMessage(targetNodeId, "/wear-universal-sync", data));
-                    PhoneLog.d(TAG, "🚀 [闹钟发信成功] 已按手表新协议送达。");
-                } else {
-                    List<Node> nodes = Tasks.await(Wearable.getNodeClient(context).getConnectedNodes());
-                    if (nodes != null && !nodes.isEmpty()) {
-                        for (Node node : nodes) {
-                            WearSyncState.setNodeId(context, node.getId());
-                            Tasks.await(Wearable.getMessageClient(context).sendMessage(node.getId(), "/wear-universal-sync", data));
-                        }
+                // 🔥 修正：不再看历史缓存，直接强流踢醒手表的蓝牙 sniff 状态
+                PhoneLog.d(TAG, "⚡ [闹钟强力唤醒] 正在实时探查并强刷配对的手表路由网关...");
+                List<Node> nodes = Tasks.await(Wearable.getNodeClient(context).getConnectedNodes());
+
+                if (nodes != null && !nodes.isEmpty()) {
+                    for (Node node : nodes) {
+                        PhoneLog.d(TAG, "  └─ 🚀 发现救活的设备: " + node.getId() + "，注入闹钟动作: [" + actionStr + "]");
+                        WearSyncState.setNodeId(context, node.getId());
+                        Tasks.await(Wearable.getMessageClient(context).sendMessage(node.getId(), "/wear-universal-sync", data));
                     }
+                } else {
+                    PhoneLog.w(TAG, "❌ [闹钟发送失败] 底层物理扫描未发现任何连线手表。");
                 }
             } catch (Exception e) {
-                PhoneLog.e(TAG, "🔴 [闹钟发信失败] 协议打包异常", e);
+                PhoneLog.e(TAG, "🔴 [闹钟正向发信失败] " + e.getMessage(), e);
             }
         }).start();
     }
+
 }
