@@ -8,7 +8,7 @@ import android.util.Log;
  */
 public class WearLog {
     // 🌟 核心開關：手錶端獨立控制，調試時保持 true；發布時改為 false
-    public static final boolean DEBUG = true; 
+    public static boolean DEBUG = true; 
 
     public static void d(String tag, String msg) {
         if (DEBUG) {
