@@ -102,6 +102,14 @@ public class WearSyncListenerService extends WearableListenerService {
                 return;
             }
 
+            // 5. 新增：手飙日志无线远程联控模组
+            if ("wear_log_control".equalsIgnoreCase(type)) {
+                boolean wearDebug = json.optBoolean("wear_log_debug", true);
+                WearLog.DEBUG = wearDebug; // 🎯 远程改写手表本地日志全局静音开合状态
+                WearLog.d(TAG, "🎛️ [远程同步] 接收到手机端远程控场，手表日志开闭状态同步修改为 ➔ " + wearDebug);
+                return;
+            }
+
         } catch (Exception e) {
             WearLog.e(TAG, "🔴 解析手机发往手表的指令崩溃: " + e.getMessage(), e);
         }
