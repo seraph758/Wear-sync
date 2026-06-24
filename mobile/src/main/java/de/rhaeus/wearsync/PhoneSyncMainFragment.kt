@@ -142,24 +142,83 @@ class PhoneSyncMainFragment : Fragment() {
                                 }
                             }
 
-                            // 🌟 新增：後台調試日誌可視化開關卡片
+                     
+                            // 🌟 1. 手機端背景調試日誌可視化開關卡片
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(16.dp),
                                 colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E))
                             ) {
-                                Row(modifier = Modifier.padding(16.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Row(
+                                    modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text("开发者调试日志", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                        Text("开发者调试日志 (手机)", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
                                         Text("关闭后将彻底隐藏手机端后台所有排查Log，极度省电", fontSize = 12.sp, color = Color.Gray)
                                     }
                                     Switch(
                                         checked = uiLogDebugSwitch.value,
                                         onCheckedChange = { isChecked ->
                                             uiLogDebugSwitch.value = isChecked
-                                            PhoneLog.DEBUG = isChecked // 🔥 一鍵影響 Java 底層所有代碼
+                                            PhoneLog.DEBUG = isChecked // 🔥 一键影响 Java 底层所有手机代码
                                             sp.edit().putBoolean("phone_log_debug_visible", isChecked).apply()
-                                            PhoneLog.d("WearSync_Main", "🎛️ [日志开关改变] 用户在界面切换日志状态 = $isChecked")
+                                            PhoneLog.d("WearSync_Main", "🎛️ [手机日志开关改变] 用户在界面切换手机日志状态 = $isChecked")
+                                        }
+                                    )
+                                }
+                            }
+                            
+                            Spacer(modifier = Modifier.height(12.dp)) // 保持良好间距
+                            
+                            // 🌟 2. 【新增】手飙端调试日志远程联动控制卡片
+                            // 注意：请确保在你的 Fragment 顶部或 init 块中提前声明好这一行：
+                            // val uiWearLogDebugSwitch = remember { mutableStateOf(sp.getBoolean("wear_log_debug_visible", true)) }
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text("开发者调试日志 (手表)", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                        Text("通过蓝牙联动控制手表端后台日志，降低手表能耗", fontSize = 12.sp, color = Color.Gray)
+                                    }
+                                    Switch(
+                                        checked = uiWearLogDebugSwitch.value,
+                                        onCheckedChange = { isChecked ->
+                                            uiWearLogDebugSwitch.value = isChecked
+                                            sp.edit().putBoolean("wear_log_debug_visible", isChecked).apply()
+                                            PhoneLog.d("WearSync_Main", "🎛️ [手表日志开关改变] 准备向手表无线投递日志流控信令 = $isChecked")
+                            
+                                            // 📡 核心蓝牙反向同步：异步发射 JSON 数据包至手表端
+                                            Thread {
+                                                try {
+                                                    val json = org.json.JSONObject()
+                                                    json.put("sender", "phone")
+                                                    json.put("type", "wear_log_control") // 专属手飙日志控场指令
+                                                    json.put("wear_log_debug", isChecked)
+                                                    json.put("timestamp", System.currentTimeMillis())
+                            
+                                                    val data = json.toString().toByteArray(java.nio.charset.StandardCharsets.UTF_8)
+                                                    val nodeId = WearSyncState.getNodeId(requireContext()) // 获取持久化的手表ID
+                                                    
+                                                    if (!nodeId.isNullOrEmpty()) {
+                                                        com.google.android.gms.wearable.Wearable.getMessageClient(requireContext())
+                                                            .sendMessage(nodeId, "/wear-universal-sync", data)
+                                                        PhoneLog.d("WearSync_Main", "🚀 [流控包发射成功] 目标手表节点 ➔ $nodeId")
+                                                    } else {
+                                                        PhoneLog.w("WearSync_Main", "⚠️ [发射终止] 当前未连接或未识别到活跃的手表节点 ID")
+                                                    }
+                                                } catch (e: Exception) {
+                                                    PhoneLog.e("WearSync_Main", "🔴 联动控制手表日志控制信令打包失败: ${e.message}", e)
+                                                }
+                                            }.start()
                                         }
                                     )
                                 }
