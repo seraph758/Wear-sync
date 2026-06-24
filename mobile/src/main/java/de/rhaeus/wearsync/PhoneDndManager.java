@@ -43,55 +43,51 @@ public class PhoneDndManager {
    /**
      * 🛰️ 正向同步：依照手表端解析协议，拆解 Mask 并打包发送
      */
-    public static void syncDndToWear(Context context, boolean isPhoneDndOn) {
+        public static void syncDndToWear(Context context, boolean isPhoneDndOn) {
         SharedPreferences sp = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         int currentMask = sp.getInt(KEY_MASK, 15);
 
         boolean isMasterOn = (currentMask & 1) != 0;
         if (!isMasterOn) {
-            PhoneLog.w(TAG, "🛑 [勿扰拦截] 勿扰联动总干线已关闭，放弃向手表同步状态掩码。");
+            PhoneLog.w(TAG, "🛑 [勿扰拦截] 勿扰联动总干线已关闭，放弃同步。");
             return;
         }
 
-        // 拆解出具体的子开关状态，用于适配手表端的 optBoolean
         boolean vibrateOn = (currentMask & 2) != 0;
         boolean sleepOn = (currentMask & 4) != 0;
         boolean powerOn = (currentMask & 8) != 0;
-
-        PhoneLog.d(TAG, "🛰️ [正向同步启动] 对齐手表协议打包中...");
 
         new Thread(() -> {
             try {
                 JSONObject json = new JSONObject();
                 json.put("sender", "phone");
                 json.put("type", "status_mask");
-                
-                // 🔥 🔥 🔥 严格对齐手表 WearSyncListenerService 的字段读取
-                json.put("dnd_sync_mask", isPhoneDndOn); // 手表用它当做是否开启勿扰的布尔值
+                json.put("dnd_sync_mask", isPhoneDndOn); 
                 json.put("vibrate_feedback", vibrateOn);
                 json.put("sleep_mode_sync", sleepOn);
                 json.put("power_saving_sync", powerOn);
                 json.put("timestamp", System.currentTimeMillis());
 
                 byte[] data = json.toString().getBytes(StandardCharsets.UTF_8);
-                String nodeId = WearSyncState.getNodeId(context);
 
-                if (nodeId != null && !nodeId.isEmpty()) {
-                    Tasks.await(Wearable.getMessageClient(context).sendMessage(nodeId, UNIVERSAL_SYNC_PATH, data));
-                    PhoneLog.d(TAG, "🚀 [正向同步成功] 协议对齐数据已送达缓存节点: " + nodeId);
-                } else {
-                    // 降级扫描
-                    List<Node> nodes = Tasks.await(Wearable.getNodeClient(context).getConnectedNodes());
-                    if (nodes != null && !nodes.isEmpty()) {
-                        for (Node node : nodes) {
-                            WearSyncState.setNodeId(context, node.getId());
-                            Tasks.await(Wearable.getMessageClient(context).sendMessage(node.getId(), UNIVERSAL_SYNC_PATH, data));
-                        }
+                // 🔥 修正：废弃状态快取判定，直接强制进行在线扫描，踢醒手表蓝牙
+                PhoneLog.d(TAG, "⚡ [勿扰强力唤醒] 开始实时扫描当前在线的手表活动节点...");
+                List<Node> nodes = Tasks.await(Wearable.getNodeClient(context).getConnectedNodes());
+
+                if (nodes != null && !nodes.isEmpty()) {
+                    for (Node node : nodes) {
+                        PhoneLog.d(TAG, "  └─ 🚀 发现活跃物理触点: " + node.getId() + "，正在强行灌入勿扰信令...");
+                        // 顺便刷新一下历史记录本
+                        WearSyncState.setNodeId(context, node.getId());
+                        Tasks.await(Wearable.getMessageClient(context).sendMessage(node.getId(), UNIVERSAL_SYNC_PATH, data));
                     }
+                } else {
+                    PhoneLog.w(TAG, "❌ [勿扰同步失败] 实时扫描结果为空！手表与手机可能彻底物理断开或被系统强杀。");
                 }
             } catch (Exception e) {
-                PhoneLog.e(TAG, "🔴 [正向同步崩溃] 发送失败: " + e.getMessage(), e);
+                PhoneLog.e(TAG, "🔴 [勿扰同步崩溃] " + e.getMessage(), e);
             }
         }).start();
     }
+
 }
