@@ -8,7 +8,7 @@ import android.util.DisplayMetrics;
 import android.view.accessibility.AccessibilityEvent;
 
 public class WearSyncAccessService extends AccessibilityService {
-
+    private static final String TAG = "WearSync_AccessService";
     private static WearSyncAccessService instance;
 
     public static WearSyncAccessService getSharedInstance() {
@@ -17,11 +17,13 @@ public class WearSyncAccessService extends AccessibilityService {
 
     @Override
     protected void onServiceConnected() {
+        WearLog.d(TAG, "♿ 恭喜！手表无障碍高级交互接管服务成功绑定启动！");
         instance = this;
     }
 
     @Override
     public boolean onUnbind(Intent intent) {
+        WearLog.w(TAG, "♿ 无障碍交互服务被解绑断开");
         instance = null;
         return super.onUnbind(intent);
     }
@@ -32,51 +34,42 @@ public class WearSyncAccessService extends AccessibilityService {
     @Override
     public void onInterrupt() {}
 
-    // === [🔥 LOCKED_FIREWALL: ORIGINAL_DRIVE_CORE - START] ===
-
-
     public void openQuickSettings() {
+        WearLog.d(TAG, "⚙️ 触发执行模拟动作 ➔ 打开系统快捷控制中心");
         performGlobalAction(GLOBAL_ACTION_QUICK_SETTINGS);
     }
 
     public void goHome() {
+        WearLog.d(TAG, "⚙️ 触发执行模拟动作 ➔ 返回表盘桌面");
         performGlobalAction(GLOBAL_ACTION_HOME);
     }
 
     public void openNotification() {
+        WearLog.d(TAG, "⚙️ 触发执行模拟动作 ➔ 打开系统通知面板");
         performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS);
     }
 
     public void goBack() {
+        WearLog.d(TAG, "⚙️ 触发执行模拟动作 ➔ 返回上一级");
         performGlobalAction(GLOBAL_ACTION_BACK);
     }
 
-
     public void click(float x, float y) {
+        WearLog.d(TAG, "⚙️ 触发屏幕高级坐标重击 ➔ [" + x + ", " + y + "]");
         dispatchGesture(createClick(x, y), null, null);
     }
 
-    /**
-     * 點擊第一排中間的黃金圖標（就寢/睡眠模式）
-     */
-    public void clickIcon1_2() {
+    public void clickIcon1_1() {
         DisplayMetrics displayMetrics = getResources().getDisplayMetrics();
-        GestureDescription.Builder gestureBuilder = new GestureDescription.Builder();
-        Path path = new Path();
-
         final int height = displayMetrics.heightPixels;
         final int midX = displayMetrics.widthPixels / 2;
-
-        // 完全參考舊代碼的黃金比例：寬度 50%，高度 40% 處重击
-        path.moveTo(midX, (int)(height * .4));
-        gestureBuilder.addStroke(new GestureDescription.StrokeDescription(path, 0, 50));
-        dispatchGesture(gestureBuilder.build(), null, null);
+        float targetY = (float) (height * .4);
+        WearLog.d(TAG, "⚙️ 自动化计算：定位快捷面板首排中心坐标 ➔ [" + midX + ", " + targetY + "]");
+        click(midX, targetY);
     }
 
-    /**
-     * 從頂部邊緣猛烈下滑，拉出快捷面板
-     */
     public void swipeDown() {
+        WearLog.d(TAG, "⚙️ 触发执行顶层物理下滑手势...");
         DisplayMetrics displayMetrics = getResources().getDisplayMetrics();
         GestureDescription.Builder gestureBuilder = new GestureDescription.Builder();
         Path path = new Path();
@@ -84,7 +77,6 @@ public class WearSyncAccessService extends AccessibilityService {
         final int height = displayMetrics.heightPixels;
         final int midX = displayMetrics.widthPixels / 2;
 
-        // 從 Y:0 完美拉到螢幕 50% 中點，確保百分之百拉出面板
         path.moveTo(midX, 0);
         path.lineTo(midX, (int)(height * .5));
         gestureBuilder.addStroke(new GestureDescription.StrokeDescription(path, 100, 50));
@@ -92,14 +84,10 @@ public class WearSyncAccessService extends AccessibilityService {
     }
 
     private static GestureDescription createClick(float x, float y) {
-        final int DURATION = 1;
         Path clickPath = new Path();
         clickPath.moveTo(x, y);
-        GestureDescription.StrokeDescription clickStroke =
-                new GestureDescription.StrokeDescription(clickPath, 0, DURATION);
+        GestureDescription.StrokeDescription clickStroke = new GestureDescription.StrokeDescription(clickPath, 0, 1);
         GestureDescription.Builder clickBuilder = new GestureDescription.Builder();
-        clickBuilder.addStroke(clickStroke);
-        return clickBuilder.build();
+        return clickBuilder.addStroke(clickStroke).build();
     }
-    // === [🔥 LOCKED_FIREWALL: ORIGINAL_DRIVE_CORE - END] ===
 }
