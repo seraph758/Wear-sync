@@ -142,6 +142,15 @@ class PhoneSyncMainFragment : Fragment() {
                                 }
                             }
 
+                            // 1. 獲取 SharedPreferences 實例（如果 context 環境下 sp 還沒聲明，請確保前面有初始化）
+                            val sp = requireContext().getSharedPreferences("dndsync_prefs", Context.MODE_PRIVATE)
+                            
+                            // 2. 聲明手機日誌開關狀態（你原本就有的）
+                            val uiLogDebugSwitch = remember { mutableStateOf(PhoneLog.DEBUG) }
+                            
+                            // 3. 🎯【新增這一行】聲明手錶日誌開關狀態，修復編譯報錯
+                            val uiWearLogDebugSwitch = remember { mutableStateOf(sp.getBoolean("wear_log_debug_visible", true)) }
+                            
                      
                             // 🌟 1. 手機端背景調試日誌可視化開關卡片
                             Card(
