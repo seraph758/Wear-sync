@@ -27,51 +27,46 @@ import androidx.fragment.app.Fragment
 import com.google.android.gms.wearable.CapabilityClient
 import com.google.android.gms.wearable.Wearable
 import androidx.compose.ui.graphics.Color
+import org.json.JSONObject
+import java.nio.charset.StandardCharsets
 
 class PhoneSyncMainFragment : Fragment() {
+    // 類別頂層狀態維護
     private val isNotificationAllowedState = mutableStateOf(false)
     private val isCameraAllowedState = mutableStateOf(false) 
     private val isConnectedState = mutableStateOf(false)
     private var capabilityChangedListener: CapabilityClient.OnCapabilityChangedListener? = null
 
-    // 🌟 新增：介面日誌開關狀態（預設同步讀取 PhoneLog.DEBUG 記憶體狀態）
+    // 📱 日誌開關類別頂層變量維護
     private val uiLogDebugSwitch = mutableStateOf(PhoneLog.DEBUG)
+    private val uiWearLogDebugSwitch = mutableStateOf(true)
 
-    private val dndMasterSwitch = mutableStateOf(true)
-    private val wearSleepSwitch = mutableStateOf(false)
-    private val wearPowerSavingSwitch = mutableStateOf(false)
-    private val dndVibrateSwitch = mutableStateOf(false) 
-
-    private val alarmMasterSwitch = mutableStateOf(true) 
-    private val alarmPkgState = mutableStateOf("com.google.android.deskclock")
-    private val alarmDismissKeyState = mutableStateOf("停止")
-    private val alarmSnoozeKeyState = mutableStateOf("延后")
-
-    private val requestCameraPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted: Boolean ->
+    // 📸 相機硬件權限申請啟動器
+    private val requestCameraPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
         isCameraAllowedState.value = isGranted
-        PhoneLog.d("WearSync_Main", "📸 [权限申请] 用户交互相机权限结果: $isGranted")
+        if (isGranted) {
+            PhoneLog.d("WearSync_Main", "📸 相机硬件权限申请成功")
+        } else {
+            PhoneLog.w("WearSync_Main", "⚠️ 相机硬件权限被无情拒绝")
+        }
     }
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
+        val sp = requireContext().getSharedPreferences("dndsync_prefs", Context.MODE_PRIVATE)
+        
+        // 讀取日誌模塊初始化狀態
+        uiLogDebugSwitch.value = sp.getBoolean("phone_log_debug_visible", PhoneLog.DEBUG)
+        uiWearLogDebugSwitch.value = sp.getBoolean("wear_log_debug_visible", true)
+
         return ComposeView(requireContext()).apply {
             setContent {
-                // 🟢 1. 統一在 setContent (Composable 作用域) 的最頂層獲取 sp，不重複定義
-                val sp = requireContext().getSharedPreferences("dndsync_prefs", Context.MODE_PRIVATE)
-                
-                // 🟢 2. 在正確的 Composable 環境下初始化這兩個 UI 狀態
-                val uiLogDebugSwitch = remember { mutableStateOf(PhoneLog.DEBUG) }
-                val uiWearLogDebugSwitch = remember { mutableStateOf(sp.getBoolean("wear_log_debug_visible", true)) }
-
-                // 🟢 3. 呼叫你的 App 主體暗黑主題（這裡保持你原本的 Theme 包裹不變）
                 MaterialTheme {
                     Surface(
                         modifier = Modifier.fillMaxSize(),
-                        color = Color(0xFF121212) // 滿版純黑背景
+                        color = Color(0xFF121212)
                     ) {
                         Column(
                             modifier = Modifier
@@ -80,13 +75,11 @@ class PhoneSyncMainFragment : Fragment() {
                                 .verticalScroll(rememberScrollState()),
                             verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
+                            // ====================================================
+                            // 🛰️ 模塊一：通訊權限與連接探針
+                            // ====================================================
                             
-                            // ----------------------------------------------------
-                            // 💡 这里可以放你原有的其他 UI 卡片（如通知权限、连接状态等）
-                            // ----------------------------------------------------
-
-
-                            // 🌟 卡片一：手機端背景調試日誌可視化開關
+                            // 1. 連接狀態卡片
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(16.dp),
@@ -97,117 +90,20 @@ class PhoneSyncMainFragment : Fragment() {
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text("开发者调试日志 (手机)", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                                        Text("关闭后将彻底隐藏手机端后台所有排查Log，极度省电", fontSize = 12.sp, color = Color.Gray)
+                                    Column {
+                                        Text("连接状态", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                        Text("检测手机与手表的骨干网络连接", fontSize = 12.sp, color = Color.Gray)
                                     }
-                                    Switch(
-                                        checked = uiLogDebugSwitch.value,
-                                        onCheckedChange = { isChecked ->
-                                            uiLogDebugSwitch.value = isChecked
-                                            PhoneLog.DEBUG = isChecked // 🔥 一鍵影響 Java 底層所有手機代碼
-                                            sp.edit().putBoolean("phone_log_debug_visible", isChecked).apply()
-                                            PhoneLog.d("WearSync_Main", "🎛️ [手机日志开关改变] 用户在界面切换手机日志状态 = $isChecked")
-                                        }
+                                    Text(
+                                        text = if (isConnectedState.value) "🟢 已连接手表" else "🔴 未连接",
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isConnectedState.value) Color(0xFF4CAF50) else Color(0xFFF44336)
                                     )
                                 }
                             }
 
-
-                            // 🌟 卡片二：手錶端調試日誌遠程聯動控制（新加的）
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(16.dp),
-                                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E))
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text("开发者调试日志 (手表)", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                                        Text("通过蓝牙联动控制手表端后台日志，降低手表能耗", fontSize = 12.sp, color = Color.Gray)
-                                    }
-                                    Switch(
-                                        checked = uiWearLogDebugSwitch.value,
-                                        onCheckedChange = { isChecked ->
-                                            uiWearLogDebugSwitch.value = isChecked
-                                            sp.edit().putBoolean("wear_log_debug_visible", isChecked).apply()
-                                            PhoneLog.d("WearSync_Main", "🎛️ [手表日志开关改变] 准备向手表无线投递日志流控信令 = $isChecked")
-
-                                            // 📡 異步發射藍牙數據包至手錶端
-                                            Thread {
-                                                try {
-                                                    val json = org.json.JSONObject()
-                                                    json.put("sender", "phone")
-                                                    json.put("type", "wear_log_control")
-                                                    json.put("wear_log_debug", isChecked)
-                                                    json.put("timestamp", System.currentTimeMillis())
-
-                                                    val data = json.toString().toByteArray(java.nio.charset.StandardCharsets.UTF_8)
-                                                    val nodeId = WearSyncState.getNodeId(requireContext())
-                                                    
-                                                    if (!nodeId.isNullOrEmpty()) {
-                                                        com.google.android.gms.wearable.Wearable.getMessageClient(requireContext())
-                                                            .sendMessage(nodeId, "/wear-universal-sync", data)
-                                                        PhoneLog.d("WearSync_Main", "🚀 [流控包发射成功] 目标手表节点 ➔ $nodeId")
-                                                    } else {
-                                                        PhoneLog.w("WearSync_Main", "⚠️ [发射终止] 当前未连接或未识别到活跃的手表节点 ID")
-                                                    }
-                                                } catch (e: Exception) {
-                                                    PhoneLog.e("WearSync_Main", "🔴 联动控制手表日志控制信令打包失败: ${e.message}", e)
-                                                }
-                                            }.start()
-                                        }
-                                    )
-                                }
-                            }
-
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-
-        // 🌟 初始化讀取：從持久化數據中回復用戶上次設定的日誌開關狀態
-        val savedLogConfig = sp.getBoolean("phone_log_debug_visible", true)
-        PhoneLog.DEBUG = savedLogConfig
-        uiLogDebugSwitch.value = savedLogConfig
-
-        dndMasterSwitch.value = sp.getBoolean("dnd_master", true)
-        wearSleepSwitch.value = sp.getBoolean("wear_sleep", false)
-        wearPowerSavingSwitch.value = sp.getBoolean("wear_power_saving", false)
-        dndVibrateSwitch.value = sp.getBoolean("dnd_vibrate", false)
-
-        alarmMasterSwitch.value = sp.getBoolean("alarm_master", true)
-        alarmPkgState.value = sp.getString("alarm_pkg", "com.google.android.deskclock") ?: "com.google.android.deskclock"
-        alarmDismissKeyState.value = sp.getString("alarm_dismiss_key", "停止") ?: "停止"
-        alarmSnoozeKeyState.value = sp.getString("alarm_snooze_key", "延后") ?: "延后"
-
-        fun calculateAndSaveMask() {
-            var mask = 0
-            if (dndMasterSwitch.value) mask = mask or 0x01 
-            if (dndVibrateSwitch.value) mask = mask or 0x02 
-            if (wearSleepSwitch.value) mask = mask or 0x04 
-            if (wearPowerSavingSwitch.value) mask = mask or 0x08 
-            sp.edit().putInt("switches_mask", mask).apply()
-            PhoneLog.d("WearSync_Main", "📊 [控制台同步] 全新计算出的全局 Mask 总值为: $mask")
-        }
-
-        return ComposeView(requireContext()).apply {
-            setContent {
-                MaterialTheme {
-                    Box(modifier = Modifier.fillMaxSize().background(Color(0xFF121212)).statusBarsPadding()) {
-                        Column(
-                            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            Text(text = "WearSync 控制台", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White)
-
-                            // 系统核心权限卡片
+                            // 2. 核心權限卡片（完美對齊原版雙權限二合一）
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(16.dp),
@@ -215,19 +111,21 @@ class PhoneSyncMainFragment : Fragment() {
                             ) {
                                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                                     Text("系统核心权限", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.LightGray)
+                                    
+                                    // 通知接管服務
                                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                         Column {
                                             Text("通知接管服务", fontSize = 15.sp, color = Color.White)
                                             Text(text = if (isNotificationAllowedState.value) "已授权" else "未授权 (核心状态同步必备)", fontSize = 12.sp, color = if (isNotificationAllowedState.value) Color(0xFF4CAF50) else Color(0xFFF44336))
                                         }
                                         if (!isNotificationAllowedState.value) {
-                                            Button(onClick = { 
-                                                PhoneLog.d("WearSync_Main", "🔏 [权限引导] 用户点击引导：跳转系统通知接管授权页")
-                                                startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) 
-                                            }) { Text("去授权") }
+                                            Button(onClick = { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }) { Text("去授权") }
                                         }
                                     }
+                                    
                                     HorizontalDivider(color = Color(0xFF2C2C2C))
+                                    
+                                    // 相機硬件權限
                                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                         Column {
                                             Text("相机硬件权限", fontSize = 15.sp, color = Color.White)
@@ -240,31 +138,189 @@ class PhoneSyncMainFragment : Fragment() {
                                 }
                             }
 
-                            // 手表连线状态卡片
+                            // ====================================================
+                            // 🎛️ 模塊二：勿擾控制台（總開關 + 3子開關：震動、睡眠、省電）
+                            // ====================================================
+                            var mask by remember { mutableStateOf(sp.getInt("dnd_sync_mask", 15)) }
+
+                            var masterOn by remember(mask) { mutableStateOf((mask and 1) != 0) }
+                            var vibrateOn by remember(mask) { mutableStateOf((mask and 2) != 0) } // 第1子：震動
+                            var sleepOn by remember(mask) { mutableStateOf((mask and 4) != 0) }   // 第2子：睡眠
+                            var powerOn by remember(mask) { mutableStateOf((mask and 8) != 0) }   // 第3子：省電
+
+                            val updateMask = { newMaster: Boolean, newVibrate: Boolean, newSleep: Boolean, newPower: Boolean ->
+                                var newMask = 0
+                                if (newMaster) newMask = newMask or 1
+                                if (newVibrate) newMask = newMask or 2
+                                if (newSleep) newMask = newMask or 4
+                                if (newPower) newMask = newMask or 8
+                                
+                                mask = newMask
+                                sp.edit().putInt("dnd_sync_mask", newMask).apply()
+                                
+                                // 發送本地廣播
+                                requireContext().sendBroadcast(Intent("de.rhaeus.wearsync.ACTION_MASK_CHANGED"))
+                                
+                                // 🚀 發送給手錶
+                                Thread {
+                                    try {
+                                        val json = JSONObject()
+                                        json.put("sender", "phone")
+                                        json.put("type", "status_mask")
+                                        json.put("dnd_sync_mask", newMask)
+                                        json.put("timestamp", System.currentTimeMillis())
+
+                                        val data = json.toString().toByteArray(StandardCharsets.UTF_8)
+                                        val nodeId = WearSyncState.getNodeId(requireContext())
+                                        if (!nodeId.isNullOrEmpty()) {
+                                            Wearable.getMessageClient(requireContext()).sendMessage(nodeId, "/wear-universal-sync", data)
+                                            PhoneLog.d("WearSync_Main", "🚀 [雙端同步] 掩碼值 $newMask 已投遞")
+                                        }
+                                    } catch (e: Exception) { PhoneLog.e("WearSync_Main", "🔴 同步失敗", e) }
+                                }.start()
+                            }
+
+                            Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E))) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text("勿擾聯動總幹線", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                        }
+                                        Switch(checked = masterOn, onCheckedChange = { masterOn = it; updateMask(it, vibrateOn, sleepOn, powerOn) })
+                                    }
+
+                                    AnimatedVisibility(visible = masterOn) {
+                                        Column(modifier = Modifier.padding(top = 14.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                                            HorizontalDivider(color = Color(0xFF2C2C2C))
+                                            
+                                            // 3個子開關
+                                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                                Text("手錶端震動反饋", color = Color.White); Switch(checked = vibrateOn, onCheckedChange = { vibrateOn = it; updateMask(masterOn, it, sleepOn, powerOn) })
+                                            }
+                                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                                Text("睡眠模式同步", color = Color.White); Switch(checked = sleepOn, onCheckedChange = { sleepOn = it; updateMask(masterOn, vibrateOn, it, powerOn) })
+                                            }
+                                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                                Text("省電模式同步", color = Color.White); Switch(checked = powerOn, onCheckedChange = { powerOn = it; updateMask(masterOn, vibrateOn, sleepOn, it) })
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // ====================================================
+                            // ⏰ 模塊三：鬧鐘代點控制台
+                            // ====================================================
+                            var customAlarmPkg by remember { mutableStateOf(sp.getString("custom_alarm_package", "com.google.android.deskclock") ?: "") }
+
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(16.dp),
                                 colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E))
                             ) {
-                                Row(modifier = Modifier.padding(16.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                    Text("手表连线状态", fontSize = 16.sp, color = Color.White)
-                                    Box(modifier = Modifier.background(if (isConnectedState.value) Color(0xFF2E7D32) else Color(0xFFC62828), RoundedCornerShape(20.dp)).padding(horizontal = 12.dp, vertical = 6.dp)) {
-                                        Text(if (isConnectedState.value) "已连接" else "未就绪", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Text("闹钟全域代点中心", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                    
+                                    OutlinedTextField(
+                                        value = customAlarmPkg,
+                                        onValueChange = { 
+                                            customAlarmPkg = it
+                                            sp.edit().putString("custom_alarm_package", it).apply()
+                                        },
+                                        label = { Text("监控时钟源包名") },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = Color.White,
+                                            unfocusedBorderColor = Color.Gray,
+                                            focusedLabelColor = Color.White,
+                                            unfocusedLabelColor = Color.Gray
+                                        )
+                                    )
+
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Button(
+                                            modifier = Modifier.weight(1f),
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
+                                            onClick = {
+                                                PhoneLog.d("WearSync_Main", "🎯 模拟发送【停止闹钟】物理拦截信令")
+                                                requireContext().sendBroadcast(Intent("de.rhaeus.wearsync.ACTION_ALARM_DISMISS_TRIGGER"))
+                                            }
+                                        ) {
+                                            Text("模拟停止闹钟", color = Color.White, fontSize = 12.sp)
+                                        }
+
+                                        Button(
+                                            modifier = Modifier.weight(1f),
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE65100)),
+                                            onClick = {
+                                                PhoneLog.d("WearSync_Main", "🎯 模拟发送【延后闹钟】物理拦截信令")
+                                                requireContext().sendBroadcast(Intent("de.rhaeus.wearsync.ACTION_ALARM_SNOOZE_TRIGGER"))
+                                            }
+                                        ) {
+                                            Text("模拟延后闹钟", color = Color.White, fontSize = 12.sp)
+                                        }
                                     }
                                 }
                             }
 
-                            // 1. 獲取 SharedPreferences 實例（如果 context 環境下 sp 還沒聲明，請確保前面有初始化）
-                            val sp = requireContext().getSharedPreferences("dndsync_prefs", Context.MODE_PRIVATE)
-                            
-                            // 2. 聲明手機日誌開關狀態（你原本就有的）
-                            val uiLogDebugSwitch = remember { mutableStateOf(PhoneLog.DEBUG) }
-                            
-                            // 3. 🎯【新增這一行】聲明手錶日誌開關狀態，修復編譯報錯
-                            val uiWearLogDebugSwitch = remember { mutableStateOf(sp.getBoolean("wear_log_debug_visible", true)) }
-                            
-                     
-                            // 🌟 1. 手機端背景調試日誌可視化開關卡片
+                            // ====================================================
+                            // 📸 模塊四：遠程相機控場
+                            // ====================================================
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E))
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Text("远程相机控场中心", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                    
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Button(
+                                            modifier = Modifier.weight(1f),
+                                            colors = ButtonDefaults.buttonColors(containerColor = if (isCameraAllowedState.value) Color(0xFF2E7D32) else Color(0xFF333333)),
+                                            onClick = {
+                                                if (!isCameraAllowedState.value) {
+                                                    requestCameraPermissionLauncher.launch(android.Manifest.permission.CAMERA)
+                                                } else {
+                                                    PhoneLog.d("WearSync_Main", "🚀 [手动控场] 激活手机相机采集管道")
+                                                    requireContext().startService(Intent(requireContext(), PhoneSyncCameraService::class.java).setAction("START_STREAM"))
+                                                }
+                                            }
+                                        ) {
+                                            Text("呼叫手表相机", color = Color.White, fontSize = 12.sp)
+                                        }
+
+                                        Button(
+                                            modifier = Modifier.weight(1f),
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7F1D1D)),
+                                            onClick = {
+                                                PhoneLog.d("WearSync_Main", "🧹 [手动控场] 拦截手机端相机服务并发送下线信令")
+                                                requireContext().stopService(Intent(requireContext(), PhoneSyncCameraService::class.java))
+                                                
+                                                Thread {
+                                                    try {
+                                                        val json = JSONObject()
+                                                        json.put("sender", "phone")
+                                                        json.put("type", "kill_wear_camera")
+                                                        json.put("timestamp", System.currentTimeMillis())
+                                                        val data = json.toString().toByteArray(StandardCharsets.UTF_8)
+                                                        val nodeId = WearSyncState.getNodeId(requireContext())
+                                                        if (!nodeId.isNullOrEmpty()) {
+                                                            Wearable.getMessageClient(requireContext()).sendMessage(nodeId, "/wear-universal-sync", data)
+                                                        }
+                                                    } catch (ignored: Exception) {}
+                                                }.start()
+                                            }
+                                        ) {
+                                            Text("强制关闭相机", color = Color.White, fontSize = 12.sp)
+                                        }
+                                    }
+                                }
+                            }
+
+                            // ====================================================
+                            // 📱 模塊五：開發者調試日誌體系
+                            // ====================================================
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(16.dp),
@@ -277,25 +333,20 @@ class PhoneSyncMainFragment : Fragment() {
                                 ) {
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text("开发者调试日志 (手机)", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                                        Text("关闭后将彻底隐藏手机端后台所有排查Log，极度省电", fontSize = 12.sp, color = Color.Gray)
+                                        Text("全面控制手机后台排查调试Log流的输出", fontSize = 12.sp, color = Color.Gray)
                                     }
                                     Switch(
                                         checked = uiLogDebugSwitch.value,
                                         onCheckedChange = { isChecked ->
                                             uiLogDebugSwitch.value = isChecked
-                                            PhoneLog.DEBUG = isChecked // 🔥 一键影响 Java 底层所有手机代码
+                                            PhoneLog.DEBUG = isChecked
                                             sp.edit().putBoolean("phone_log_debug_visible", isChecked).apply()
-                                            PhoneLog.d("WearSync_Main", "🎛️ [手机日志开关改变] 用户在界面切换手机日志状态 = $isChecked")
+                                            PhoneLog.d("WearSync_Main", "🎛️ [手机日志开关] 状态变更为: $isChecked")
                                         }
                                     )
                                 }
                             }
-                            
-                            Spacer(modifier = Modifier.height(12.dp)) // 保持良好间距
-                            
-                            // 🌟 2. 【新增】手飙端调试日志远程联动控制卡片
-                            // 注意：请确保在你的 Fragment 顶部或 init 块中提前声明好这一行：
-                            // val uiWearLogDebugSwitch = remember { mutableStateOf(sp.getBoolean("wear_log_debug_visible", true)) }
+
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(16.dp),
@@ -308,196 +359,34 @@ class PhoneSyncMainFragment : Fragment() {
                                 ) {
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text("开发者调试日志 (手表)", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                                        Text("通过蓝牙联动控制手表端后台日志，降低手表能耗", fontSize = 12.sp, color = Color.Gray)
+                                        Text("通过骨干网信令远程压制或放行手表日志流", fontSize = 12.sp, color = Color.Gray)
                                     }
                                     Switch(
                                         checked = uiWearLogDebugSwitch.value,
                                         onCheckedChange = { isChecked ->
                                             uiWearLogDebugSwitch.value = isChecked
                                             sp.edit().putBoolean("wear_log_debug_visible", isChecked).apply()
-                                            PhoneLog.d("WearSync_Main", "🎛️ [手表日志开关改变] 准备向手表无线投递日志流控信令 = $isChecked")
-                            
-                                            // 📡 核心蓝牙反向同步：异步发射 JSON 数据包至手表端
+                                            PhoneLog.d("WearSync_Main", "🎛️ [手表日志开关] 准备送达远程流控信令: $isChecked")
+
                                             Thread {
                                                 try {
-                                                    val json = org.json.JSONObject()
+                                                    val json = JSONObject()
                                                     json.put("sender", "phone")
-                                                    json.put("type", "wear_log_control") // 专属手飙日志控场指令
+                                                    json.put("type", "wear_log_control")
                                                     json.put("wear_log_debug", isChecked)
                                                     json.put("timestamp", System.currentTimeMillis())
-                            
-                                                    val data = json.toString().toByteArray(java.nio.charset.StandardCharsets.UTF_8)
-                                                    val nodeId = WearSyncState.getNodeId(requireContext()) // 获取持久化的手表ID
-                                                    
+
+                                                    val data = json.toString().toByteArray(StandardCharsets.UTF_8)
+                                                    val nodeId = WearSyncState.getNodeId(requireContext())
                                                     if (!nodeId.isNullOrEmpty()) {
-                                                        com.google.android.gms.wearable.Wearable.getMessageClient(requireContext())
-                                                            .sendMessage(nodeId, "/wear-universal-sync", data)
-                                                        PhoneLog.d("WearSync_Main", "🚀 [流控包发射成功] 目标手表节点 ➔ $nodeId")
-                                                    } else {
-                                                        PhoneLog.w("WearSync_Main", "⚠️ [发射终止] 当前未连接或未识别到活跃的手表节点 ID")
+                                                        Wearable.getMessageClient(requireContext()).sendMessage(nodeId, "/wear-universal-sync", data)
                                                     }
                                                 } catch (e: Exception) {
-                                                    PhoneLog.e("WearSync_Main", "🔴 联动控制手表日志控制信令打包失败: ${e.message}", e)
+                                                    PhoneLog.e("WearSync_Main", "🔴 发送手表日志控制信令失败", e)
                                                 }
                                             }.start()
                                         }
                                     )
-                                }
-                            }
-
-                            // 勿扰同步卡片
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(16.dp),
-                                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E))
-                            ) {
-                                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text("同步勿扰状态", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                                            Text("开启后将双向对齐手表状态(支持开启与联动关闭)", fontSize = 12.sp, color = Color.Gray)
-                                        }
-                                       Switch(
-                                            checked = dndMasterSwitch.value,
-                                            onCheckedChange = { isChecked -> 
-                                                dndMasterSwitch.value = isChecked
-                                                sp.edit().putBoolean("dnd_master", isChecked).apply()
-                                                PhoneLog.d("WearSync_Main", "🎛️ [控制台交互] 勿扰总开关切换为: $isChecked")
-                                                calculateAndSaveMask() 
-                                            }
-                                        )
-                                    }
-
-                                    AnimatedVisibility(visible = dndMasterSwitch.value) {
-                                        Column(modifier = Modifier.fillMaxWidth().background(Color(0xFF252525), RoundedCornerShape(12.dp)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                                Text("1. 同步状态时手表震动", fontSize = 14.sp, color = Color.White)
-                                                Switch(
-                                                    checked = dndVibrateSwitch.value,
-                                                    onCheckedChange = { it ->
-                                                        dndVibrateSwitch.value = it
-                                                        requireContext().getSharedPreferences("wearsync_prefs", Context.MODE_PRIVATE).edit().putBoolean("dnd_vibrate", it).apply()
-                                                        PhoneLog.d("WearSync_Main", "🎛️ [控制台交互] 子开关-勿扰时手表震动改变为: $it")
-                                                        calculateAndSaveMask()
-                                                    }
-                                                )
-                                            }
-                                            HorizontalDivider(color = Color(0xFF383838))
-                                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                                Text("2. 连动睡眠模式", fontSize = 14.sp, color = Color.White)
-                                                Switch(
-                                                    checked = wearSleepSwitch.value,
-                                                    onCheckedChange = { it ->
-                                                        wearSleepSwitch.value = it
-                                                        requireContext().getSharedPreferences("wearsync_prefs", Context.MODE_PRIVATE).edit().putBoolean("wear_sleep", it).apply()
-                                                        PhoneLog.d("WearSync_Main", "🎛️ [控制台交互] 子开关-连动睡眠模式改变为: $it")
-                                                        calculateAndSaveMask()
-                                                    }
-                                                )
-                                            }
-                                            HorizontalDivider(color = Color(0xFF383838))
-                                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                                Text("3. 连动省电模式", fontSize = 14.sp, color = Color.White)
-                                                Switch(
-                                                    checked = wearPowerSavingSwitch.value,
-                                                    onCheckedChange = { it ->
-                                                        wearPowerSavingSwitch.value = it
-                                                        requireContext().getSharedPreferences("wearsync_prefs", Context.MODE_PRIVATE).edit().putBoolean("wear_power_saving", it).apply()
-                                                        PhoneLog.d("WearSync_Main", "🎛️ [控制台交互] 子开关-连动省电模式改变为: $it")
-                                                        calculateAndSaveMask()
-                                                    }
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            // 闹钟拦截卡片
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(16.dp),
-                                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E))
-                            ) {
-                                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text("同步手机闹钟状态", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                                            Text("开启后支持手表端接管非标闹钟的全屏响铃拦截与控制", fontSize = 12.sp, color = Color.Gray)
-                                        }
-                                        Switch(checked = alarmMasterSwitch.value, onCheckedChange = { alarmMasterSwitch.value = it; sp.edit().putBoolean("alarm_master", it).apply(); PhoneLog.d("WearSync_Main", "🎛️ [控制台交互] 闹钟接管总开关改变为: $it") })
-                                    }
-
-                                    AnimatedVisibility(visible = alarmMasterSwitch.value) {
-                                        Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                            OutlinedTextField(
-                                                value = alarmPkgState.value,
-                                                onValueChange = { alarmPkgState.value = it; sp.edit().putString("alarm_pkg", it).apply() },
-                                                label = { Text("目标闹钟应用包名", color = Color.Gray) },
-                                                modifier = Modifier.fillMaxWidth(),
-                                                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Color(0xFF3F51B5), unfocusedBorderColor = Color.DarkGray)
-                                            )
-
-                                            OutlinedTextField(
-                                                value = alarmDismissKeyState.value,
-                                                onValueChange = { alarmDismissKeyState.value = it; sp.edit().putString("alarm_dismiss_key", it).apply() },
-                                                label = { Text("自定义“停止/关闭”动作按钮文本匹配词", color = Color.Gray) },
-                                                modifier = Modifier.fillMaxWidth(),
-                                                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Color(0xFF4CAF50), unfocusedBorderColor = Color.DarkGray)
-                                            )
-
-                                            OutlinedTextField(
-                                                value = alarmSnoozeKeyState.value,
-                                                onValueChange = { alarmSnoozeKeyState.value = it; sp.edit().putString("alarm_snooze_key", it).apply() },
-                                                label = { Text("自定义“延后/稍后”动作按钮文本匹配词", color = Color.Gray) },
-                                                modifier = Modifier.fillMaxWidth(),
-                                                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Color(0xFFFF9800), unfocusedBorderColor = Color.DarkGray)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                            // 🧪 侦错功能按钮
-                            Button(
-                                onClick = {
-                                    try {
-                                        val context = requireContext()
-                                        val svcIntent = Intent(context, PhoneSyncCameraService::class.java).apply { action = "START_CAMERA" }
-                                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                                            context.startForegroundService(svcIntent)
-                                        } else {
-                                            context.startService(svcIntent)
-                                        }
-                                        PhoneLog.d("WearSync_Main", "🧪 [调试主动拉起] 用户在控制台触发测试：尝试唤醒手机端相机背景流 PhoneSyncCameraService")
-                                    } catch (e: Exception) {
-                                        PhoneLog.e("WearSync_Main", "❌ [调试主动拉起失败] 唤醒相机前台服务发生异常: " + e.message)
-                                    }
-                                },
-                                modifier = Modifier.fillMaxWidth().height(50.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE91E63)),
-                                shape = RoundedCornerShape(12.dp)
-                            ) { 
-                                Text("🧪 调试：拉起远端相机控制", fontSize = 15.sp, fontWeight = FontWeight.Bold) 
-                            }
-
-                            // 🎯【红色安全按钮】
-                            if (isCameraAllowedState.value) {
-                                Button(
-                                    onClick = {
-                                        try {
-                                            val context = requireContext()
-                                            val svcIntent = Intent(context, PhoneSyncCameraService::class.java).apply { action = "STOP_CAMERA" }
-                                            context.startService(svcIntent)
-                                            PhoneLog.d("WearSync_Main", "🎯 [安全中止] 用户强制关闭手机相机背景服务")
-                                        } catch (e: Exception) {
-                                            PhoneLog.e("WearSync_Main", "❌ [安全中止失败] 强行停止相机服务异常: " + e.message)
-                                        }
-                                    },
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)),
-                                    shape = RoundedCornerShape(12.dp),
-                                    modifier = Modifier.fillMaxWidth().height(50.dp)
-                                ) {
-                                    Text("❌ 强制关闭手机相机背景服务", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold) 
                                 }
                             }
                         }
@@ -528,11 +417,9 @@ class PhoneSyncMainFragment : Fragment() {
         val context = requireContext()
         Wearable.getCapabilityClient(context).getCapability("dnd_sync", CapabilityClient.FILTER_REACHABLE).addOnSuccessListener { 
             isConnectedState.value = it.nodes.isNotEmpty() 
-            PhoneLog.d("WearSync_Main", "📡 [连线探针] 初始化连线检查成功，当前节点就绪状态 = " + it.nodes.isNotEmpty())
         }
         capabilityChangedListener = CapabilityClient.OnCapabilityChangedListener { 
             isConnectedState.value = it.nodes.isNotEmpty() 
-            PhoneLog.d("WearSync_Main", "📡 [连线探针回调] 手表连接状态发生突变！当前存活状态 = " + it.nodes.isNotEmpty())
         }
         capabilityChangedListener?.let { Wearable.getCapabilityClient(context).addListener(it, "dnd_sync") }
     }
@@ -540,7 +427,6 @@ class PhoneSyncMainFragment : Fragment() {
     private fun unregisterConnectivityListener() {
         capabilityChangedListener?.let { 
             Wearable.getCapabilityClient(requireContext()).removeListener(it) 
-            PhoneLog.d("WearSync_Main", "📡 [连线探针注销] 主界面进入后台，解绑 Google 连线监听器")
         }
     }
 }
