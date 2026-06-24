@@ -10,7 +10,6 @@ import android.os.Handler;
 import android.os.Looper;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
-import android.util.Log;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -18,19 +17,15 @@ import java.util.Locale;
 
 /**
  * 📲 手机端通知与勿扰模式监听服务（哨兵服务）
- * 核心升级：
- * 1. 彻底修复勿扰变化回调中的未定义变量编译崩溃。
- * 2. 独家补齐【闹钟高频核查再次拉起看门狗】：只要手机闹钟在响，每4秒强制激活一次手表，直到真正点灭，彻底解决UI消失后不重新拉起的致命缺陷！
+ * 优雅日誌控制版 —— 使用自定義 PhoneLog 進行排查
  */
 public class PhoneSyncNotificationService extends NotificationListenerService {
     private static final String TAG = "WearSync_PhoneNotification";
     private static PhoneSyncNotificationService instance;
-    
-    // 🎯 修复：全局静态变量正确放置在 class 内部最上方
+
     public static android.app.PendingIntent cachedDismissIntent = null;
     public static android.app.PendingIntent cachedSnoozeIntent = null;
 
-    // ⏰ 闹钟高频再次拉起看门狗执行器
     private final Handler alarmWatchdogHandler = new Handler(Looper.getMainLooper());
     private Runnable alarmWatchdogRunnable = null;
     private boolean isAlarmCurrentlyRinging = false;
@@ -45,7 +40,16 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
     public void onCreate() {
         super.onCreate();
         instance = this;
-        Log.d(TAG, "🚀 PhoneSyncNotificationService 哨兵服务已启动");
+        PhoneLog.d(TAG, "🚀 [生命周期] PhoneSyncNotificationService 哨兵服务 -> onCreate() 已成功启动！");
+        
+        try {
+            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm != null) {
+                PhoneLog.d(TAG, "🔍 [启动探针] 当前手机系统底层的 InterruptionFilter 状态值为: " + nm.getCurrentInterruptionFilter());
+            }
+        } catch (Exception e) {
+            PhoneLog.e(TAG, "❌ [启动探针] 尝试获取系统初始勿扰状态失败: " + e.getMessage());
+        }
     }
 
     @Override
@@ -53,46 +57,62 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
         super.onDestroy();
         stopAlarmWatchdog();
         instance = null;
-        Log.d(TAG, "🛑 PhoneSyncNotificationService 哨兵服务已销毁");
+        PhoneLog.d(TAG, "🛑 [生命周期] PhoneSyncNotificationService 哨兵服务 -> onDestroy() 已销毁");
     }
 
     @Override
     public void onNotificationPosted(StatusBarNotification sbn) {
-        if (sbn == null) return;
+        if (sbn == null) {
+            PhoneLog.w(TAG, "⚠️ [闹钟监听] 收到空通知事件 (StatusBarNotification is null)");
+            return;
+        }
         String packageName = sbn.getPackageName();
 
-        // 判斷是否為常見的系統鬧鐘包名
         if ("com.google.android.deskclock".equals(packageName) 
             || "com.coloros.alarmclock".equals(packageName) 
             || "com.android.deskclock".equals(packageName)) {
 
+            PhoneLog.d(TAG, "⏰ [闹钟事件] 检测到目标包名闹钟弹出: " + packageName);
+
             Notification notification = sbn.getNotification();
-            if (notification == null) return;
+            if (notification == null) {
+                PhoneLog.w(TAG, "⚠️ [闹钟事件] Notification 实体为空，拦截处理");
+                return;
+            }
 
             boolean isInsistent = (notification.flags & Notification.FLAG_INSISTENT) != 0;
             boolean isOngoing = (notification.flags & Notification.FLAG_ONGOING_EVENT) != 0;
             boolean isAlarmCategory = Notification.CATEGORY_ALARM.equals(notification.category);
 
-            if (!isInsistent && !isOngoing && !isAlarmCategory) return; 
+            PhoneLog.d(TAG, "📊 [闹钟属性] isInsistent=" + isInsistent + ", isOngoing=" + isOngoing + ", isAlarmCategory=" + isAlarmCategory);
+
+            if (!isInsistent && !isOngoing && !isAlarmCategory) {
+                PhoneLog.w(TAG, "⚠️ [闹钟拦截] 该通知不符合响铃特征(非持续/非进行中/非闹钟分类)，已放弃后续拉起");
+                return; 
+            }
 
             SharedPreferences prefs = getSharedPreferences("wearsync_prefs", Context.MODE_PRIVATE);
             String dismissKey = prefs.getString("alarm_dismiss_key", "停止").toLowerCase();
             String snoozeKey = prefs.getString("alarm_snooze_key", "延后").toLowerCase();
 
-            // 🧠 智能提取通知栏的真实物理按键 Intent
             if (notification.actions != null) {
+                PhoneLog.d(TAG, "🧠 [意图提取] 开始解析通知栏物理按键，总Action数: " + notification.actions.length);
                 for (Notification.Action action : notification.actions) {
                     if (action.title == null) continue;
                     String actionTitle = action.title.toString().toLowerCase();
+                    PhoneLog.d(TAG, "  └─ 发现按键文本: [" + action.title.toString() + "]");
                     if (actionTitle.contains(dismissKey) || actionTitle.contains("stop") || actionTitle.contains("关闭")) {
                         cachedDismissIntent = action.actionIntent;
+                        PhoneLog.d(TAG, "     🎯 成功锁定并缓存 [停止/关闭] Intent");
                     } else if (actionTitle.contains(snoozeKey) || actionTitle.contains("snooze")) {
                         cachedSnoozeIntent = action.actionIntent;
+                        PhoneLog.d(TAG, "     🎯 成功锁定并缓存 [延后/稍后] Intent");
                     }
                 }
+            } else {
+                PhoneLog.w(TAG, "⚠️ [意图提取] 警告：该闹钟通知栏没有任何物理 Action 按钮！");
             }
-            
-            Log.d(TAG, "🔥 [放行轰鸣] 检测到真正的闹钟响铃事件！");
+
             Bundle extras = notification.extras;
             String alarmTitle = "";
             String alarmText = "";
@@ -100,7 +120,7 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
             if (extras != null) {
                 CharSequence titleCharSequence = extras.getCharSequence(Notification.EXTRA_TITLE);
                 if (titleCharSequence != null) alarmTitle = titleCharSequence.toString();
-                
+
                 CharSequence textCharSequence = extras.getCharSequence(Notification.EXTRA_TEXT);
                 if (textCharSequence != null) alarmText = textCharSequence.toString();
             }
@@ -110,25 +130,22 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
                 alarmText = sdf.format(new Date());
             }
 
-            // 缓存当前的闹钟文本，供看门狗高频再次拉起使用
+            PhoneLog.d(TAG, "🔥 [放行轰鸣] 确认真实闹钟，准备发射！标题: [" + alarmTitle + "], 内容: [" + alarmText + "]");
             cachedAlarmTitle = alarmTitle;
             cachedAlarmText = alarmText;
 
-            // 🚀 1. 立即触发第一次正向推送拉起手表 UI
             PhoneAlarmManager.notifyWatchAlarmRinging(this, alarmTitle, alarmText);
 
-            // 🚀 2. 启动/刷新【核查再次拉起机制看门狗】
             isAlarmCurrentlyRinging = true;
             startAlarmWatchdog();
         }
     }
-    
+
     @Override
     public void onNotificationRemoved(StatusBarNotification sbn) {
         super.onNotificationRemoved(sbn);
         if (sbn == null) return;
 
-        // 🎯 修复：统一使用 "wearsync_prefs" 键名，确保多端配置能正确读取
         SharedPreferences prefs = getSharedPreferences("wearsync_prefs", Context.MODE_PRIVATE);
         String targetPkg = prefs.getString("key_alarm_package_name", "com.google.android.deskclock");
         String currentPkg = sbn.getPackageName();
@@ -136,57 +153,74 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
         if (targetPkg.equalsIgnoreCase(currentPkg) 
             || "com.android.deskclock".equals(currentPkg) 
             || "com.coloros.alarmclock".equals(currentPkg)) {
-            
-            Log.d(TAG, "⏰ [哨兵拦截] 手机端目标闹钟通知已消失（已点灭/延后成功），通知手表停震并销毁，同时关闭看门狗...");
-            
-            // 🛑 关闭再次拉起轮询器，释放 CPU 资源
-            stopAlarmWatchdog();
 
-            // 🌟 通知手表清除闹钟状态并强行销毁全屏 UI
+            PhoneLog.d(TAG, "⏰ [哨兵拦截] 手机端闹钟通知消失，触发清除机制。消失包名: " + currentPkg);
+
+            stopAlarmWatchdog();
             PhoneAlarmManager.notifyWatchAlarmDismissed(this);
         }
     }
 
+    /**
+     * 🎯 勿扰模式核心监听拦截站
+     */
     @Override
     public void onInterruptionFilterChanged(int interruptionFilter) {
         super.onInterruptionFilterChanged(interruptionFilter);
 
-        // 🔒 联锁防死循环：如果是手表反向同步导致的手机勿扰改变，直接拦截，绝不回传
+        // 🚨 节点 1: 证明系统是否向本服务派发了事件
+        PhoneLog.d(TAG, "🚨🚨🚨 [勿扰重磅回调] 触发 onInterruptionFilterChanged! 当前系统传入的 filter 码 = " + interruptionFilter);
+
+        // 🚨 节点 2: 联锁校验
+        PhoneLog.d(TAG, "🔍 [勿擾檢查] 當前 PhoneSyncListenerService.isInternalUpdate 的聯鎖狀態 = " + PhoneSyncListenerService.isInternalUpdate);
         if (PhoneSyncListenerService.isInternalUpdate) {
-            Log.d(TAG, "🛑 判定为手表引起的内部修改，阻止反向回传。");
+            PhoneLog.w(TAG, "🛑 [勿扰拦截] 判定该变化是由手表反向同步引起的内部修改，触发『安全联锁保护』，拒绝回传，防止死循环！");
             return;
         }
 
+        // 🚨 节点 3: 检查总开关
         SharedPreferences prefs = getSharedPreferences("wearsync_prefs", Context.MODE_PRIVATE);
         boolean dndMaster = prefs.getBoolean("dnd_master", true);
-        
-        // 如果总开关没开，手机自身状态变化绝不通知手表
-        if (!dndMaster) return; 
+        PhoneLog.d(TAG, "🔍 [勿擾檢查] 讀取 SharedPreferences -> dnd_master 總開關狀態 = " + dndMaster);
 
+        if (!dndMaster) {
+            PhoneLog.w(TAG, "🛑 [勿扰拦截] 由于主界面『勿扰同步总开关』处于关闭状态，拦截本次同步，不再下发给任何模块！");
+            return; 
+        }
+
+        // 🚨 节点 4: 读取并解析子开关
         boolean isPhoneDndOn = (interruptionFilter > 1);
         boolean vibrateSwitch = prefs.getBoolean("dnd_vibrate", false);
         boolean sleepLinkage = prefs.getBoolean("wear_sleep", false);     
         boolean powerSaveLinkage = prefs.getBoolean("wear_power_saving", false); 
 
-        PhoneSyncListenerService.sendStatusMaskToWatch(this, isPhoneDndOn, vibrateSwitch, sleepLinkage, powerSaveLinkage);
+        PhoneLog.d(TAG, "📊 [勿擾計算] 準備打包 Mask 數據:");
+        PhoneLog.d(TAG, "  ├─ 手机勿扰是否开启 (interruptionFilter > 1): " + isPhoneDndOn);
+        PhoneLog.d(TAG, "  ├─ 勿扰时手表震动開關 (dnd_vibrate): " + vibrateSwitch);
+        PhoneLog.d(TAG, "  ├─ 睡眠模式連動開關 (wear_sleep): " + sleepLinkage);
+        PhoneLog.d(TAG, "  └─ 省電模式連動開關 (wear_power_saving): " + powerSaveLinkage);
+
+        // 🚨 节点 5: 临门一脚，看看调用跳转有没有执行
+        PhoneLog.d(TAG, "🚀 [勿扰准备发射] 所有校验通过！正在调用 PhoneSyncListenerService.sendStatusMaskToWatch()...");
+        
+        try {
+            PhoneSyncListenerService.sendStatusMaskToWatch(this, isPhoneDndOn, vibrateSwitch, sleepLinkage, powerSaveLinkage);
+            PhoneLog.d(TAG, "✨ [勿扰准备发射] PhoneSyncListenerService.sendStatusMaskToWatch() 静态方法执行完毕。");
+        } catch (Exception e) {
+            PhoneLog.e(TAG, "❌ [致命崩溃] 在调用 PhoneSyncListenerService 方法时发生异常！" + e.getMessage());
+        }
     }
 
-    /**
-     * ⏰ 启动闹钟状态高频核查轮询器
-     * 如果手表端 UI 被意外划掉、或者因为系统原因熄灭，只要手机通知还在，每 4 秒强行再次拉起，直到彻底掐灭闹钟！
-     */
     private void startAlarmWatchdog() {
-        if (alarmWatchdogRunnable != null) return; // 已经运行中则不再重复创建
+        if (alarmWatchdogRunnable != null) return;
 
+        PhoneLog.d(TAG, "🕵️ [看门狗] 闹钟高频拉起机制开启...");
         alarmWatchdogRunnable = new Runnable() {
             @Override
             public void run() {
                 if (isAlarmCurrentlyRinging) {
-                    Log.d(TAG, "🕵️ 【鬧鐘再次拉起核查】檢測到手機鬧鐘仍處於轟鳴狀態！強行再次向手錶發射 START_ALARM_UI 確保不漏接...");
-                    // 持续高频轰炸拉起手表，确保万无一失
+                    PhoneLog.d(TAG, "🕵️ 【鬧鐘再次拉起核查】手機鬧鐘仍在轟鳴，強行發射通知...");
                     PhoneAlarmManager.notifyWatchAlarmRinging(PhoneSyncNotificationService.this, cachedAlarmTitle, cachedAlarmText);
-                    
-                    // 每隔 4000 毫秒（4秒）检查并再次拉起一次
                     alarmWatchdogHandler.postDelayed(this, 4000);
                 }
             }
@@ -194,15 +228,12 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
         alarmWatchdogHandler.postDelayed(alarmWatchdogRunnable, 4000);
     }
 
-    /**
-     * 🛑 关闭闹钟轮询看门狗
-     */
     private void stopAlarmWatchdog() {
         isAlarmCurrentlyRinging = false;
         if (alarmWatchdogRunnable != null) {
             alarmWatchdogHandler.removeCallbacks(alarmWatchdogRunnable);
             alarmWatchdogRunnable = null;
-            Log.d(TAG, "🛑 【鬧鐘看門狗已銷毀】輪詢拉起機制已安全關閉。");
+            PhoneLog.d(TAG, "🛑 [看门狗] 轮询拉起机制已关闭。");
         }
     }
-} // 🎯 整个类的唯一闭合大括号在最底部
+}
