@@ -55,11 +55,88 @@ class PhoneSyncMainFragment : Fragment() {
     }
 
     override fun onCreateView(
-        inflater: LayoutInflater, container: ViewGroup?,
-        savedInstanceState: Bundle?
-    ): View {
-        val sp = requireContext().getSharedPreferences("wearsync_prefs", Context.MODE_PRIVATE)
-        
+    inflater: LayoutInflater, container: ViewGroup?,
+    savedInstanceState: Bundle?
+): View {
+    // 1. 先在外部獲取 sp 實例（確保名字和原本的 "dndsync_prefs" 一致）
+    val sp = requireContext().getSharedPreferences("dndsync_prefs", Context.MODE_PRIVATE)
+
+    return ComposeView(requireContext()).apply {
+        setContent {
+            // 2. 🌟 必須在 setContent 內部（Composable 作用域內）使用 remember！
+            val uiLogDebugSwitch = remember { mutableStateOf(PhoneLog.DEBUG) }
+            val uiWearLogDebugSwitch = remember { mutableStateOf(sp.getBoolean("wear_log_debug_visible", true)) }
+
+            // ==========================================
+            // 3. 這裡放你的 UI 主佈局（例如 LazyColumn 或 Column）
+            // ==========================================
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color(0xFF121212))
+            ) {
+                
+                // 這裡放你原本的其他 UI 卡片...
+
+                // 🌟 手機端調試日誌開關卡片
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("开发者调试日志 (手机)", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            Text("关闭后将彻底隐藏手机端后台所有排查Log，极度省电", fontSize = 12.sp, color = Color.Gray)
+                        }
+                        Switch(
+                            checked = uiLogDebugSwitch.value,
+                            onCheckedChange = { isChecked ->
+                                uiLogDebugSwitch.value = isChecked
+                                PhoneLog.DEBUG = isChecked
+                                sp.edit().putBoolean("phone_log_debug_visible", isChecked).apply()
+                            }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // 🌟 手錶端調試日誌開關卡片
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("开发者调试日志 (手表)", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            Text("通过蓝牙联动控制手表端后台日志，降低手表能耗", fontSize = 12.sp, color = Color.Gray)
+                        }
+                        Switch(
+                            checked = uiWearLogDebugSwitch.value, // ✅ 完美復用 Composable 作用域內定義的狀態
+                            onCheckedChange = { isChecked ->
+                                uiWearLogDebugSwitch.value = isChecked
+                                sp.edit().putBoolean("wear_log_debug_visible", isChecked).apply()
+                                
+                                // 發送藍牙數據至手錶...（保持之前的 Thread 邏輯不變）
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
         // 🌟 初始化讀取：從持久化數據中回復用戶上次設定的日誌開關狀態
         val savedLogConfig = sp.getBoolean("phone_log_debug_visible", true)
         PhoneLog.DEBUG = savedLogConfig
