@@ -37,7 +37,7 @@ public class PhoneAlarmManager {
             if ("DISMISS".equalsIgnoreCase(commandType)) {
                 PhoneLog.d(TAG, "🔍 [闹钟逆向控制] 正在验证手机端 [停止] PendingIntent 缓存状态...");
                 if (PhoneSyncNotificationService.cachedDismissIntent != null) {
-                    PhoneLog.i(TAG, "🚀 [物理模拟成功] 正在跨进程向系统时钟注入【停止/关闭】按键信号！");
+                    PhoneLog.d(TAG, "🚀 [物理模拟成功] 正在跨进程向系统时钟注入【停止/关闭】按键信号！");
                     PhoneSyncNotificationService.cachedDismissIntent.send();
                 } else {
                     PhoneLog.w(TAG, "⚠️ [物理模拟失败] 手机缓存的 cachedDismissIntent 为空！可能通知已被提前销毁");
@@ -45,7 +45,7 @@ public class PhoneAlarmManager {
             } else if ("SNOOZE".equalsIgnoreCase(commandType)) {
                 PhoneLog.d(TAG, "🔍 [闹钟逆向控制] 正在验证手机端 [延后] PendingIntent 缓存状态...");
                 if (PhoneSyncNotificationService.cachedSnoozeIntent != null) {
-                    PhoneLog.i(TAG, "🚀 [物理模拟成功] 正在跨进程向系统时钟注入【延后/稍后】按键信号！");
+                    PhoneLog.d(TAG, "🚀 [物理模拟成功] 正在跨进程向系统时钟注入【延后/稍后】按键信号！");
                     PhoneSyncNotificationService.cachedSnoozeIntent.send();
                 } else {
                     PhoneLog.w(TAG, "⚠️ [物理模拟失败] 手机缓存的 cachedSnoozeIntent 为空！");
