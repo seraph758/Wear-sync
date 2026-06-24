@@ -9,18 +9,14 @@ import android.media.MediaCodec;
 import android.media.MediaFormat;
 import android.os.Build;
 import android.os.Bundle;
-import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.widget.Button;
 import android.widget.RelativeLayout;
-
 import com.google.android.gms.tasks.Tasks;
 import com.google.android.gms.wearable.Node;
 import com.google.android.gms.wearable.Wearable;
-
 import org.json.JSONObject;
-
 import java.lang.ref.WeakReference;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -35,125 +31,127 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
     private boolean isDecoderRunning = false;
     private boolean isUserExiting = false;
 
-    // 暴露引用给 ListenerService 使用
     public static WeakReference<WearCameraActivity> sActivityRef = new WeakReference<>(null);
 
     private final BroadcastReceiver phoneKillReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            if ("de.rhaeus.wearsync.ACTION_KILL_WEAR_CAMERA".equals(intent.getAction())) {
-                Log.d(TAG, "🏳️ 收到手机端关闭指令的本地广播，手表端 Camera UI 无条件自杀退出...");
+            if (intent != null && "de.rhaeus.wearsync.ACTION_FORCE_QUIT_WEAR_CAMERA".equals(intent.getAction())) {
+                WearLog.d(TAG, "📥 收到手机端被迫挂断指令，正在无条件退出手表流媒体界面...");
                 cleanExit(false);
             }
         }
     };
 
-    public static void forceQuitInstance() {
-        WearCameraActivity activity = sActivityRef.get();
-        if (activity != null) {
-            Log.d(TAG, "🛑 触发兜底自杀退出...");
-            activity.cleanExit(false);
-        }
-    }
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        WearCameraActivity.sActivityRef = new WeakReference<>(this);
         setContentView(R.layout.activity_wear_camera);
 
-        sActivityRef = new WeakReference<>(this);
-
-        surfaceView = findViewById(R.id.surface_camera_preview);
+        surfaceView = findViewById(R.id.surfaceView);
         surfaceView.getHolder().addCallback(this);
 
-        RelativeLayout rootLayout = findViewById(R.id.layout_camera_root);
-        if (rootLayout != null) {
-            rootLayout.setOnClickListener(v -> {
-                Log.d(TAG, "📸 用户轻触全屏任意区域 ➔ 触发倒计时");
-                startCaptureCountdown();
-            });
-        }
+        Button btnShutter = findViewById(R.id.btn_shutter);
+        btnShutter.setOnClickListener(v -> {
+            WearLog.d(TAG, "🔘 用户按下手表快门，下发触发拍照脉冲");
+            sendControlSignalToPhone("ACTION_TRIGGER_SHUTTER");
+        });
 
-        Button btnCapture = findViewById(R.id.btnCapture);
-        if (btnCapture != null) {
-            btnCapture.setOnClickListener(v -> {
-                Log.d(TAG, "📸 用户点击了底部的专属相机按钮 ➔ 触发倒计时");
-                startCaptureCountdown();
-            });
-        }
+        Button btnClose = findViewById(R.id.btn_close);
+        btnClose.setOnClickListener(v -> {
+            WearLog.d(TAG, "🔘 用户点击手表关闭，主动断开链路");
+            cleanExit(true);
+        });
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(phoneKillReceiver, new IntentFilter("de.rhaeus.wearsync.ACTION_KILL_WEAR_CAMERA"), Context.RECEIVER_NOT_EXPORTED);
+        IntentFilter filter = new IntentFilter("de.rhaeus.wearsync.ACTION_FORCE_QUIT_WEAR_CAMERA");
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            registerReceiver(phoneKillReceiver, filter, Context.RECEIVER_EXPORTED);
         } else {
-            registerReceiver(phoneKillReceiver, new IntentFilter("de.rhaeus.wearsync.ACTION_KILL_WEAR_CAMERA"));
+            registerReceiver(phoneKillReceiver, filter);
         }
+        WearLog.d(TAG, "🎬 onCreate: 手表观景窗 Activity 完成初始化准备");
+    }
+
+    public void adjustRotation(int degrees) {
+        runOnUiThread(() -> {
+            if (surfaceView != null) {
+                WearLog.d(TAG, "📐 收到手机端传感重力方向 ➔ 正在渲染动态旋转: " + degrees + "度");
+                surfaceView.setRotation(degrees);
+            }
+        });
     }
 
     @Override
     public void surfaceCreated(SurfaceHolder holder) {
+        WearLog.d(TAG, "🖥️ Surface 硬件载体已成功构建，准备初始化 H264 视频解码器...");
+        initDecoder(holder);
+    }
+
+    private void initDecoder(SurfaceHolder holder) {
         try {
-            MediaFormat format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, 640, 480);
             mDecoder = MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);
+            MediaFormat format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, 640, 480);
             mDecoder.configure(format, holder.getSurface(), null, 0);
             mDecoder.start();
             isDecoderRunning = true;
-            
-            // 🎯 核心补充：当画布准备好后，立刻向手机发射唤醒指令！
-            Log.d(TAG, "📺 画布就绪，正在呼叫手机端...");
-            sendControlSignalToPhone("START_CAMERA");
-
+            WearLog.d(TAG, "✨ H.264 底层硬解引擎成功起飞！");
         } catch (Exception e) {
-            Log.e(TAG, "解码器初始化失败", e);
+            WearLog.e(TAG, "❌ 解码器初始化严重受阻: " + e.getMessage(), e);
+        }
+    }
+
+    public void feedH264Data(byte[] data, int length) {
+        if (!isDecoderRunning || mDecoder == null) return;
+        try {
+            int inputBufferIndex = mDecoder.dequeueInputBuffer(10000);
+            if (inputBufferIndex >= 0) {
+                ByteBuffer inputBuffer = mDecoder.getInputBuffer(inputBufferIndex);
+                if (inputBuffer != null) {
+                    inputBuffer.clear();
+                    inputBuffer.put(data, 0, length);
+                    mDecoder.queueInputBuffer(inputBufferIndex, 0, length, System.currentTimeMillis(), 0);
+                }
+            }
+            MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
+            int outputBufferIndex = mDecoder.dequeueOutputBuffer(bufferInfo, 10000);
+            while (outputBufferIndex >= 0) {
+                mDecoder.releaseOutputBuffer(outputBufferIndex, true);
+                outputBufferIndex = mDecoder.dequeueOutputBuffer(bufferInfo, 0);
+            }
+        } catch (Exception e) {
+            WearLog.e(TAG, "⚠️ 帧流灌入硬解管线发生拥堵波动: " + e.getMessage());
         }
     }
 
     @Override
-    public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
-        // Surface 大小改变，暂无需处理
-    }
+    public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {}
 
     @Override
     public void surfaceDestroyed(SurfaceHolder holder) {
+        WearLog.w(TAG, "🖥️ Surface 被销毁，正在强制熔断解码管线...");
+        releaseDecoder();
+    }
+
+    private void releaseDecoder() {
+        isDecoderRunning = false;
         if (mDecoder != null) {
             try {
                 mDecoder.stop();
                 mDecoder.release();
             } catch (Exception ignored) {}
             mDecoder = null;
-            isDecoderRunning = false;
+            WearLog.d(TAG, "🛑 解码器硬件资源已安全释放回收");
         }
     }
 
-    public void feedH264Data(byte[] data, int length) {
-        if (!isDecoderRunning || mDecoder == null || isUserExiting) return;
-
-        try {
-            int inputBufferIndex = mDecoder.dequeueInputBuffer(10000);
-            if (inputBufferIndex >= 0) {
-                ByteBuffer inputBuffer = mDecoder.getInputBuffer(inputBufferIndex);
-                inputBuffer.clear();
-                inputBuffer.put(data, 0, length);
-                mDecoder.queueInputBuffer(inputBufferIndex, 0, length, System.currentTimeMillis() * 1000, 0);
-            }
-
-            MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
-            int outputBufferIndex = mDecoder.dequeueOutputBuffer(bufferInfo, 0);
-            while (outputBufferIndex >= 0) {
-                mDecoder.releaseOutputBuffer(outputBufferIndex, true); 
-                outputBufferIndex = mDecoder.dequeueOutputBuffer(bufferInfo, 0);
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "解码馈入失败", e);
-        }
-    }
-
-    private void sendControlSignalToPhone(String actionStr) {
+    private void sendControlSignalToPhone(String actionCommand) {
         new Thread(() -> {
             try {
                 JSONObject json = new JSONObject();
                 json.put("sender", "wear");
                 json.put("type", "camera_control");
-                json.put("action", actionStr);
+                json.put("action", actionCommand);
                 json.put("timestamp", System.currentTimeMillis());
 
                 byte[] payload = json.toString().getBytes(StandardCharsets.UTF_8);
@@ -164,41 +162,27 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
                     }
                 }
             } catch (Exception e) {
-                Log.e(TAG, "向手机端投递相机控场指令失败", e);
+                WearLog.e(TAG, "❌ 向手机端投递相机控场指令失败", e);
             }
         }).start();
-    }
-
-    private void startCaptureCountdown() {
-        new android.os.CountDownTimer(3000, 1000) {
-            public void onTick(long millisUntilFinished) {
-                Log.d(TAG, "📸 倒计时: " + (millisUntilFinished / 1000 + 1));
-            }
-            public void onFinish() {
-                Log.d(TAG, "📸 倒计时结束 ➔ 下发快门");
-                sendControlSignalToPhone("CAPTURE_SHUTTER");
-            }
-        }.start();
     }
 
     private void cleanExit(boolean notifyPhone) {
         if (isUserExiting) return;
         isUserExiting = true;
-        Log.d(TAG, "🧹 正在启动手表相机退出机制...");
+        WearLog.d(TAG, "🧹 正在启动手表相机退出机制...");
 
         if (notifyPhone) {
             sendControlSignalToPhone("STOP_CAMERA");
         }
-
         try {
             unregisterReceiver(phoneKillReceiver);
         } catch (Exception ignored) {}
-
+        releaseDecoder();
         if (sActivityRef.get() == this) {
             sActivityRef.clear();
         }
-
-        finishAndRemoveTask(); 
+        finishAndRemoveTask();
     }
 
     @Override
@@ -209,7 +193,7 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
 
     @Override
     protected void onDestroy() {
-        cleanExit(true);
+        cleanExit(false);
         super.onDestroy();
     }
 }
