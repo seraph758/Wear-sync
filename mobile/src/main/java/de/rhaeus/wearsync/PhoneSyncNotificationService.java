@@ -164,53 +164,33 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
     /**
      * 🎯 勿扰模式核心监听拦截站
      */
+/**
+     * 🎯 勿扰模式核心监听拦截站
+     */
     @Override
     public void onInterruptionFilterChanged(int interruptionFilter) {
         super.onInterruptionFilterChanged(interruptionFilter);
 
-        // 🚨 节点 1: 证明系统是否向本服务派发了事件
-        PhoneLog.d(TAG, "🚨🚨🚨 [勿扰重磅回调] 触发 onInterruptionFilterChanged! 当前系统传入的 filter 码 = " + interruptionFilter);
+        PhoneLog.d(TAG, "🚨🚨🚨 [勿扰重磅回调] 触发 onInterruptionFilterChanged! filter 码 = " + interruptionFilter);
 
-        // 🚨 节点 2: 联锁校验
-        PhoneLog.d(TAG, "🔍 [勿擾檢查] 當前 PhoneSyncListenerService.isInternalUpdate 的聯鎖狀態 = " + PhoneSyncListenerService.isInternalUpdate);
+        // 🚨 安全连锁保护：防止死循环
         if (PhoneSyncListenerService.isInternalUpdate) {
-            PhoneLog.w(TAG, "🛑 [勿扰拦截] 判定该变化是由手表反向同步引起的内部修改，触发『安全联锁保护』，拒绝回传，防止死循环！");
+            PhoneLog.w(TAG, "🛑 [勿扰拦截] 判定该变化由手表引起，触发『安全连锁保护』，拒绝回传！");
             return;
         }
 
-        // 🚨 节点 3: 检查总开关
-        SharedPreferences prefs = getSharedPreferences("wearsync_prefs", Context.MODE_PRIVATE);
-        boolean dndMaster = prefs.getBoolean("dnd_master", true);
-        PhoneLog.d(TAG, "🔍 [勿擾檢查] 讀取 SharedPreferences -> dnd_master 總開關狀態 = " + dndMaster);
-
-        if (!dndMaster) {
-            PhoneLog.w(TAG, "🛑 [勿扰拦截] 由于主界面『勿扰同步总开关』处于关闭状态，拦截本次同步，不再下发给任何模块！");
-            return; 
-        }
-
-        // 🚨 节点 4: 读取并解析子开关
+        // 判断手机当前勿扰状态是否开启 (Filter > 1 代表开启了某种勿扰/免打扰模式)
         boolean isPhoneDndOn = (interruptionFilter > 1);
-        boolean vibrateSwitch = prefs.getBoolean("dnd_vibrate", false);
-        boolean sleepLinkage = prefs.getBoolean("wear_sleep", false);     
-        boolean powerSaveLinkage = prefs.getBoolean("wear_power_saving", false); 
 
-        PhoneLog.d(TAG, "📊 [勿擾計算] 準備打包 Mask 數據:");
-        PhoneLog.d(TAG, "  ├─ 手机勿扰是否开启 (interruptionFilter > 1): " + isPhoneDndOn);
-        PhoneLog.d(TAG, "  ├─ 勿扰时手表震动開關 (dnd_vibrate): " + vibrateSwitch);
-        PhoneLog.d(TAG, "  ├─ 睡眠模式連動開關 (wear_sleep): " + sleepLinkage);
-        PhoneLog.d(TAG, "  └─ 省電模式連動開關 (wear_power_saving): " + powerSaveLinkage);
-
-        // 🚨 节点 5: 临门一脚，看看调用跳转有没有执行
-        PhoneLog.d(TAG, "🚀 [勿扰准备发射] 所有校验通过！正在调用 PhoneSyncListenerService.sendStatusMaskToWatch()...");
-        
+        PhoneLog.d(TAG, "🚀 [勿扰准备发射] 所有基础校验通过！正在移交 PhoneDndManager 调度...");
         try {
-            PhoneSyncListenerService.sendStatusMaskToWatch(this, isPhoneDndOn, vibrateSwitch, sleepLinkage, powerSaveLinkage);
-            PhoneLog.d(TAG, "✨ [勿扰准备发射] PhoneSyncListenerService.sendStatusMaskToWatch() 静态方法执行完毕。");
+            // 🔥 业务托管：直接丢给专属管理器，让它内部去读 Mask 并发送
+            PhoneDndManager.syncDndToWear(this, isPhoneDndOn);
+            PhoneLog.d(TAG, "✨ [勿扰准备发射] PhoneDndManager.syncDndToWear() 托管方法执行完毕。");
         } catch (Exception e) {
-            PhoneLog.e(TAG, "❌ [致命崩溃] 在调用 PhoneSyncListenerService 方法时发生异常！" + e.getMessage());
+            PhoneLog.e(TAG, "❌ [致命崩溃] 在调用 PhoneDndManager 方法时发生异常！" + e.getMessage());
         }
     }
-
     private void startAlarmWatchdog() {
         if (alarmWatchdogRunnable != null) return;
 
