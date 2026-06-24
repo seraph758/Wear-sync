@@ -5,237 +5,70 @@ import android.content.Intent;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
-import android.util.Log;
 import android.widget.Toast;
 
+/**
+ * 🎬 远程拍照全透明/跳板 Activity
+ * 变更：全面重构 Log 级别规范，挤干换行空行，归化 PhoneLog 开关。
+ */
 public class WearSyncRemoteCameraActivity extends Activity {
 
-    private static final String TAG =
-            "WearSync_RemoteActivity";
+    private static final String TAG = "WearSync_RemoteActivity";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-
-        Log.e(
-                TAG,
-                "① onCreate开始执行"
-        );
-
+        PhoneLog.d(TAG, "① onCreate 开始执行...");
         super.onCreate(savedInstanceState);
 
-        Log.e(
-                TAG,
-                "② super.onCreate执行完成"
-        );
+        Toast.makeText(this, "RemoteCameraActivity", Toast.LENGTH_LONG).show();
+        PhoneLog.d(TAG, "② 跳板 Activity 组件与 Toast 已就绪. 当前线程: " + Thread.currentThread().getName());
+        PhoneLog.d(TAG, "③ 携带的 Intent 载荷: " + getIntent());
 
-
-        Toast.makeText(
-                this,
-                "RemoteCameraActivity",
-                Toast.LENGTH_LONG
-        ).show();
-
-
-        Log.e(
-                TAG,
-                "③ Toast已显示"
-        );
-
-
-        Log.e(
-                TAG,
-                "④ 当前线程="
-                        + Thread.currentThread().getName()
-        );
-
-
-        Log.e(
-                TAG,
-                "⑤ 当前Intent="
-                        + getIntent()
-        );
-
-
-        Log.e(
-                TAG,
-                "⑥ 准备启动 PhoneSyncCameraService"
-        );
-
-
-        Intent serviceIntent =
-                new Intent(
-                        this,
-                        PhoneSyncCameraService.class
-                );
-
-
-        Log.e(
-                TAG,
-                "⑦ Service Intent创建完成"
-        );
-
-
-        serviceIntent.setAction(
-                PhoneSyncCameraService.ACTION_START_CAMERA
-        );
-
-
-        Log.e(
-                TAG,
-                "⑧ Action="
-                        + PhoneSyncCameraService.ACTION_START_CAMERA
-        );
-
+        PhoneLog.d(TAG, "④ 准备通过跨进程通信启动 PhoneSyncCameraService...");
+        Intent serviceIntent = new Intent(this, PhoneSyncCameraService.class);
+        serviceIntent.setAction(PhoneSyncCameraService.ACTION_START_CAMERA);
 
         try {
-
             if (Build.VERSION.SDK_INT >= 26) {
-
-
-                Log.e(
-                        TAG,
-                        "⑨ 调用 startForegroundService"
-                );
-
-
-                startForegroundService(
-                        serviceIntent
-                );
-
-
+                PhoneLog.d(TAG, "⑤ 系统版本 >= 26，调用 startForegroundService");
+                startForegroundService(serviceIntent);
             } else {
-
-
-                Log.e(
-                        TAG,
-                        "⑨ 调用 startService"
-                );
-
-
-                startService(
-                        serviceIntent
-                );
-
+                PhoneLog.d(TAG, "⑤ 系统版本 < 26，调用 startService");
+                startService(serviceIntent);
             }
-
-
-            Log.e(
-                    TAG,
-                    "⑩ Service启动调用完成"
-            );
-
-
+            PhoneLog.d(TAG, "⑥ 相机流前台后台绑定指令已成功下发");
         } catch (Exception e) {
-
-
-            Log.e(
-                    TAG,
-                    "❌ Service启动异常",
-                    e
-            );
-
+            PhoneLog.e(TAG, "❌ [致命异常] 穿透拉起 PhoneSyncCameraService 失败: " + e.getMessage(), e);
         }
 
-
-
-        Log.e(
-                TAG,
-                "⑪ 准备延时关闭RemoteActivity"
-        );
-
-
-        /*
-         * 不立即finish
-         *
-         * 给 CameraX 和厂商 CameraManager
-         * 留出时间确认当前 Activity
-         *
-         * 等相机启动后再关闭
-         */
-        new Handler().postDelayed(
-                new Runnable() {
-
-                    @Override
-                    public void run() {
-
-
-                        Log.e(
-                                TAG,
-                                "⑫ 延时结束，执行finish"
-                        );
-
-
-                        finish();
-
-
-                        Log.e(
-                                TAG,
-                                "⑬ finish已调用"
-                        );
-
-                    }
-
-                },
-                3000
-        );
-
+        PhoneLog.d(TAG, "⑦ 启动 3 秒防崩溃延时。预留空间给厂商 CameraManager 进行底层硬件握手...");
+        new Handler().postDelayed(() -> {
+            PhoneLog.d(TAG, "⑧ 防崩溃延时结束，主动调用 finish() 销毁跳板，实现后台无感隐藏");
+            finish();
+        }, 3000);
     }
-
-
 
     @Override
     protected void onStart() {
-
         super.onStart();
-
-        Log.e(
-                TAG,
-                "onStart"
-        );
-
+        PhoneLog.d(TAG, "生命周期回调 ➔ onStart");
     }
-
-
 
     @Override
     protected void onResume() {
-
         super.onResume();
-
-        Log.e(
-                TAG,
-                "onResume"
-        );
-
+        PhoneLog.d(TAG, "生命周期回调 ➔ onResume");
     }
-
-
 
     @Override
     protected void onPause() {
-
         super.onPause();
-
-        Log.e(
-                TAG,
-                "onPause"
-        );
-
+        PhoneLog.d(TAG, "生命周期回调 ➔ onPause");
     }
-
-
 
     @Override
     protected void onDestroy() {
-
-        Log.e(
-                TAG,
-                "onDestroy"
-        );
-
-
+        PhoneLog.d(TAG, "生命周期回调 ➔ onDestroy (Activity 销毁释放)");
         super.onDestroy();
-
     }
-
 }
