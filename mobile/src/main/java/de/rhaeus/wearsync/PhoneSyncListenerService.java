@@ -80,18 +80,15 @@ public class PhoneSyncListenerService extends WearableListenerService {
                 return;
             }
             // ==========================================
-            // ⏰ 模组二：闹钟远端代点控制
+            // ⏰ 模组二：闹钟远端代点控制 (解耦极简版)
             // ==========================================
             if ("alarm".equalsIgnoreCase(type) || "alarm_action".equalsIgnoreCase(type)) {
-                if ("DISMISS".equalsIgnoreCase(action) || "SNOOZE".equalsIgnoreCase(action)) {
-                    PhoneLog.d(TAG, "⏰ [闹钟核心流转] 收到手表下发的动作指令 ➔ " + action + "，正在移交 PhoneAlarmManager 跨进程点击...");
-                    PhoneAlarmManager.handleWatchCommand(this, action);
-                } else {
-                    PhoneLog.w(TAG, "⚠️ [闹钟信令异常] 无法识别的闹钟动作: " + action);
-                }
+                PhoneLog.d(TAG, "⏰ [闹钟核心流转] 捕获到手表闹钟信令 ➔ 动作: [" + action + "]，全权移交 PhoneAlarmManager 调度！");
+                
+                // 🔥 闭着眼睛直接转发，让 AlarmManager 内部去判定 DISMISS 或 SNOOZE
+                PhoneAlarmManager.handleWatchCommand(this, action);
                 return;
             }
-
             // ==========================================
             // 📸 模组三：远程相机协议控制
             // ==========================================
