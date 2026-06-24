@@ -38,8 +38,8 @@ public class PhoneDndManager {
         }
     }
 
-    /**
-     * 🛰️ 正向同步：当手机系统勿扰状态改变时，打包最新的 Mask 推送至手表（对齐在线扫描降级逻辑）
+   /**
+     * 🛰️ 正向同步：依照手表端解析协议，拆解 Mask 并打包发送
      */
     public static void syncDndToWear(Context context, boolean isPhoneDndOn) {
         SharedPreferences sp = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
@@ -51,47 +51,44 @@ public class PhoneDndManager {
             return;
         }
 
-        PhoneLog.d(TAG, "🛰️ [正向同步启动] 准备打包状态掩码。手机勿扰=" + isPhoneDndOn + ", Mask=" + currentMask);
+        // 拆解出具体的子开关状态，用于适配手表端的 optBoolean
+        boolean vibrateOn = (currentMask & 2) != 0;
+        boolean sleepOn = (currentMask & 4) != 0;
+        boolean powerOn = (currentMask & 8) != 0;
+
+        PhoneLog.d(TAG, "🛰️ [正向同步启动] 对齐手表协议打包中...");
 
         new Thread(() -> {
             try {
                 JSONObject json = new JSONObject();
                 json.put("sender", "phone");
                 json.put("type", "status_mask");
-                json.put("dnd_sync_mask", currentMask); 
+                
+                // 🔥 🔥 🔥 严格对齐手表 WearSyncListenerService 的字段读取
+                json.put("dnd_sync_mask", isPhoneDndOn); // 手表用它当做是否开启勿扰的布尔值
+                json.put("vibrate_feedback", vibrateOn);
+                json.put("sleep_mode_sync", sleepOn);
+                json.put("power_saving_sync", powerOn);
                 json.put("timestamp", System.currentTimeMillis());
 
                 byte[] data = json.toString().getBytes(StandardCharsets.UTF_8);
-                
-                // 1. 优先读取缓存
                 String nodeId = WearSyncState.getNodeId(context);
 
                 if (nodeId != null && !nodeId.isEmpty()) {
-                    // 2. 命中缓存直接发送
                     Tasks.await(Wearable.getMessageClient(context).sendMessage(nodeId, UNIVERSAL_SYNC_PATH, data));
-                    PhoneLog.d(TAG, "🚀 [正向同步成功] 状态掩码 [" + currentMask + "] 已推送到缓存节点: " + nodeId);
+                    PhoneLog.d(TAG, "🚀 [正向同步成功] 协议对齐数据已送达缓存节点: " + nodeId);
                 } else {
-                    // 3. 🔥 🔥 🔥 [降级补偿] 缓存为空，触发在线扫描，对齐 PhoneAlarmManager 逻辑
-                    PhoneLog.w(TAG, "⚠️ [正向同步降级] 活跃节点缓存为空，触发在线扫描机制...");
-                    java.util.List<com.google.android.gms.wearable.Node> nodes = 
-                            Tasks.await(Wearable.getNodeClient(context).getConnectedNodes());
-
+                    // 降级扫描
+                    List<Node> nodes = Tasks.await(Wearable.getNodeClient(context).getConnectedNodes());
                     if (nodes != null && !nodes.isEmpty()) {
-                        PhoneLog.d(TAG, "🔍 [正向同步降级] 在线扫描发现 " + nodes.size() + " 个可通信的手表设备");
-                        for (com.google.android.gms.wearable.Node node : nodes) {
-                            PhoneLog.d(TAG, "  └─ 正在激活并重写节点缓存: " + node.getId());
-                            // 重新写入缓存，供后续模块使用
-                            WearSyncState.setNodeId(context, node.getId()); 
-                            // 补发勿扰掩码
+                        for (Node node : nodes) {
+                            WearSyncState.setNodeId(context, node.getId());
                             Tasks.await(Wearable.getMessageClient(context).sendMessage(node.getId(), UNIVERSAL_SYNC_PATH, data));
                         }
-                        PhoneLog.d(TAG, "🚀 [正向同步成功] 降级扫描同步掩码机制发射完成。");
-                    } else {
-                        PhoneLog.w(TAG, "❌ [正向同步断联] 传输失败：在线没有发现任何物理手表，放弃本次发射。");
                     }
                 }
             } catch (Exception e) {
-                PhoneLog.e(TAG, "🔴 [正向同步崩溃] 异步推送当前面板掩码失败: " + e.getMessage(), e);
+                PhoneLog.e(TAG, "🔴 [正向同步崩溃] 发送失败: " + e.getMessage(), e);
             }
         }).start();
     }
