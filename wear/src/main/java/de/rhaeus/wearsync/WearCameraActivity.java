@@ -58,12 +58,7 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
             sendControlSignalToPhone("ACTION_TRIGGER_SHUTTER");
         });
 
-        Button btnClose = findViewById(R.id.btn_close);
-        btnClose.setOnClickListener(v -> {
-            WearLog.d(TAG, "🔘 用户点击手表关闭，主动断开链路");
-            cleanExit(true);
-        });
-
+       
         IntentFilter filter = new IntentFilter("de.rhaeus.wearsync.ACTION_FORCE_QUIT_WEAR_CAMERA");
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             registerReceiver(phoneKillReceiver, filter, Context.RECEIVER_EXPORTED);
