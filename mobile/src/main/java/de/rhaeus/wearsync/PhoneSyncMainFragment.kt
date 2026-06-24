@@ -55,87 +55,122 @@ class PhoneSyncMainFragment : Fragment() {
     }
 
     override fun onCreateView(
-    inflater: LayoutInflater, container: ViewGroup?,
-    savedInstanceState: Bundle?
-): View {
-    // 1. 先在外部獲取 sp 實例（確保名字和原本的 "dndsync_prefs" 一致）
-    val sp = requireContext().getSharedPreferences("dndsync_prefs", Context.MODE_PRIVATE)
-
-    return ComposeView(requireContext()).apply {
-        setContent {
-            // 2. 🌟 必須在 setContent 內部（Composable 作用域內）使用 remember！
-            val uiLogDebugSwitch = remember { mutableStateOf(PhoneLog.DEBUG) }
-            val uiWearLogDebugSwitch = remember { mutableStateOf(sp.getBoolean("wear_log_debug_visible", true)) }
-
-            // ==========================================
-            // 3. 這裡放你的 UI 主佈局（例如 LazyColumn 或 Column）
-            // ==========================================
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color(0xFF121212))
-            ) {
+        inflater: LayoutInflater, container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        return ComposeView(requireContext()).apply {
+            setContent {
+                // 🟢 1. 統一在 setContent (Composable 作用域) 的最頂層獲取 sp，不重複定義
+                val sp = requireContext().getSharedPreferences("dndsync_prefs", Context.MODE_PRIVATE)
                 
-                // 這裡放你原本的其他 UI 卡片...
+                // 🟢 2. 在正確的 Composable 環境下初始化這兩個 UI 狀態
+                val uiLogDebugSwitch = remember { mutableStateOf(PhoneLog.DEBUG) }
+                val uiWearLogDebugSwitch = remember { mutableStateOf(sp.getBoolean("wear_log_debug_visible", true)) }
 
-                // 🌟 手機端調試日誌開關卡片
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                // 🟢 3. 呼叫你的 App 主體暗黑主題（這裡保持你原本的 Theme 包裹不變）
+                MaterialTheme {
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = Color(0xFF121212) // 滿版純黑背景
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("开发者调试日志 (手机)", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                            Text("关闭后将彻底隐藏手机端后台所有排查Log，极度省电", fontSize = 12.sp, color = Color.Gray)
-                        }
-                        Switch(
-                            checked = uiLogDebugSwitch.value,
-                            onCheckedChange = { isChecked ->
-                                uiLogDebugSwitch.value = isChecked
-                                PhoneLog.DEBUG = isChecked
-                                sp.edit().putBoolean("phone_log_debug_visible", isChecked).apply()
-                            }
-                        )
-                    }
-                }
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(16.dp)
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            
+                            // ----------------------------------------------------
+                            // 💡 这里可以放你原有的其他 UI 卡片（如通知权限、连接状态等）
+                            // ----------------------------------------------------
 
-                Spacer(modifier = Modifier.height(12.dp))
 
-                // 🌟 手錶端調試日誌開關卡片
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("开发者调试日志 (手表)", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                            Text("通过蓝牙联动控制手表端后台日志，降低手表能耗", fontSize = 12.sp, color = Color.Gray)
-                        }
-                        Switch(
-                            checked = uiWearLogDebugSwitch.value, // ✅ 完美復用 Composable 作用域內定義的狀態
-                            onCheckedChange = { isChecked ->
-                                uiWearLogDebugSwitch.value = isChecked
-                                sp.edit().putBoolean("wear_log_debug_visible", isChecked).apply()
-                                
-                                // 發送藍牙數據至手錶...（保持之前的 Thread 邏輯不變）
+                            // 🌟 卡片一：手機端背景調試日誌可視化開關
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text("开发者调试日志 (手机)", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                        Text("关闭后将彻底隐藏手机端后台所有排查Log，极度省电", fontSize = 12.sp, color = Color.Gray)
+                                    }
+                                    Switch(
+                                        checked = uiLogDebugSwitch.value,
+                                        onCheckedChange = { isChecked ->
+                                            uiLogDebugSwitch.value = isChecked
+                                            PhoneLog.DEBUG = isChecked // 🔥 一鍵影響 Java 底層所有手機代碼
+                                            sp.edit().putBoolean("phone_log_debug_visible", isChecked).apply()
+                                            PhoneLog.d("WearSync_Main", "🎛️ [手机日志开关改变] 用户在界面切换手机日志状态 = $isChecked")
+                                        }
+                                    )
+                                }
                             }
-                        )
+
+
+                            // 🌟 卡片二：手錶端調試日誌遠程聯動控制（新加的）
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text("开发者调试日志 (手表)", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                        Text("通过蓝牙联动控制手表端后台日志，降低手表能耗", fontSize = 12.sp, color = Color.Gray)
+                                    }
+                                    Switch(
+                                        checked = uiWearLogDebugSwitch.value,
+                                        onCheckedChange = { isChecked ->
+                                            uiWearLogDebugSwitch.value = isChecked
+                                            sp.edit().putBoolean("wear_log_debug_visible", isChecked).apply()
+                                            PhoneLog.d("WearSync_Main", "🎛️ [手表日志开关改变] 准备向手表无线投递日志流控信令 = $isChecked")
+
+                                            // 📡 異步發射藍牙數據包至手錶端
+                                            Thread {
+                                                try {
+                                                    val json = org.json.JSONObject()
+                                                    json.put("sender", "phone")
+                                                    json.put("type", "wear_log_control")
+                                                    json.put("wear_log_debug", isChecked)
+                                                    json.put("timestamp", System.currentTimeMillis())
+
+                                                    val data = json.toString().toByteArray(java.nio.charset.StandardCharsets.UTF_8)
+                                                    val nodeId = WearSyncState.getNodeId(requireContext())
+                                                    
+                                                    if (!nodeId.isNullOrEmpty()) {
+                                                        com.google.android.gms.wearable.Wearable.getMessageClient(requireContext())
+                                                            .sendMessage(nodeId, "/wear-universal-sync", data)
+                                                        PhoneLog.d("WearSync_Main", "🚀 [流控包发射成功] 目标手表节点 ➔ $nodeId")
+                                                    } else {
+                                                        PhoneLog.w("WearSync_Main", "⚠️ [发射终止] 当前未连接或未识别到活跃的手表节点 ID")
+                                                    }
+                                                } catch (e: Exception) {
+                                                    PhoneLog.e("WearSync_Main", "🔴 联动控制手表日志控制信令打包失败: ${e.message}", e)
+                                                }
+                                            }.start()
+                                        }
+                                    )
+                                }
+                            }
+
+                        }
                     }
                 }
             }
         }
     }
-}
+
 
         // 🌟 初始化讀取：從持久化數據中回復用戶上次設定的日誌開關狀態
         val savedLogConfig = sp.getBoolean("phone_log_debug_visible", true)
