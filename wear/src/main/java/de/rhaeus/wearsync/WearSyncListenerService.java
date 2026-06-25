@@ -42,33 +42,47 @@ public class WearSyncListenerService extends WearableListenerService {
 
             WearLog.d(TAG, "📥 [手表信令到港] ➔ type=[" + type + "], action=[" + action + "]");
 
-            // 1. 勿扰同步模组
+           // =========================================================================
+            // 🌓 模组一：勿扰对齐切换模块（接收手机发来的 DND 独立包）
+            // =========================================================================
             if ("dnd".equalsIgnoreCase(type)) {
                 int value = json.optInt("dnd_state", -1);
                 if (value == -1) return;
 
+                // 🎯 物理防线：关上回传大门
                 WearSyncNotificationService.isInternalUpdate = true;
+                
                 NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
                 if (nm != null) {
-                    nm.setInterruptionFilter(value);
-                    WearLog.d(TAG, "🌓 手表端勿扰对齐更新成功 ➔ " + value);
+                    int currentWatchFilter = nm.getCurrentInterruptionFilter();
+                    if (currentWatchFilter != value) {
+                        nm.setInterruptionFilter(value);
+                        WearLog.d(TAG, "🌓 手表端勿扰对齐更新成功 ➔ " + value);
+                    }
                 }
-                new Handler(getMainLooper()).postDelayed(() -> WearSyncNotificationService.isInternalUpdate = false, 1500);
+                
+                // ⏳ 安全防線：延時拉長到 2000ms，給緊隨其後的 Mask 聯動留出足夠的廣播消散時間
+                new Handler(getMainLooper()).postDelayed(() -> {
+                    WearSyncNotificationService.isInternalUpdate = false;
+                    WearLog.d(TAG, "🔓 [手錶正向鎖] 釋放，重新開啟逆向通道。");
+                }, 2000);
                 return;
             }
 
-            // 2. 状态掩码处理模组
-            if ("status_mask".equalsIgnoreCase(type)) {
-                int mask = json.optInt("mask_value", 0);
-                WearLog.d(TAG, "📊 收到手机同步的全新全局掩码 = " + mask);
+            // =========================================================================
+            // 🎛️ 模组二：配置掩码自动化连控模块（接收手机发来的 Mask 独立包）
+            // =========================================================================
+            if ("status_mask".equalsIgnoreCase(type) || json.has("status_mask") || json.has("mask_value")) {
+                // 直接移交手錶專屬管理器，去跑震動、睡眠、省電聯動
+                WearSyncDndManager.handleIncomingMask(this, json);
                 return;
             }
 
           // =========================================================================
-// 🔋 模组三：闹钟拦截控制模组（极致精简・快递员模式）
-// =========================================================================
-if ("alarm".equalsIgnoreCase(type)) {
-    WearLog.d(TAG, "⏰ 收到手机闹钟信令，正在将其无损打包并直发 WearAlarmActivity ➔ " + action);
+        // 🔋 模组三：闹钟拦截控制模组（极致精简・快递员模式）
+        // =========================================================================
+        if ("alarm".equalsIgnoreCase(type)) {
+            WearLog.d(TAG, "⏰ 收到手机闹钟信令，正在将其无损打包并直发 WearAlarmActivity ➔ " + action);
     
     Intent alarmIntent = new Intent(this, WearAlarmActivity.class);
     // 🎯 核心精简：直接把原始 JSON 字符串塞进去，所有的解析和自毁都让 Activity 现场自己做！
