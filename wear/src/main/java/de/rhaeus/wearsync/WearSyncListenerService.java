@@ -64,22 +64,25 @@ public class WearSyncListenerService extends WearableListenerService {
                 return;
             }
 
-            // 3. 闹钟拦截控制模组
-            if ("alarm".equalsIgnoreCase(type)) {
-                if ("START_WEAR_ALARM".equalsIgnoreCase(action)) {
-                    WearLog.d(TAG, "⏰ 手机闹钟高能预警！正在强制唤醒全屏强拉全画幅接管 activity...");
-                    Intent alarmIntent = new Intent(this, WearAlarmActivity.class);
-                    alarmIntent.putExtra("alarm_time", json.optString("time", "00:00"));
-                    alarmIntent.putExtra("alarm_label", json.optString("label", "闹钟"));
-                    alarmIntent.putExtra("alarm_day", json.optString("day_tips", ""));
-                    alarmIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-                    startActivity(alarmIntent);
-                } else if ("FORCE_STOP_WEAR_ALARM".equalsIgnoreCase(action)) {
-                    WearLog.d(TAG, "⏰ 手机端下发强退信号，正在通过本地内核广播自毁灭活手表全屏闹钟...");
-                    sendBroadcast(new Intent(WearAlarmActivity.ACTION_INTERNAL_FORCE_STOP));
-                }
-                return;
-            }
+          // =========================================================================
+// 🔋 模组三：闹钟拦截控制模组（极致精简・快递员模式）
+// =========================================================================
+if ("alarm".equalsIgnoreCase(type)) {
+    WearLog.d(TAG, "⏰ 收到手机闹钟信令，正在将其无损打包并直发 WearAlarmActivity ➔ " + action);
+    
+    Intent alarmIntent = new Intent(this, WearAlarmActivity.class);
+    // 🎯 核心精简：直接把原始 JSON 字符串塞进去，所有的解析和自毁都让 Activity 现场自己做！
+    alarmIntent.putExtra("raw_alarm_json", json.toString());
+    alarmIntent.putExtra("alarm_action", action);
+    
+    // 保证 Activity 不管是没启动还是已启动，都能被准确唤醒并投递新 Intent
+    alarmIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK 
+                       | Intent.FLAG_ACTIVITY_CLEAR_TOP 
+                       | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+    startActivity(alarmIntent);
+    return;
+}
+
 
             // 4. 相机穿透控制模组
             if ("camera_control".equalsIgnoreCase(type)) {
