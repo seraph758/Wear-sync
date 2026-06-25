@@ -49,7 +49,7 @@ public class WearSyncDndManager {
             if (targetDndEnabled != isWatchDndOn) {
                 mNotificationManager.setInterruptionFilter(targetDndEnabled ? 3 : 1); // 3: INTERRUPTION_FILTER_PRIORITY, 1: INTERRUPTION_FILTER_ALL
                 hasDndChanged = true;
-                WearLog.i(TAG, "🌗 [勿擾同步] 手錶本地勿擾已變更為: " + targetDndEnabled);
+                WearLog.d(TAG, "🌗 [勿擾同步] 手錶本地勿擾已變更為: " + targetDndEnabled);
             }
         }
 
