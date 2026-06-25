@@ -11,7 +11,7 @@ import com.google.android.gms.wearable.Node;
 import java.util.List;
 
 /**
- * 🌓 勿扰与配置掩码核心业务专属管理器 (解耦重构版)
+ * 🌓 勿扰与配置掩码核心业务专属管理器 (单包精简优化版)
  */
 public class PhoneDndManager {
     private static final String TAG = "WearSync_PhoneDnd";
@@ -41,7 +41,7 @@ public class PhoneDndManager {
     }
 
     /**
-     * 🛰️ 正向同步：将手机勿扰状态与掩码推送至手表（融合 WearSyncState 快取优化版）
+     * 🛰️ 正向同步：将全量状态通过单包 Mask 推送至手表（极致省电与带宽优化）
      */
     public static void syncDndToWear(Context context, boolean isPhoneDndOn) {
         SharedPreferences sp = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
@@ -54,52 +54,47 @@ public class PhoneDndManager {
             return;
         }
 
-        // 2. 映射系统标准的 InterruptionFilter 值
-        int systemDndValue = isPhoneDndOn ? 2 : 1; 
-
         new Thread(() -> {
             try {
-                // 🧩 协议一：核心 DND 物理切换信令
-                JSONObject dndJson = new JSONObject();
-                dndJson.put("sender", "phone");
-                dndJson.put("type", "dnd");           
-                dndJson.put("dnd_state", systemDndValue); 
-                dndJson.put("timestamp", System.currentTimeMillis());
-                byte[] dndData = dndJson.toString().getBytes(StandardCharsets.UTF_8);
+                // 🎯 核心修正：动静融合。通过位运算，把手机当前真实的勿扰开关状态（DND_ON/OFF）
+                // 实时写入到 currentMask 的第 0 位（Bit 0），确保手錶端解读（mask & 0x01）时完全正确！
+                int finalMaskValue;
+                if (isPhoneDndOn) {
+                    finalMaskValue = currentMask | 0x01;  // 强制把最后一位变 1 (开启勿扰)
+                } else {
+                    finalMaskValue = currentMask & ~0x01; // 强制把最后一位变 0 (关闭勿扰)
+                }
 
-                // 🧩 协议二：最新的掩码状态值
+                // 🧩 协议包：融合了勿扰状态 + 子开关配置的全新全局掩码
                 JSONObject maskJson = new JSONObject();
                 maskJson.put("sender", "phone");
                 maskJson.put("type", "status_mask");  
-                maskJson.put("mask_value", currentMask);
+                maskJson.put("status_mask", finalMaskValue); // 👈 传输最新的融合掩码值
                 maskJson.put("timestamp", System.currentTimeMillis());
                 byte[] maskData = maskJson.toString().getBytes(StandardCharsets.UTF_8);
 
-                // 3. 🎯 优先从 WearSyncState 缓存获取活跃的手表节点 ID
+                // 2. 🎯 优先从 WearSyncState 缓存获取活跃的手表节点 ID
                 String cachedNodeId = WearSyncState.getNodeId(context);
 
                 if (cachedNodeId != null && !cachedNodeId.isEmpty()) {
-                    PhoneLog.d(TAG, "⚡ [勿扰发信] 命中 WearSyncState 缓存节点: " + cachedNodeId + "，正在双发信令套餐...");
+                    PhoneLog.d(TAG, "⚡ [勿扰发信] 命中缓存节点: " + cachedNodeId + " ➔ 投递全量融合掩码: " + finalMaskValue);
                     
-                    // 连发射击：先发切换指令，再发状态掩码
-                    Tasks.await(Wearable.getMessageClient(context).sendMessage(cachedNodeId, UNIVERSAL_SYNC_PATH, dndData));
+                    // 🚀 干净利落的一枪发射
                     Tasks.await(Wearable.getMessageClient(context).sendMessage(cachedNodeId, UNIVERSAL_SYNC_PATH, maskData));
                     
-                    PhoneLog.d(TAG, "🚀 [正向同步成功] 已通过缓存快车道送达目标手表。");
+                    PhoneLog.d(TAG, "🚀 [正向同步成功] 已通过单包快车道送达目标手表。");
                 } else {
-                    // 4. 降级方案：快取失效时，执行物理实时扫描，并顺便踢醒处于 sniff 状态的蓝牙
-                    PhoneLog.w(TAG, "⚠️ [勿扰发信降级] WearSyncState 缓存为空，启动物理实时扫描...");
+                    // 3. 降级方案：物理扫描
+                    PhoneLog.w(TAG, "⚠️ [勿扰发信降级] 缓存为空，启动物理实时扫描...");
                     java.util.List<com.google.android.gms.wearable.Node> nodes = 
                             Tasks.await(Wearable.getNodeClient(context).getConnectedNodes());
 
                     if (nodes != null && !nodes.isEmpty()) {
                         for (com.google.android.gms.wearable.Node node : nodes) {
-                            PhoneLog.d(TAG, "  └─ 🚀 扫描发现活动触点: " + node.getId() + "，正在刷新持久化快取并灌入信令...");
-                            // 刷新缓存记录
+                            PhoneLog.d(TAG, "  └─ 🚀 发现活动触点: " + node.getId() + "，灌入单包融合信令...");
                             WearSyncState.setNodeId(context, node.getId());
                             
-                            // 连发射击
-                            Tasks.await(Wearable.getMessageClient(context).sendMessage(node.getId(), UNIVERSAL_SYNC_PATH, dndData));
+                            // 🚀 降级单发
                             Tasks.await(Wearable.getMessageClient(context).sendMessage(node.getId(), UNIVERSAL_SYNC_PATH, maskData));
                         }
                         PhoneLog.d(TAG, "🚀 [正向同步成功] 降级物理扫描流发送完成。");
@@ -112,5 +107,4 @@ public class PhoneDndManager {
             }
         }).start();
     }
-
 }
