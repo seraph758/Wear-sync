@@ -18,13 +18,13 @@ import org.json.JSONObject;
 public class WearSyncDndManager {
     private static final String TAG = "WearSync_WearDnd";
 
-    /**
+      /**
      * 📥 核心解析入口：負責解讀手機發送過來的 status_mask 數據並執行連鎖聯動 (完美保留所有細節)
      */
     public static void handleIncomingMask(Context context, JSONObject json) {
         if (json == null) return;
         
-        // 🎯 完美保留：相容兩種 JSON 鍵名格式："status_mask" 欄位值或對象屬性
+        // 🎯 相容兩種 JSON 鍵名格式："status_mask" 欄位值或對象屬性
         int statusMask = json.optInt("status_mask", json.optInt("mask_value", -1));
         if (statusMask == -1) return;
 
@@ -36,14 +36,14 @@ public class WearSyncDndManager {
         // 位運算精準拆解子功能開關狀態
         boolean targetDndEnabled = (statusMask & 0x01) != 0;       
         boolean isVibrateSwitchOn = (statusMask & 0x02) != 0;      
-        boolean isSleepLinkageOpen = (maskValue -> targetDndEnabled 等動態判斷，為防漏掉，我們嚴格看齊 Bit 2)
+        // 🔥 這裡已修正：徹底清除了語法錯誤的草稿文字，乾淨對齊 Bit 2 (值為 4)
         boolean isSleepLinkageOpen = (statusMask & 0x04) != 0;     
         boolean isPowerSaveLinkageOpen = (statusMask & 0x08) != 0; 
 
         NotificationManager mNotificationManager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
         boolean hasDndChanged = false;
 
-        // 1. 同步勿擾模式 (完美加回：即使是雙包，也做防禦性狀態對齊)
+        // 1. 同步勿擾模式
         if (mNotificationManager != null) {
             int currentWatchDndFilter = mNotificationManager.getCurrentInterruptionFilter();
             boolean isWatchDndOn = (currentWatchDndFilter > 1);
@@ -58,10 +58,10 @@ public class WearSyncDndManager {
         if (isVibrateSwitchOn) {
             vibrate(context);
         } else {
-            WearLog.w(TAG, "🔇 [勿擾震動子開關=關閉] 攔截並封鎖震動。");
+            WearLog.w(TAG, "🔇 [勿擾震動子開关=關閉] 攔截並封鎖震動。");
         }
 
-        // 3. 睡眠模式（就寢模式）自動化聯動 (🔥 完美補回 hasDndChanged 判定，防止無障礙重複誤點)
+        // 3. 睡眠模式（就寢模式）自動化聯動 (補回 hasDndChanged 判定，防止重複誤點)
         if (isSleepLinkageOpen && hasDndChanged) {
             toggleBedtimeMode(context);
         }
@@ -73,7 +73,7 @@ public class WearSyncDndManager {
             WearLog.d(TAG, "🔋 [省電聯動] 已同步手錶本地省電狀態為: " + (targetDndEnabled ? "開啟" : "關閉"));
         }
 
-        // 5. 延遲解鎖，給手錶系統廣播徹底消散留出反應時間 (雙包安全冷卻)
+        // 5. 延遲解鎖，給手錶系統廣播徹底消散留出反應時間
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
             WearSyncNotificationService.isInternalUpdate = false;
             WearLog.d(TAG, "🔓 [解鎖] 手錶防回傳死循環鎖已安全釋放。");
