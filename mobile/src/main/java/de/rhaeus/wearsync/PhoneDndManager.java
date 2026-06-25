@@ -22,17 +22,32 @@ public class PhoneDndManager {
     /**
      * 📥 处理从 PhoneSyncListenerService 转发过来的手表反向勿扰同步指令
      */
+    /**
+     * 📥 逆向同步核心入口：收到手錶反向傳回的原生勿擾 Filter 值，修改手機本體
+     */
     public static void handleIncomingAction(Context context, int wearSystemDndVal) {
         PhoneLog.d(TAG, "📥 [逆向同步] 收到手表反向勿扰信令 ➔ 目标值 = " + wearSystemDndVal);
         try {
             NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
             if (nm != null) {
-                boolean hasPermission = nm.isNotificationPolicyAccessGranted();
-                if (hasPermission) {
-                    nm.setInterruptionFilter(wearSystemDndVal);
-                    PhoneLog.d(TAG, "✨ [逆向同步成功] 手机系统勿扰模式已成功设置为 = " + wearSystemDndVal);
+                // 🎯 核心安全校驗：先獲取手機當前的 filter 狀態
+                int currentPhoneFilter = nm.getCurrentInterruptionFilter();
+                
+                // 🎯 只有當手錶傳過來的狀態與手機當前狀態不相等時，才允許修改，原地攔截重複信號
+                if (currentPhoneFilter != wearSystemDndVal) {
+                    boolean hasPermission = nm.isNotificationPolicyAccessGranted();
+                    if (hasPermission) {
+                        // 🔒 關閉正向發射開關，告訴手機監聽器：「這是我自己改的，不要再發回給手錶了！」
+                        // （請確保您的 PhoneSyncNotificationService 裡有對齊這個 isInternalUpdate 變量）
+                        // PhoneSyncNotificationService.isInternalUpdate = true; 
+
+                        nm.setInterruptionFilter(wearSystemDndVal);
+                        PhoneLog.d(TAG, "✨ [逆向同步成功] 手机系统勿扰模式已成功设置为 = " + wearSystemDndVal);
+                    } else {
+                        PhoneLog.w(TAG, "⚠️ [逆向同步失败] 手机端缺乏 NotificationPolicyAccess 权限！");
+                    }
                 } else {
-                    PhoneLog.w(TAG, "⚠️ [逆向同步失败] 手机端缺乏 NotificationPolicyAccess 权限！");
+                    PhoneLog.d(TAG, "✅ [逆向同步攔截] 手機當前勿擾 Filter 已經是 " + wearSystemDndVal + "，判定為回流或重複信號，不作處理。");
                 }
             }
         } catch (Exception e) {
