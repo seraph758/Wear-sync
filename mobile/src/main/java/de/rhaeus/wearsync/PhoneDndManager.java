@@ -48,11 +48,12 @@ public class PhoneDndManager {
      */
     public static void syncDndToWear(Context context, int interruptionFilter) {
         SharedPreferences sp = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        // 預設為 15 (二進制 1111)，即所有聯動預設全開
         int currentMask = sp.getInt(KEY_MASK, 15); 
 
         new Thread(() -> {
             try {
-                // 🧩 槍響第一聲：先發送純淨的本地持久化掩碼包 (讓手錶先做好配置準備)
+                // 🧩 🚀 槍響第一聲：先發送純淨的本地持久化掩碼包 (讓手錶先做好配置準備)
                 JSONObject maskJson = new JSONObject();
                 maskJson.put("sender", "phone");
                 maskJson.put("type", "status_mask");  
@@ -60,24 +61,29 @@ public class PhoneDndManager {
                 maskJson.put("timestamp", System.currentTimeMillis());
                 byte[] maskData = maskJson.toString().getBytes(StandardCharsets.UTF_8);
 
-                // 🧩 槍響第二聲：再發送原汁原味的系統勿擾狀態包 (帶動聯動執行)
+                // 🧩 🚀 槍響第二聲：再發送原汁原味的系統勿擾狀態包 (不作布林值轉換，直接傳 1,2,3,4)
                 JSONObject dndJson = new JSONObject();
                 dndJson.put("sender", "phone");
                 dndJson.put("type", "dnd");           
-                dndJson.put("dnd_state", interruptionFilter); // ➔ 原生舊代碼底層數值，不作人為轉換
+                dndJson.put("dnd_state", interruptionFilter); 
                 dndJson.put("timestamp", System.currentTimeMillis());
                 byte[] dndData = dndJson.toString().getBytes(StandardCharsets.UTF_8);
 
                 String nodeId = WearSyncState.getNodeId(context);
                 if (nodeId != null && !nodeId.isEmpty()) {
-                    // 🔥 先 Mask，後 DND
+                    // 🔥 先發 Mask 配置包
                     Tasks.await(Wearable.getMessageClient(context).sendMessage(nodeId, UNIVERSAL_SYNC_PATH, maskData));
-                    Thread.sleep(50); // 微調間隔，確保手錶隊列順序不亂
+                    
+                    // 稍微短暫延遲 50ms 確保手錶隊列順序不會因網絡顛倒
+                    Thread.sleep(50); 
+                    
+                    // 後發 DND 狀態包
                     Tasks.await(Wearable.getMessageClient(context).sendMessage(nodeId, UNIVERSAL_SYNC_PATH, dndData));
-                    PhoneLog.d(TAG, "🚀 [正向發射成功] 已先發 Mask(" + currentMask + ")，後發 DND 原生Filter(" + interruptionFilter + ")");
+                    
+                    PhoneLog.d(TAG, "🚀 [正向雙發成功] 已先發 Mask(" + currentMask + ")，後發 DND 原生Filter(" + interruptionFilter + ")");
                 }
             } catch (Exception e) {
-                PhoneLog.e(TAG, "🔴 [發信異常] ", e);
+                PhoneLog.e(TAG, "🔴 [發信異常] 傳輸勿擾信號失敗: ", e);
             }
         }).start();
     }
