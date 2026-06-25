@@ -84,22 +84,16 @@ public class WearSyncListenerService extends WearableListenerService {
             // 4. 相机穿透控制模组
             if ("camera_control".equalsIgnoreCase(type)) {
                 if ("START_CAMERA".equalsIgnoreCase(action)) {
-                    int degrees = json.optInt("rotation_degrees", 0);
                     WearLog.d(TAG, "📸 远程相机开火指令送达！正在强制启动手表预览界面...");
-                    
                     Intent camIntent = new Intent(this, WearCameraActivity.class);
                     camIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
                     startActivity(camIntent);
-
-                    new Handler(getMainLooper()).postDelayed(() -> {
-                        WearCameraActivity act = WearCameraActivity.sActivityRef.get();
-                        if (act != null) act.adjustRotation(degrees);
-                    }, 500);
                 } else if ("FORCE_QUIT_CAMERA".equalsIgnoreCase(action) || "STOP_CAMERA".equalsIgnoreCase(action)) {
                     WearLog.d(TAG, "🛑 远程相机被手机强制切断，向本地 Activity 发送被迫挂断中断广播...");
                     sendBroadcast(new Intent("de.rhaeus.wearsync.ACTION_FORCE_QUIT_WEAR_CAMERA"));
                 }
                 return;
+
             }
 
             // 5. 新增：手飙日志无线远程联控模组
