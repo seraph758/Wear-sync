@@ -64,7 +64,6 @@ class PhoneSyncMainFragment : Fragment() {
         return ComposeView(requireContext()).apply {
             setContent {
                 MaterialTheme {
-                    // 🌓 核心优化 1：根据手机系统亮暗色自适应色彩体系
                     val isDark = isSystemInDarkTheme()
                     val backgroundColor = if (isDark) Color(0xFF121214) else Color(0xFFF4F4F6)
                     val cardBgColor = if (isDark) Color(0xFF1E1E24) else Color(0xFFFFFFFF)
@@ -83,7 +82,6 @@ class PhoneSyncMainFragment : Fragment() {
                                 .verticalScroll(rememberScrollState()),
                             verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
-                            // 頂部大標題
                             Text(
                                 text = "WearSync 枢纽",
                                 fontSize = 28.sp,
@@ -92,16 +90,14 @@ class PhoneSyncMainFragment : Fragment() {
                                 modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)
                             )
 
-                            // 1. 連接狀態探針卡片
+                            // 1. 连接状态卡片
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(16.dp),
                                 colors = CardDefaults.cardColors(containerColor = cardBgColor)
                             ) {
                                 Row(
-                                    modifier = Modifier
-                                        .padding(16.dp)
-                                        .fillMaxWidth(),
+                                    modifier = Modifier.padding(16.dp).fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
@@ -118,24 +114,19 @@ class PhoneSyncMainFragment : Fragment() {
                                 }
                             }
 
-                            // 🛠️ 核心优化 2：拆分旧版权限卡片，改为一行放两个权限卡片，平分宽度且等高
+                            // 2. 双权限卡片并排
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                // 權限卡片 A：通知接管
                                 Card(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(125.dp),
+                                    modifier = Modifier.weight(1f).height(125.dp),
                                     shape = RoundedCornerShape(16.dp),
                                     colors = CardDefaults.cardColors(containerColor = cardBgColor),
                                     border = if (!isDark) BorderStroke(1.dp, dividerColor) else null
                                 ) {
                                     Column(
-                                        modifier = Modifier
-                                            .padding(12.dp)
-                                            .fillMaxSize(),
+                                        modifier = Modifier.padding(12.dp).fillMaxSize(),
                                         verticalArrangement = Arrangement.SpaceBetween
                                     ) {
                                         Column {
@@ -152,9 +143,7 @@ class PhoneSyncMainFragment : Fragment() {
                                             Button(
                                                 onClick = { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) },
                                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                                modifier = Modifier
-                                                    .align(Alignment.End)
-                                                    .height(28.dp)
+                                                modifier = Modifier.align(Alignment.End).height(28.dp)
                                             ) {
                                                 Text("去授权", fontSize = 11.sp)
                                             }
@@ -164,19 +153,14 @@ class PhoneSyncMainFragment : Fragment() {
                                     }
                                 }
 
-                                // 權限卡片 B：相機硬件
                                 Card(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(125.dp),
+                                    modifier = Modifier.weight(1f).height(125.dp),
                                     shape = RoundedCornerShape(16.dp),
                                     colors = CardDefaults.cardColors(containerColor = cardBgColor),
                                     border = if (!isDark) BorderStroke(1.dp, dividerColor) else null
                                 ) {
                                     Column(
-                                        modifier = Modifier
-                                            .padding(12.dp)
-                                            .fillMaxSize(),
+                                        modifier = Modifier.padding(12.dp).fillMaxSize(),
                                         verticalArrangement = Arrangement.SpaceBetween
                                     ) {
                                         Column {
@@ -193,9 +177,7 @@ class PhoneSyncMainFragment : Fragment() {
                                             Button(
                                                 onClick = { requestCameraPermissionLauncher.launch(android.Manifest.permission.CAMERA) },
                                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                                modifier = Modifier
-                                                    .align(Alignment.End)
-                                                    .height(28.dp)
+                                                modifier = Modifier.align(Alignment.End).height(28.dp)
                                             ) {
                                                 Text("授相机", fontSize = 11.sp)
                                             }
@@ -206,9 +188,8 @@ class PhoneSyncMainFragment : Fragment() {
                                 }
                             }
 
-                            // 2. 勿擾控制台（總開關 + 3子開關：震動、睡眠、省電）
+                            // 3. 勿扰联动控制台
                             var mask by remember { mutableStateOf(sp.getInt("dnd_sync_mask", 15)) }
-
                             var masterOn by remember(mask) { mutableStateOf((mask and 1) != 0) }
                             var vibrateOn by remember(mask) { mutableStateOf((mask and 2) != 0) }
                             var sleepOn by remember(mask) { mutableStateOf((mask and 4) != 0) }
@@ -223,7 +204,6 @@ class PhoneSyncMainFragment : Fragment() {
 
                                 mask = newMask
                                 sp.edit().putInt("dnd_sync_mask", newMask).apply()
-
                                 requireContext().sendBroadcast(Intent("de.rhaeus.wearsync.ACTION_MASK_CHANGED"))
 
                                 Thread {
@@ -257,16 +237,8 @@ class PhoneSyncMainFragment : Fragment() {
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text("勿扰联动总干线", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = textColor)
-                                        }
-                                        Switch(
-                                            checked = masterOn,
-                                            onCheckedChange = {
-                                                masterOn = it
-                                                updateMask(it, vibrateOn, sleepOn, powerOn)
-                                            }
-                                        )
+                                        Text("勿扰联动总干线", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = textColor)
+                                        Switch(checked = masterOn, onCheckedChange = { masterOn = it; updateMask(it, vibrateOn, sleepOn, powerOn) })
                                     }
 
                                     AnimatedVisibility(visible = masterOn) {
@@ -275,7 +247,6 @@ class PhoneSyncMainFragment : Fragment() {
                                             verticalArrangement = Arrangement.spacedBy(14.dp)
                                         ) {
                                             HorizontalDivider(color = dividerColor)
-
                                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                                 Text("手表端震动反馈", color = textColor)
                                                 Switch(checked = vibrateOn, onCheckedChange = { vibrateOn = it; updateMask(masterOn, it, sleepOn, powerOn) })
@@ -293,7 +264,7 @@ class PhoneSyncMainFragment : Fragment() {
                                 }
                             }
 
-                            // 3. 鬧鐘全域代點控制台
+                            // 4. 闹钟全域代点
                             var customAlarmPkg by remember { mutableStateOf(sp.getString("custom_alarm_package", "com.google.android.deskclock") ?: "") }
 
                             Card(
@@ -320,7 +291,7 @@ class PhoneSyncMainFragment : Fragment() {
                                         )
                                     )
 
-Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         Button(
                                             modifier = Modifier.weight(1f),
                                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
@@ -346,7 +317,7 @@ Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spac
                                 }
                             }
 
-                            // 4. 遠程相機控場中心
+                            // 5. 远程相机控场中心
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(16.dp),
@@ -364,7 +335,7 @@ Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spac
                                                     requestCameraPermissionLauncher.launch(android.Manifest.permission.CAMERA)
                                                 } else {
                                                     PhoneLog.d("WearSync_Main", "🚀 [手动控场] 激活手机相机采集管道")
-                                                    requireContext().startService(Intent(requireContext(), PhoneSyncCameraService::class.java).setAction("de.rhaeus.wearsync.ACTION_START_CAMERA"))
+                                                    requireContext().startService(Intent(requireContext(), PhoneSyncCameraService::class.java).setAction(PhoneSyncCameraService.ACTION_START_CAMERA))
                                                 }
                                             }
                                         ) {
@@ -375,15 +346,18 @@ Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spac
                                             modifier = Modifier.weight(1f),
                                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7F1D1D)),
                                             onClick = {
-                                                PhoneLog.d("WearSync_Main", "🧹 [手动控场] 拦截手机端相机服务并发送下线信令")
+                                                PhoneLog.d("WearSync_Main", "🧹 [手动控场] 拦截手机端相机 service 并发送下线信令")
                                                 requireContext().stopService(Intent(requireContext(), PhoneSyncCameraService::class.java))
 
                                                 Thread {
                                                     try {
                                                         val json = JSONObject()
-                                                        json.put("sender", "phone")
-                                                        json.put("type", "kill_wear_camera")
-                                                        json.put("timestamp", System.currentTimeMillis())
+                                            // 在 PhoneSyncMainFragment.kt 中，將強制關閉按鈕的 JSON 替換為：
+            json.put("sender", "phone")
+            json.put("type", "camera_control") // 👈 對齊手錶端
+            json.put("action", "FORCE_QUIT_CAMERA") // 👈 對齊手錶端
+            json.put("timestamp", System.currentTimeMillis())
+
                                                         val data = json.toString().toByteArray(StandardCharsets.UTF_8)
                                                         val nodeId = WearSyncState.getNodeId(requireContext())
                                                         if (!nodeId.isNullOrEmpty()) {
@@ -399,7 +373,7 @@ Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spac
                                 }
                             }
 
-                            // 5. 開發者調試日誌體系 (手機)
+                            // 6. 调试日志(手机)
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(16.dp),
@@ -426,7 +400,7 @@ Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spac
                                 }
                             }
 
-                            // 6. 開發者調試日誌體系 (手錶)
+                            // 7. 调试日志(手表)
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(16.dp),
@@ -475,7 +449,7 @@ Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spac
             }
         }
     }
-  override fun onResume() {
+        override fun onResume() {
         super.onResume()
         checkNotificationPermission()
         isCameraAllowedState.value = requireContext().checkSelfPermission(android.Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED

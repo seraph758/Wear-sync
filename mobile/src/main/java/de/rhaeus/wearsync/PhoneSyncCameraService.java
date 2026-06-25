@@ -22,6 +22,7 @@ import androidx.core.content.ContextCompat;
 import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.LifecycleOwner;
 import androidx.lifecycle.LifecycleRegistry;
+import com.google.common.util.concurrent.ListenableFuture;
 import com.google.android.gms.tasks.Tasks;
 import com.google.android.gms.wearable.ChannelClient;
 import com.google.android.gms.wearable.Node;
@@ -51,6 +52,7 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
     private OutputStream mOutputStream;
     private boolean isPipelineReady = false;
     private OrientationEventListener mOrientationListener;
+    private Surface mInputSurface;
     
     // 🎛️ 类成员变量：用以动态通知 CameraX 修正输出画幅方向
     private Preview mPreviewUseCase;
@@ -112,7 +114,7 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
 
             mEncoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);
             mEncoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
-            Surface inputSurface = mEncoder.createInputSurface();
+            mInputSurface = mEncoder.createInputSurface();
 
             mEncoder.setCallback(new MediaCodec.Callback() {
                 @Override
@@ -135,7 +137,7 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
                         }
                     } catch (Exception e) {
                         PhoneLog.e(TAG, "⚠️ 帧流灌入高速传输网关遭遇短暂拥堵: " + e.getMessage());
-                    } finally {
+                    } finaly {
                         try { codec.releaseOutputBuffer(index, false); } catch (Exception ignored) {}
                     }
                 }
@@ -152,26 +154,36 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
             mEncoder.start();
             PhoneLog.d(TAG, "🚀 H.264 硬件视频编码器点火成功！开始绑定 CameraX 空间投影...");
 
-            ProcessCameraProvider cameraProvider = Tasks.await(ProcessCameraProvider.getInstance(this));
-            
-            // 🎯 将实例赋值给全局成员变量，以便 Orientation 监听器动态修改输出旋转角
-            mPreviewUseCase = new Preview.Builder().build();
-            mPreviewUseCase.setSurfaceProvider(ContextCompat.getMainExecutor(this), surfaceRequest -> {
-                surfaceRequest.provideSurface(inputSurface, ContextCompat.getMainExecutor(this), result -> {
-                    PhoneLog.d(TAG, "🖥️ CameraX 图像承载 Surface 握手交接完毕。");
-                });
-            });
+            // 🛠️ 核心修复：改用符合标准的异步机制获取 CameraProvider，销毁 Tasks.await() 编译死穴
+            final ListenableFuture<ProcessCameraProvider> cameraProviderFuture = ProcessCameraProvider.getInstance(this);
+            cameraProviderFuture.addListener(() -> {
+                try {
+                    ProcessCameraProvider cameraProvider = cameraProviderFuture.get();
+                    
+                    // 🎯 将实例赋值给全局成员变量，以便 Orientation 监听器动态修改输出旋转角
+                    mPreviewUseCase = new Preview.Builder().build();
+                    mPreviewUseCase.setSurfaceProvider(ContextCompat.getMainExecutor(PhoneSyncCameraService.this), surfaceRequest -> {
+                        if (mInputSurface != null) {
+                            surfaceRequest.provideSurface(mInputSurface, ContextCompat.getMainExecutor(PhoneSyncCameraService.this), result -> {
+                                PhoneLog.d(TAG, "🖥️ CameraX 图像承载 Surface 握手交接完毕。");
+                            });
+                        }
+                    });
 
-            // 获取当前手机屏幕的默认物理方向赋予初始值
-            WindowManager wm = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
-            if (wm != null) {
-                mPreviewUseCase.setTargetRotation(wm.getDefaultDisplay().getRotation());
-            }
+                    // 获取当前手机屏幕的默认物理方向赋予初始值
+                    WindowManager wm = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
+                    if (wm != null) {
+                        mPreviewUseCase.setTargetRotation(wm.getDefaultDisplay().getRotation());
+                    }
 
-            CameraSelector cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA;
-            cameraProvider.unbindAll();
-            cameraProvider.bindToLifecycle(this, cameraSelector, mPreviewUseCase);
-            PhoneLog.d(TAG, "✨ CameraX 核心用例已成功绑定至前台服务上下文。");
+                    CameraSelector cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA;
+                    cameraProvider.unbindAll();
+                    cameraProvider.bindToLifecycle(PhoneSyncCameraService.this, cameraSelector, mPreviewUseCase);
+                    PhoneLog.d(TAG, "✨ CameraX 核心用例已成功绑定至前台服务上下文。");
+                } catch (Exception e) {
+                    PhoneLog.e(TAG, "🔴 异步绑定 CameraX 失败: " + e.getMessage(), e);
+                }
+            }, ContextCompat.getMainExecutor(this));
 
         } catch (Exception e) {
             PhoneLog.e(TAG, "🔴 [致命] 相机流核心硬编码管线构建遭遇崩溃: " + e.getMessage(), e);
@@ -224,16 +236,13 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
                         mPreviewUseCase.setTargetRotation(rotation);
                     } catch (Exception ignored) {}
                 }
-                
-                // 💡 注意：此处已经彻底删除了 sendControlMessageToWatch("ROTATION_CHANGED") 指令。
-                // 手表不会收到任何旋转干扰，从而实现“手机转、画面转、手表无脑平铺显示”的最佳图传体验。
             }
         };
         mOrientationListener.enable();
     }
 
     private void releaseCameraAndPipeline() {
-        PhoneLog.w(TAG, "🧹 正在执行系统熔断保护：回收并关闭手机相机及硬解管线资源...");
+        PhoneLog.w(TAG, "🧹 正在执行 system 熔断保护：回收并关闭手机相机及硬解管线资源...");
         isPipelineReady = false;
         if (mOrientationListener != null) {
             mOrientationListener.disable();
@@ -252,11 +261,22 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
             } catch (Exception ignored) {}
             mOutputStream = null;
         }
+        if (mInputSurface != null) {
+            mInputSurface.release();
+            mInputSurface = null;
+        }
+        
+        // 🛠️ 核心修复：解绑 CameraX 同样移出 Tasks.await()，改用标准非异步主线程清理机制
         try {
-            ProcessCameraProvider cameraProvider = Tasks.await(ProcessCameraProvider.getInstance(this));
-            cameraProvider.unbindAll();
+            final ListenableFuture<ProcessCameraProvider> cameraProviderFuture = ProcessCameraProvider.getInstance(this);
+            cameraProviderFuture.addListener(() -> {
+                try {
+                    ProcessCameraProvider cameraProvider = cameraProviderFuture.get();
+                    cameraProvider.unbindAll();
+                    PhoneLog.d(TAG, "🧹 硬件流媒体所有底层依赖彻底降落安全释放。");
+                } catch (Exception ignored) {}
+            }, ContextCompat.getMainExecutor(this));
         } catch (Exception ignored) {}
-        PhoneLog.d(TAG, "🧹 硬件流媒体所有底层依赖彻底降落安全释放。");
     }
 
     @Nullable
