@@ -68,15 +68,6 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
         WearLog.d(TAG, "🎬 onCreate: 手表观景窗 Activity 完成初始化准备");
     }
 
-    public void adjustRotation(int degrees) {
-        runOnUiThread(() -> {
-            if (surfaceView != null) {
-                WearLog.d(TAG, "📐 收到手机端传感重力方向 ➔ 正在渲染动态旋转: " + degrees + "度");
-                surfaceView.setRotation(degrees);
-            }
-        });
-    }
-
     @Override
     public void surfaceCreated(SurfaceHolder holder) {
         WearLog.d(TAG, "🖥️ Surface 硬件载体已成功构建，准备初始化 H264 视频解码器...");
