@@ -17,7 +17,8 @@ public class PhoneAlarmManager {
      */
     public static void notifyWatchAlarmRinging(Context context, String label, String time) {
         PhoneLog.d(TAG, "🔔 [闹钟触发源] 接收到哨兵指令：手机闹钟正在狂轰乱炸 ➔ 标签: [" + label + "], 时间: [" + time + "]");
-        sendAlarmSignalToWatch(context, "START_ALARM_UI", label, time);
+        // 🎯 优化：从源头直接改用全新、对齐手表的暗号 "START_WEAR_ALARM"，彻底抛弃老旧中间名
+        sendAlarmSignalToWatch(context, "START_WEAR_ALARM", label, time);
     }
 
     /**
@@ -68,14 +69,10 @@ public class PhoneAlarmManager {
                 json.put("sender", "phone");
                 json.put("type", "alarm");
                 
-                // 🔥 🔥 🔥 冲突 1 修复：将手機的 START_ALARM_UI 对齐转换为手表的 START_WEAR_ALARM
-                String finalizedAction = actionStr;
-                if ("START_ALARM_UI".equalsIgnoreCase(actionStr)) {
-                    finalizedAction = "START_WEAR_ALARM";
-                }
-                json.put("action", finalizedAction);
+                // 🎯 彻底洗净：因为源头暗号已经完全对齐，不再需要任何繁琐的 if-else 转换逻辑，直接注入！
+                json.put("action", actionStr);
                 
-                // 🔥 🔥 🔥 冲突 2 修复：严格对齐手表接收端的三个 key ("time", "label", "day_tips")
+                // 严格对齐手表接收端的三个 key ("time", "label", "day_tips")
                 json.put("label", (label == null || label.isEmpty()) ? "闹钟" : label);
                 json.put("time", (time == null) ? "00:00" : time);
                 json.put("day_tips", ""); // 如果手机端有周几的提示可以填入，暂时填空确保不崩溃
@@ -83,11 +80,11 @@ public class PhoneAlarmManager {
 
                 byte[] data = json.toString().getBytes(StandardCharsets.UTF_8);
 
-                // 🔥 🔥 🔥 融合想法：优先从 WearSyncState 缓存中拿 NodeId，速度极快
+                // 优先从 WearSyncState 缓存中拿 NodeId，速度极快
                 String targetNodeId = WearSyncState.getNodeId(context);
 
                 if (targetNodeId != null && !targetNodeId.isEmpty()) {
-                    PhoneLog.d(TAG, "⚡ [闹钟发信] 命中 WearSyncState 缓存: " + targetNodeId + "，正在以对齐新协议秒发射 [" + finalizedAction + "]...");
+                    PhoneLog.d(TAG, "⚡ [闹钟发信] 命中 WearSyncState 缓存: " + targetNodeId + "，正在以纯净新协议秒发射 [" + actionStr + "]...");
                     Tasks.await(Wearable.getMessageClient(context).sendMessage(targetNodeId, "/wear-universal-sync", data));
                     PhoneLog.d(TAG, "🚀 [闹钟发信成功] 闹钟信号已安全投递到缓存通道。");
                 } else {
@@ -112,5 +109,4 @@ public class PhoneAlarmManager {
             }
         }).start();
     }
-
 }
