@@ -9,14 +9,13 @@ import android.os.PowerManager;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.provider.Settings;
-import android.util.Log;
 import android.widget.Toast;
 import org.json.JSONObject;
 
 /**
- * 🌓 手錶端勿擾、掩碼解讀與自動化聯控核心管理器 (重構解耦版)
+ * 🌓 手錶端勿擾、掩碼解讀與無障礙自動化聯控核心管理器
  */
-public class WearDndManager {
+public class WearSyncDndManager {
     private static final String TAG = "WearSync_WearDnd";
 
     /**
@@ -29,7 +28,7 @@ public class WearDndManager {
         int statusMask = json.optInt("status_mask", json.optInt("mask_value", -1));
         if (statusMask == -1) return;
 
-        Log.d(TAG, "📥 [手錶端勿擾解析] 收到手機權威 Mask: " + statusMask);
+        WearLog.d(TAG, "📥 [手錶端勿擾解析] 收到手機權威 Mask: " + statusMask);
 
         // 🎯 核心防護：直接把鎖下在發信人身上，絕殺雙向死循環大風暴！
         WearSyncNotificationService.isInternalUpdate = true;
@@ -50,7 +49,7 @@ public class WearDndManager {
             if (targetDndEnabled != isWatchDndOn) {
                 mNotificationManager.setInterruptionFilter(targetDndEnabled ? 3 : 1); // 3: INTERRUPTION_FILTER_PRIORITY, 1: INTERRUPTION_FILTER_ALL
                 hasDndChanged = true;
-                Log.i(TAG, "🌗 [勿擾同步] 手錶本地勿擾已變更為: " + targetDndEnabled);
+                WearLog.i(TAG, "🌗 [勿擾同步] 手錶本地勿擾已變更為: " + targetDndEnabled);
             }
         }
 
@@ -58,7 +57,7 @@ public class WearDndManager {
         if (isVibrateSwitchOn) {
             vibrate(context);
         } else {
-            Log.w(TAG, "🔇 [勿擾震動子開關=關閉] 攔截並封鎖震動。");
+            WearLog.w(TAG, "🔇 [勿擾震動子開關=關閉] 攔截並封鎖震動。");
         }
 
         // 3. 睡眠模式（就寢模式）自動化聯動
@@ -70,13 +69,13 @@ public class WearDndManager {
         if (isPowerSaveLinkageOpen) {
             Settings.Global.putInt(context.getContentResolver(), "low_power", targetDndEnabled ? 1 : 0);
             context.sendBroadcast(new Intent(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED));
-            Log.d(TAG, "🔋 [省電聯動] 已同步手錶本地省電狀態為: " + (targetDndEnabled ? "開啟" : "關閉"));
+            WearLog.d(TAG, "🔋 [省電聯動] 已同步手錶本地省電狀態為: " + (targetDndEnabled ? "開啟" : "關閉"));
         }
 
         // 5. 延遲解鎖，給手錶系統廣播徹底消散留出反應時間
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
             WearSyncNotificationService.isInternalUpdate = false;
-            Log.d(TAG, "🔓 [解鎖] 手錶防回傳死循環鎖已安全釋放。");
+            WearLog.d(TAG, "🔓 [解鎖] 手錶防回傳死循環鎖已安全釋放。");
         }, 1500);
     }
 
@@ -111,14 +110,14 @@ public class WearDndManager {
                 serv.clickIcon1_2();   // 點擊對應格子（就寢模式開關）
                 Thread.sleep(1000);
                 serv.goBack();         // 返回，關閉面板
-                Log.d(TAG, "✨ [無障礙聯動] 就寢模式（睡眠模式）自動化模擬腳本執行完畢。");
+                WearLog.d(TAG, "✨ [無障礙聯動] 就寢模式（睡眠模式）自動化模擬腳本執行完畢。");
             } catch (Exception e) {
-                Log.e(TAG, "❌ 無障礙操作中途被系統熔斷或中斷", e);
+                WearLog.e(TAG, "❌ 無障礙操作中途被系統熔斷或中斷", e);
             } finally {
-                // 🎯 雙 'l' 的 finally 區塊：強制釋放 Wakelock，防止手錶燒電
+                // 🎯 雙 'l' 的 finally 修正檢驗：強制釋放 Wakelock，防止手錶燒電長亮
                 if (wakeLock.isHeld()) {
                     wakeLock.release();
-                    Log.d(TAG, "🔒 Wakelock 釋放成功，手錶螢幕重回休眠機制。");
+                    WearLog.d(TAG, "🔒 Wakelock 釋放成功，手錶螢幕重回休眠機制。");
                 }
             }
         }).start();
