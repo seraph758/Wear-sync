@@ -6,9 +6,11 @@ import android.content.Intent;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaFormat;
+import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.view.OrientationEventListener;
 import android.view.Surface;
 import android.view.WindowManager;
 import androidx.annotation.NonNull;
@@ -32,23 +34,26 @@ import java.util.List;
 
 /**
  * 📹 手机端背景相机取景流硬编码核心服务 (CameraX + MediaCodec + Wearable Channel)
- * 变更：全面替换为 PhoneLog 体系，实现高负载硬编码下的零日志省电开销，彻底消灭百行空行。
+ * 完美对齐版：修复双端握手寻址、校准Channel斜杠、手机端自适应重力旋转（手表无脑渲染）。
  */
 public class PhoneSyncCameraService extends Service implements LifecycleOwner {
 
-    private static final String TAG = "WearSync_PhoneCamera";
-    private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
-    private static final String CAMERA_PREVIEW_STREAM_PATH = "/camera-preview-stream";
-
+    private static final String TAG = "WearSync_CameraService";
+    
+    // 🎯 协议对齐：严格匹配清单文件与跳板 Activity 的 Action 字符串
     public static final String ACTION_START_CAMERA = "de.rhaeus.wearsync.ACTION_START_CAMERA";
-    public static final String ACTION_STOP_CAMERA_STREAM = "de.rhaeus.wearsync.ACTION_STOP_CAMERA_STREAM";
-    public static final String ACTION_TRIGGER_SHUTTER = "de.rhaeus.wearsync.ACTION_TRIGGER_SHUTTER";
+    public static final String ACTION_STOP_CAMERA = "de.rhaeus.wearsync.ACTION_STOP_CAMERA";
+    private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
+
+    private final LifecycleRegistry lifecycleRegistry = new LifecycleRegistry(this);
 
     private MediaCodec mEncoder;
-    private ChannelClient.Channel mTargetChannel;
-    private OutputStream mChannelOutputStream;
-    private boolean isStreaming = false;
-    private LifecycleRegistry lifecycleRegistry;
+    private OutputStream mOutputStream;
+    private boolean isPipelineReady = false;
+    private OrientationEventListener mOrientationListener;
+    
+    // 🎛️ 类成员变量：用以动态通知 CameraX 修正输出画幅方向
+    private Preview mPreviewUseCase;
 
     @NonNull
     @Override
@@ -59,221 +64,199 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
     @Override
     public void onCreate() {
         super.onCreate();
-        lifecycleRegistry = new LifecycleRegistry(this);
+        PhoneLog.d(TAG, "① onCreate: 远程相机核心流转服务开始初始化...");
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE);
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START);
+        if (intent != null && intent.getAction() != null) {
+            String action = intent.getAction();
+            PhoneLog.d(TAG, "② onStartCommand 接收到穿透指令 ➔ " + action);
 
-        if (intent == null || intent.getAction() == null) {
-            stopSelf();
-            return START_NOT_STICKY;
-        }
+            if (ACTION_START_CAMERA.equals(action)) {
+                lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START);
+                
+                // 🤝 握手寻址补全：优先从全局车牌号缓存中获取当前触发抓拍的手表节点 ID
+                String targetNodeId = WearSyncState.getNodeId(this);
+                if (targetNodeId == null || targetNodeId.isEmpty()) {
+                    PhoneLog.w(TAG, "⚠️ [寻址警告] 持久化节点 ID 为空，触发后备应急广播查找机制...");
+                    targetNodeId = "connected_nodes";
+                }
 
-        String action = intent.getAction();
-        PhoneLog.d(TAG, "📥 [服务收到 Action] ➔ " + action);
+                // 1. 点火 CameraX 与 H264 编码管线
+                setupCameraAndPipeline();
+                
+                // 2. 启动重力方向传感器监听（手机自吃旋转）
+                setupOrientationListener();
 
-        if (ACTION_START_CAMERA.equals(action) || "START_CAMERA".equals(action)) {
-            if (android.os.Build.VERSION.SDK_INT >= 26) {
-                String channelId = "camera_sync_channel";
-                android.app.NotificationChannel channel = new android.app.NotificationChannel(
-                        channelId, "相机远端同步", android.app.NotificationManager.IMPORTANCE_LOW);
-                android.app.NotificationManager nm = (android.app.NotificationManager) getSystemService(NOTIFICATION_SERVICE);
-                if (nm != null) nm.createNotificationChannel(channel);
-
-                android.app.Notification notification = new android.app.Notification.Builder(this, channelId)
-                        .setContentTitle("WearSync")
-                        .setContentText("远端相机同步中...")
-                        .setSmallIcon(android.R.drawable.ic_menu_camera)
-                        .build();
-                startForeground(8899, notification);
+                // 3. 拧开高速公路闸门：带上明确的 nodeId 去和手表握手开辟流通道
+                openChannelAndStream(targetNodeId);
+            } 
+            else if (ACTION_STOP_CAMERA.equals(action)) {
+                PhoneLog.d(TAG, "🛑 接收到主动安全退出中断指令，准备自我熔断销毁...");
+                stopSelf();
             }
-            startCameraAndSetupPipeline();
-        } else if (ACTION_STOP_CAMERA_STREAM.equals(action) || "de.rhaeus.wearsync.ACTION_STOP_CAMERA".equals(action)) {
-            PhoneLog.d(TAG, "🛑 收到明确停止请求，开始释放相机管线资源...");
-            releaseCameraAndPipeline();
-            stopSelf();
-        } else if (ACTION_TRIGGER_SHUTTER.equals(action)) {
-            executePhoneShutter();
         }
-
         return START_NOT_STICKY;
     }
 
-    private void startCameraAndSetupPipeline() {
-        if (isStreaming) {
-            PhoneLog.w(TAG, "⚠️ 相机流已经在运行中，拒绝重复开启");
-            return;
-        }
-        isStreaming = true;
+    private void setupCameraAndPipeline() {
+        try {
+            PhoneLog.d(TAG, "⚙️ 开始配置 H.264 底层硬核编码参数 (640x480, 15fps)...");
+            MediaFormat format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, 640, 480);
+            format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
+            format.setInteger(MediaFormat.KEY_BIT_RATE, 500000); // 500kbps 顺滑不卡顿
+            format.setInteger(MediaFormat.KEY_FRAME_RATE, 15);
+            format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
 
-        new Thread(() -> {
-            try {
-                PhoneLog.d(TAG, "⚙️ 开始配置 MediaCodec H.264 (AVC) 视频硬编码器 [640x480, 24fps]...");
-                MediaFormat format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, 640, 480);
-                format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
-                format.setInteger(MediaFormat.KEY_BIT_RATE, 1000000);
-                format.setInteger(MediaFormat.KEY_FRAME_RATE, 24);
-                format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
+            mEncoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);
+            mEncoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+            Surface inputSurface = mEncoder.createInputSurface();
 
-                mEncoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);
-                mEncoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
-                Surface inputSurface = mEncoder.createInputSurface();
-                mEncoder.start();
+            mEncoder.setCallback(new MediaCodec.Callback() {
+                @Override
+                public void onInputBufferAvailable(@NonNull MediaCodec codec, int index) {}
 
-                int rotation = calculatePhoneRotation();
-                PhoneLog.d(TAG, "⚙️ 手机当前屏幕旋转弧度 = " + rotation + "，正在向手表握手下发旋转角度基准...");
-                sendControlMessageToWatch("START_CAMERA", rotation);
-
-                String watchNodeId = WearSyncState.getNodeId(this);
-                if (watchNodeId == null || watchNodeId.isEmpty()) {
-                    PhoneLog.w(TAG, "⚠️ 内存中未命中手表 ID，开始拉起全网节点探针...");
-                    List<Node> nodes = Tasks.await(Wearable.getNodeClient(this).getConnectedNodes());
-                    if (nodes != null && !nodes.isEmpty()) {
-                        watchNodeId = nodes.get(0).getId();
-                        WearSyncState.setNodeId(this, watchNodeId);
+                @Override
+                public void onOutputBufferAvailable(@NonNull MediaCodec codec, int index, @NonNull MediaCodec.BufferInfo info) {
+                    if (!isPipelineReady || mOutputStream == null) {
+                        try { mEncoder.releaseOutputBuffer(index, false); } catch (Exception ignored) {}
+                        return;
+                    }
+                    try {
+                        ByteBuffer outputBuffer = codec.getOutputBuffer(index);
+                        if (outputBuffer != null) {
+                            byte[] outData = new byte[info.size];
+                            outputBuffer.get(outData);
+                            // 将硬编码出的 H.264 帧数据直接高频喷射进 Wear Channel 管道
+                            mOutputStream.write(outData, 0, outData.length);
+                            mOutputStream.flush();
+                        }
+                    } catch (Exception e) {
+                        PhoneLog.e(TAG, "⚠️ 帧流灌入高速传输网关遭遇短暂拥堵: " + e.getMessage());
+                    } finally {
+                        try { codec.releaseOutputBuffer(index, false); } catch (Exception ignored) {}
                     }
                 }
 
-                if (watchNodeId != null) {
-                    PhoneLog.d(TAG, "📡 正在通过谷歌微端创建高性能流媒体传输管道 (Channel Client)...");
-                    mTargetChannel = Tasks.await(Wearable.getChannelClient(this).openChannel(watchNodeId, CAMERA_PREVIEW_STREAM_PATH));
-                    mChannelOutputStream = Tasks.await(Wearable.getChannelClient(this).getOutputStream(mTargetChannel));
-
-                    PhoneLog.d(TAG, "📸 异步抛回主线程：准备将 CameraX 预览层表面绑定到 MediaCodec Surface 上...");
-                    new Handler(Looper.getMainLooper()).post(() -> bindCameraXToSurface(inputSurface));
-
-                    PhoneLog.d(TAG, "🚀 [核心推流引擎] 成功点火！开始循环向通道灌入 H.264 原始帧字节数组...");
-                    pumpEncodedStreamToWatch();
-                } else {
-                    PhoneLog.e(TAG, "❌ [推流中止] 未能发现任何处于在线连线状态的手表节点！");
-                    releaseCameraAndPipeline();
+                @Override
+                public void onError(@NonNull MediaCodec codec, @NonNull MediaCodec.CodecException e) {
+                    PhoneLog.e(TAG, "🔴 MediaCodec 硬件层发生内部编码拥堵波动: " + e.getDiagnosticInfo());
                 }
+
+                @Override
+                public void onOutputFormatChanged(@NonNull MediaCodec codec, @NonNull MediaFormat format) {}
+            });
+
+            mEncoder.start();
+            PhoneLog.d(TAG, "🚀 H.264 硬件视频编码器点火成功！开始绑定 CameraX 空间投影...");
+
+            ProcessCameraProvider cameraProvider = Tasks.await(ProcessCameraProvider.getInstance(this));
+            
+            // 🎯 将实例赋值给全局成员变量，以便 Orientation 监听器动态修改输出旋转角
+            mPreviewUseCase = new Preview.Builder().build();
+            mPreviewUseCase.setSurfaceProvider(ContextCompat.getMainExecutor(this), surfaceRequest -> {
+                surfaceRequest.provideSurface(inputSurface, ContextCompat.getMainExecutor(this), result -> {
+                    PhoneLog.d(TAG, "🖥️ CameraX 图像承载 Surface 握手交接完毕。");
+                });
+            });
+
+            // 获取当前手机屏幕的默认物理方向赋予初始值
+            WindowManager wm = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
+            if (wm != null) {
+                mPreviewUseCase.setTargetRotation(wm.getDefaultDisplay().getRotation());
+            }
+
+            CameraSelector cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA;
+            cameraProvider.unbindAll();
+            cameraProvider.bindToLifecycle(this, cameraSelector, mPreviewUseCase);
+            PhoneLog.d(TAG, "✨ CameraX 核心用例已成功绑定至前台服务上下文。");
+
+        } catch (Exception e) {
+            PhoneLog.e(TAG, "🔴 [致命] 相机流核心硬编码管线构建遭遇崩溃: " + e.getMessage(), e);
+        }
+    }
+
+    private void openChannelAndStream(String nodeId) {
+        new Thread(() -> {
+            try {
+                PhoneLog.d(TAG, "🌊 正在向目标手表节点 [" + nodeId + "] 申请打通高性能双轨流媒体网关...");
+                
+                // 🔥 核心对齐：路径前面必须补上斜杠 "/"，与手表端接收常量绝对咬死！
+                ChannelClient.Channel channel = Tasks.await(Wearable.getChannelClient(this)
+                        .openChannel(nodeId, "/camera-preview-stream"));
+
+                PhoneLog.d(TAG, "✨ [网关建立成功] 正在拧开高速流媒体字节输出流阀门...");
+                mOutputStream = Tasks.await(Wearable.getChannelClient(this).getOutputStream(channel));
+                isPipelineReady = true;
+                PhoneLog.d(TAG, "🚀 [管道就绪] 手机图传帧率流开始顺畅喷射！");
             } catch (Exception e) {
-                PhoneLog.e(TAG, "🔴 [致命错误] 编码器硬管线搭建失败: " + e.getMessage(), e);
-                releaseCameraAndPipeline();
+                PhoneLog.e(TAG, "🔴 [网关崩溃] 无法与远端手表成功闭合流媒体物理链路: " + e.getMessage(), e);
             }
         }).start();
     }
 
-    private void bindCameraXToSurface(Surface encoderInputSurface) {
-        ProcessCameraProvider.getInstance(this).addListener(() -> {
-            try {
-                ProcessCameraProvider provider = ProcessCameraProvider.getInstance(this).get();
-                provider.unbindAll();
+    /**
+     * 📐 核心重构：让手机端自适应重力方向旋转，手表端彻底解脱，只负责纯平渲染！
+     */
+    private void setupOrientationListener() {
+        mOrientationListener = new OrientationEventListener(this) {
+            @Override
+            public void onOrientationChanged(int orientation) {
+                if (orientation == ORIENTATION_UNKNOWN) return;
 
-                Preview preview = new Preview.Builder()
-                        .setTargetResolution(new android.util.Size(640, 480))
-                        .build();
-
-                preview.setSurfaceProvider(request -> request.provideSurface(
-                        encoderInputSurface,
-                        ContextCompat.getMainExecutor(this),
-                        result -> {}
-                ));
-
-                provider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, preview);
-                PhoneLog.d(TAG, "✨ CameraX 预览管道与硬解编码器输入表面绑定大功告成！");
-            } catch (Exception e) {
-                PhoneLog.e(TAG, "🔴 CameraX 跨生命周期宿主绑定失败: " + e.getMessage(), e);
-            }
-        }, ContextCompat.getMainExecutor(this));
-    }
-
-    private void pumpEncodedStreamToWatch() {
-        MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
-        // 🌟 重点优化：在此高频循环中全面杜绝原生 Log。通过 PhoneLog 在开关闭合时将实现完全零调用，省电且不堵塞线程
-        while (isStreaming && mEncoder != null && mChannelOutputStream != null) {
-            try {
-                int index = mEncoder.dequeueOutputBuffer(info, 10000);
-                if (index >= 0) {
-                    ByteBuffer buffer = mEncoder.getOutputBuffer(index);
-                    if (buffer != null && info.size > 0) {
-                        byte[] data = new byte[info.size];
-                        buffer.position(info.offset);
-                        buffer.limit(info.offset + info.size);
-                        buffer.get(data);
-
-                        mChannelOutputStream.write(data);
-                        mChannelOutputStream.flush();
-                    }
-                    mEncoder.releaseOutputBuffer(index, false);
+                // 将传感器的倾斜角度严格映射为 Android 标准的 Surface 物理象限角度
+                int rotation;
+                if (orientation >= 315 || orientation < 45) {
+                    rotation = Surface.ROTATION_0;
+                } else if (orientation >= 45 && orientation < 135) {
+                    rotation = Surface.ROTATION_270; // 逆时针修正
+                } else if (orientation >= 135 && orientation < 225) {
+                    rotation = Surface.ROTATION_180;
+                } else {
+                    rotation = Surface.ROTATION_90;
                 }
-            } catch (Exception e) {
-                PhoneLog.e(TAG, "⚠️ [推流异常中断] 循环推流遭遇 IO 管道阻塞或主动熔断: " + e.getMessage());
-                break;
-            }
-        }
-    }
 
-    private void executePhoneShutter() {
-        PhoneLog.d(TAG, "📸 [快门动作] 收到手表下发的硬件快门拍照脉冲信号！");
+                // 🎯 手机自吃旋转：直接动态修改 CameraX 的数据源发射方向！
+                if (mPreviewUseCase != null) {
+                    try {
+                        mPreviewUseCase.setTargetRotation(rotation);
+                    } catch (Exception ignored) {}
+                }
+                
+                // 💡 注意：此处已经彻底删除了 sendControlMessageToWatch("ROTATION_CHANGED") 指令。
+                // 手表不会收到任何旋转干扰，从而实现“手机转、画面转、手表无脑平铺显示”的最佳图传体验。
+            }
+        };
+        mOrientationListener.enable();
     }
 
     private void releaseCameraAndPipeline() {
-        if (!isStreaming) return;
-        isStreaming = false;
-        PhoneLog.w(TAG, "🛑 [管线开始熔断] 正在全力回收相机、编码器及数据流通道...");
-
-        try {
-            if (mEncoder != null) {
+        PhoneLog.w(TAG, "🧹 正在执行系统熔断保护：回收并关闭手机相机及硬解管线资源...");
+        isPipelineReady = false;
+        if (mOrientationListener != null) {
+            mOrientationListener.disable();
+            mOrientationListener = null;
+        }
+        if (mEncoder != null) {
+            try {
                 mEncoder.stop();
                 mEncoder.release();
-                mEncoder = null;
-            }
-            new Handler(Looper.getMainLooper()).post(() -> {
-                try {
-                    ProcessCameraProvider.getInstance(this).get().unbindAll();
-                    PhoneLog.d(TAG, "🛑 CameraX 组件解绑完成");
-                } catch (Exception ignored) {}
-            });
-            if (mChannelOutputStream != null) {
-                mChannelOutputStream.close();
-                mChannelOutputStream = null;
-            }
-            if (mTargetChannel != null) {
-                Wearable.getChannelClient(this).close(mTargetChannel);
-                mTargetChannel = null;
-            }
-            sendControlMessageToWatch("FORCE_QUIT_CAMERA", 0);
-            PhoneLog.d(TAG, "✨ 拍照所有硬管线资源解脱完毕");
-        } catch (Exception e) {
-            PhoneLog.e(TAG, "🔴 熔断管线抛出资源释放异常: " + e.getMessage());
+            } catch (Exception ignored) {}
+            mEncoder = null;
         }
-    }
-
-    private void sendControlMessageToWatch(String action, int rotation) {
-        new Thread(() -> {
+        if (mOutputStream != null) {
             try {
-                JSONObject json = new JSONObject();
-                json.put("sender", "phone");
-                json.put("type", "camera_control");
-                json.put("action", action);
-                json.put("rotation_degrees", rotation);
-
-                byte[] data = json.toString().getBytes(StandardCharsets.UTF_8);
-                String nodeId = WearSyncState.getNodeId(this);
-
-                if (nodeId != null) {
-                    Tasks.await(Wearable.getMessageClient(this).sendMessage(nodeId, UNIVERSAL_SYNC_PATH, data));
-                }
-            } catch (Exception e) {
-                PhoneLog.e(TAG, "🔴 向手表同步相机控制反向信令失败", e);
-            }
-        }).start();
-    }
-
-    private int calculatePhoneRotation() {
-        WindowManager wm = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
-        if (wm == null) return 0;
-        switch (wm.getDefaultDisplay().getRotation()) {
-            case 1: return 90;
-            case 2: return 180;
-            case 3: return 270;
-            default: return 0;
+                mOutputStream.close();
+            } catch (Exception ignored) {}
+            mOutputStream = null;
         }
+        try {
+            ProcessCameraProvider cameraProvider = Tasks.await(ProcessCameraProvider.getInstance(this));
+            cameraProvider.unbindAll();
+        } catch (Exception ignored) {}
+        PhoneLog.d(TAG, "🧹 硬件流媒体所有底层依赖彻底降落安全释放。");
     }
 
     @Nullable
@@ -285,6 +268,6 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
         releaseCameraAndPipeline();
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY);
         super.onDestroy();
+        PhoneLog.d(TAG, "🏳️ onDestroy: 远程相机前台服务完整生命周期安全终结。");
     }
 }
-

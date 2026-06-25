@@ -59,36 +59,56 @@ public class PhoneAlarmManager {
     }
 
     /**
-     * 🚀 内部发送核心
+     * 🛰️ 正向发射：严格对齐手表端真实接收协议的闹钟发射流
      */
-        private static void sendAlarmSignalToWatch(Context context, String actionStr, String label, String time) {
+    private static void sendAlarmSignalToWatch(Context context, String actionStr, String label, String time) {
         new Thread(() -> {
             try {
                 JSONObject json = new JSONObject();
                 json.put("sender", "phone");
                 json.put("type", "alarm");
-                json.put("action", actionStr);
-                json.put("title", (label == null || label.isEmpty()) ? "闹钟" : label);
-                json.put("content", (time == null) ? "" : time);
+                
+                // 🔥 🔥 🔥 冲突 1 修复：将手機的 START_ALARM_UI 对齐转换为手表的 START_WEAR_ALARM
+                String finalizedAction = actionStr;
+                if ("START_ALARM_UI".equalsIgnoreCase(actionStr)) {
+                    finalizedAction = "START_WEAR_ALARM";
+                }
+                json.put("action", finalizedAction);
+                
+                // 🔥 🔥 🔥 冲突 2 修复：严格对齐手表接收端的三个 key ("time", "label", "day_tips")
+                json.put("label", (label == null || label.isEmpty()) ? "闹钟" : label);
+                json.put("time", (time == null) ? "00:00" : time);
+                json.put("day_tips", ""); // 如果手机端有周几的提示可以填入，暂时填空确保不崩溃
                 json.put("timestamp", System.currentTimeMillis());
 
                 byte[] data = json.toString().getBytes(StandardCharsets.UTF_8);
 
-                // 🔥 修正：不再看历史缓存，直接强流踢醒手表的蓝牙 sniff 状态
-                PhoneLog.d(TAG, "⚡ [闹钟强力唤醒] 正在实时探查并强刷配对的手表路由网关...");
-                List<Node> nodes = Tasks.await(Wearable.getNodeClient(context).getConnectedNodes());
+                // 🔥 🔥 🔥 融合想法：优先从 WearSyncState 缓存中拿 NodeId，速度极快
+                String targetNodeId = WearSyncState.getNodeId(context);
 
-                if (nodes != null && !nodes.isEmpty()) {
-                    for (Node node : nodes) {
-                        PhoneLog.d(TAG, "  └─ 🚀 发现救活的设备: " + node.getId() + "，注入闹钟动作: [" + actionStr + "]");
-                        WearSyncState.setNodeId(context, node.getId());
-                        Tasks.await(Wearable.getMessageClient(context).sendMessage(node.getId(), "/wear-universal-sync", data));
-                    }
+                if (targetNodeId != null && !targetNodeId.isEmpty()) {
+                    PhoneLog.d(TAG, "⚡ [闹钟发信] 命中 WearSyncState 缓存: " + targetNodeId + "，正在以对齐新协议秒发射 [" + finalizedAction + "]...");
+                    Tasks.await(Wearable.getMessageClient(context).sendMessage(targetNodeId, "/wear-universal-sync", data));
+                    PhoneLog.d(TAG, "🚀 [闹钟发信成功] 闹钟信号已安全投递到缓存通道。");
                 } else {
-                    PhoneLog.w(TAG, "❌ [闹钟发送失败] 底层物理扫描未发现任何连线手表。");
+                    // 降级方案：物理扫描并踢醒手表蓝牙
+                    PhoneLog.w(TAG, "⚠️ [闹钟发信降级] 缓存中无可用节点，触发在线物理扫描...");
+                    java.util.List<com.google.android.gms.wearable.Node> nodes = 
+                            Tasks.await(Wearable.getNodeClient(context).getConnectedNodes());
+
+                    if (nodes != null && !nodes.isEmpty()) {
+                        for (com.google.android.gms.wearable.Node node : nodes) {
+                            PhoneLog.d(TAG, "  └─ 🚀 发现复活节点: " + node.getId() + "，刷新持久化缓存并灌入闹钟动作...");
+                            WearSyncState.setNodeId(context, node.getId());
+                            Tasks.await(Wearable.getMessageClient(context).sendMessage(node.getId(), "/wear-universal-sync", data));
+                        }
+                        PhoneLog.d(TAG, "🚀 [闹钟发信成功] 降级广播流发射完成。");
+                    } else {
+                        PhoneLog.w(TAG, "❌ [闹钟发信断联] 传输失败：没有发现任何可通信的手表。");
+                    }
                 }
             } catch (Exception e) {
-                PhoneLog.e(TAG, "🔴 [闹钟正向发信失败] " + e.getMessage(), e);
+                PhoneLog.e(TAG, "🔴 [闹钟正向发信失败] 协议校准打包异常: " + e.getMessage(), e);
             }
         }).start();
     }
