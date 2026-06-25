@@ -167,30 +167,31 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
 /**
      * 🎯 勿扰模式核心监听拦截站
      */
+    /**
+     * 🎯 勿擾模式核心監聽攔截站
+     */
     @Override
     public void onInterruptionFilterChanged(int interruptionFilter) {
         super.onInterruptionFilterChanged(interruptionFilter);
 
-        PhoneLog.d(TAG, "🚨🚨🚨 [勿扰重磅回调] 触发 onInterruptionFilterChanged! filter 码 = " + interruptionFilter);
+        PhoneLog.d(TAG, "🚨🚨🚨 [勿擾重磅回調] 觸發 onInterruptionFilterChanged! filter 碼 = " + interruptionFilter);
 
-        // 🚨 安全连锁保护：防止死循环
+        // 🚨 安全連鎖保護：防止死循環
         if (PhoneSyncListenerService.isInternalUpdate) {
-            PhoneLog.w(TAG, "🛑 [勿扰拦截] 判定该变化由手表引起，触发『安全连锁保护』，拒绝回传！");
+            PhoneLog.w(TAG, "🛑 [勿擾攔截] 判定該變化由手錶引起，觸發『安全連鎖保護』，拒絕回傳！");
             return;
         }
 
-        // 判断手机当前勿扰状态是否开启 (Filter > 1 代表开启了某种勿扰/免打扰模式)
-        boolean isPhoneDndOn = (interruptionFilter > 1);
-
-        PhoneLog.d(TAG, "🚀 [勿扰准备发射] 所有基础校验通过！正在移交 PhoneDndManager 调度...");
+        PhoneLog.d(TAG, "🚀 [勿擾準備發射] 所有基礎校驗通過！正在移交 PhoneDndManager 調度...");
         try {
-            // 🔥 业务托管：直接丢给专属管理器，让它内部去读 Mask 并发送
-            PhoneDndManager.syncDndToWear(this, isPhoneDndOn);
-            PhoneLog.d(TAG, "✨ [勿扰准备发射] PhoneDndManager.syncDndToWear() 托管方法执行完毕。");
+            // 🔥 🔥 🔥 升級核心：拿掉布林值轉換，直接原封不動把系統原生 interruptionFilter (1,2,3,4) 傳過去
+            PhoneDndManager.syncDndToWear(this, interruptionFilter);
+            PhoneLog.d(TAG, "✨ [勿擾準備發射] PhoneDndManager.syncDndToWear() 託管方法執行完畢。");
         } catch (Exception e) {
-            PhoneLog.e(TAG, "❌ [致命崩溃] 在调用 PhoneDndManager 方法时发生异常！" + e.getMessage());
+            PhoneLog.e(TAG, "❌ [致命崩潰] 在調用 PhoneDndManager 方法時發生異常！" + e.getMessage());
         }
     }
+    
     private void startAlarmWatchdog() {
         if (alarmWatchdogRunnable != null) return;
 
