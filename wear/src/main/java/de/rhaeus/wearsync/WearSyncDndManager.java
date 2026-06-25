@@ -107,7 +107,7 @@ public class WearSyncDndManager {
                 Thread.sleep(1000);
                 serv.swipeDown();      // 下滑拉出快捷面板
                 Thread.sleep(1000);
-                serv.clickIcon1_2();   // 點擊對應格子（就寢模式開關）
+                serv.clickIcon1_1();   // 點擊對應格子（就寢模式開關）
                 Thread.sleep(1000);
                 serv.goBack();         // 返回，關閉面板
                 WearLog.d(TAG, "✨ [無障礙聯動] 就寢模式（睡眠模式）自動化模擬腳本執行完畢。");
