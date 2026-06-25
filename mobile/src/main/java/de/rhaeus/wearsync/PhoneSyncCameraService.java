@@ -137,7 +137,7 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
                         }
                     } catch (Exception e) {
                         PhoneLog.e(TAG, "⚠️ 帧流灌入高速传输网关遭遇短暂拥堵: " + e.getMessage());
-                    } finaly {
+                    } finally {
                         try { codec.releaseOutputBuffer(index, false); } catch (Exception ignored) {}
                     }
                 }
