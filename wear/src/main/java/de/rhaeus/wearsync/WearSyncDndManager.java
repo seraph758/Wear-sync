@@ -142,14 +142,20 @@ public class WearSyncDndManager {
     
     
     
+        WearLog.d(TAG,
+                "📳 [震动判断] master="
+                + isSyncAllowed
+                + " vibrate="
+                + isVibrateSwitchOn
+                + " dnd="
+                + dndStatePhone);
+        
         if (isVibrateSwitchOn && dndStatePhone > 1) {
-    
-            WearLog.d(TAG,"📳 [震动提示]");
-    
+            WearLog.d(TAG,"📳 [开始震动]");
             vibrate(context);
-    
+        } else {
+            WearLog.d(TAG,"🔇 [未满足震动条件]");
         }
-    
     
     
         if (mNotificationManager.isNotificationPolicyAccessGranted()) {
@@ -210,7 +216,7 @@ public class WearSyncDndManager {
 
         new Thread(() -> {
             try {
-                Thread.sleep(1000);
+                Thread.sleep(2000);
                 serv.swipeDown();      // 下滑拉出快捷面板
                 Thread.sleep(1000);
                 serv.clickIcon1_1();   // 精準呼叫你現有的 clickIcon1_1() 點擊首排中心
@@ -229,9 +235,25 @@ public class WearSyncDndManager {
     }
 
     private static void vibrate(Context context) {
-        Vibrator v = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
-        if (v != null && v.hasVibrator()) {
-            v.vibrate(VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE));
+        Vibrator v=(Vibrator)context.getSystemService(Context.VIBRATOR_SERVICE);
+    
+        if(v==null){
+            WearLog.e(TAG,"❌ Vibrator==null");
+            return;
         }
+    
+        if(!v.hasVibrator()){
+            WearLog.e(TAG,"❌ 设备没有振动器");
+            return;
+        }
+    
+        WearLog.d(TAG,"📳 真正执行系统震动");
+    
+        v.vibrate(
+                VibrationEffect.createOneShot(
+                        50,
+                        VibrationEffect.DEFAULT_AMPLITUDE
+                )
+        );
     }
 }
