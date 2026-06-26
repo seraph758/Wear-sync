@@ -81,7 +81,6 @@ public class PhoneDndManager {
     SharedPreferences sp = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
     int currentMask = sp.getInt("dnd_sync_mask", 15);
     
-    ```
     new Thread(() -> {
         try {
             JSONObject json = new JSONObject();
