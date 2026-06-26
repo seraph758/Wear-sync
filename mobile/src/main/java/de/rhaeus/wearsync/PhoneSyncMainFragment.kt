@@ -289,27 +289,27 @@ Card(
         )
 
 
-        Button(
-            modifier = Modifier.fillMaxWidth(),
-            onClick = {
+    Button(
+    modifier = Modifier.fillMaxWidth(),
+    onClick = {
 
-                startActivity(
-                    Intent(
-                        requireContext(),
-                        PhoneSyncAppPicker::class.java
-                    )
-                )
+        PhoneSyncAppPicker.show(
+            requireContext()
+        ){ pkg,name ->
 
-            }
-        ){
-
-            Text(
-                "当前时钟源: $selectedAlarmName",
-                fontSize = 13.sp
-            )
+            selectedAlarmName = name
+            selectedAlarmPkg = pkg
 
         }
 
+    }
+)
+{
+    Text(
+        "当前时钟源: $selectedAlarmName",
+        fontSize = 13.sp
+    )
+}
 
         Text(
             "包名: $selectedAlarmPkg",
