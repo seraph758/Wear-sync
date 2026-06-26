@@ -77,142 +77,44 @@ public class PhoneDndManager {
  * Bit2 = 睡眠模式联动
  * Bit3 = 省电模式联动
  */
-    public static void syncDndToWear(
-            Context context,
-            int interruptionFilter
-    ) {
+    public static void syncDndToWear(Context context, int interruptionFilter) {
+    SharedPreferences sp = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+    int currentMask = sp.getInt("dnd_sync_mask", 15);
     
+    ```
+    new Thread(() -> {
+        try {
+            JSONObject json = new JSONObject();
+            json.put("sender", "phone");
+            json.put("type", "dnd");
+            json.put("dnd_state", interruptionFilter);
+            json.put("mask", currentMask);
+            json.put("timestamp", System.currentTimeMillis());
     
-        SharedPreferences sp =
-                context.getSharedPreferences(
-                        PREFS_NAME,
-                        Context.MODE_PRIVATE
-                );
+            byte[] data = json.toString().getBytes(StandardCharsets.UTF_8);
+            String nodeId = WearSyncState.getNodeId(context);
     
-    
-        // 默认四个开关全开
-        int currentMask =
-                sp.getInt(
-                        KEY_MASK,
-                        15
-                );
-    
-    
-        new Thread(() -> {
-    
-    
-            try {
-    
-    
-                JSONObject json =
-                        new JSONObject();
-    
-    
-    
-                json.put(
-                        "sender",
-                        "phone"
-                );
-    
-    
-                json.put(
-                        "type",
-                        "dnd"
-                );
-    
-    
-    
-                // 手机原生勿扰状态
-                json.put(
-                        "dnd_state",
-                        interruptionFilter
-                );
-    
-    
-    
-                // 联动开关mask
-                json.put(
-                        "mask",
-                        currentMask
-                );
-    
-    
-    
-                json.put(
-                        "timestamp",
-                        System.currentTimeMillis()
-                );
-    
-    
-    
-                byte[] data =
-                        json.toString()
-                                .getBytes(
-                                        StandardCharsets.UTF_8
-                                );
-    
-    
-    
-                String nodeId =
-                        WearSyncState.getNodeId(
-                                context
-                        );
-    
-    
-    
-                if (nodeId == null
-                        || nodeId.isEmpty()) {
-    
-    
-                    PhoneLog.w(
-                            TAG,
-                            "⚠️ [DND发送失败] NodeId为空"
-                    );
-    
-    
-                    return;
-    
-                }
-    
-    
-    
-    
-                Tasks.await(
-                        Wearable.getMessageClient(context)
-                                .sendMessage(
-                                        nodeId,
-                                        UNIVERSAL_SYNC_PATH,
-                                        data
-                                )
-                );
-    
-    
-    
-                PhoneLog.d(
-                        TAG,
-                        "🚀 [DND单包发送成功] dnd_state="
-                                + interruptionFilter
-                                + " mask="
-                                + currentMask
-                );
-    
-    
-    
-            } catch(Exception e) {
-    
-    
-                PhoneLog.e(
-                        TAG,
-                        "🔴 [DND发送异常]",
-                        e
-                );
-    
-    
+            if (nodeId == null || nodeId.isEmpty()) {
+                PhoneLog.w(TAG, "⚠️ [DND发送失败] NodeId为空");
+                return;
             }
     
+            PhoneLog.d(TAG, "📤 [准备发送] dnd_state=" + interruptionFilter + " mask=" + currentMask);
     
+            Tasks.await(Wearable.getMessageClient(context).sendMessage(nodeId, UNIVERSAL_SYNC_PATH, data));
     
+            PhoneLog.d(TAG, "✅ [DND单包发送成功] dnd_state=" + interruptionFilter
+                    + " master=" + ((currentMask & 1) != 0)
+                    + " vibrate=" + ((currentMask & 2) != 0)
+                    + " sleep=" + ((currentMask & 4) != 0)
+                    + " power=" + ((currentMask & 8) != 0)
+                    + " mask=" + currentMask);
+        
+            } catch (Exception e) {
+                PhoneLog.e(TAG, "🔴 [DND发送异常]", e);
+            }
         }).start();
     
     }
+
 }
