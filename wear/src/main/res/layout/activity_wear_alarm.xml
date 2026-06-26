@@ -1,75 +1,102 @@
 <?xml version="1.0" encoding="utf-8"?>
 
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/alarm_container"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#000000">
 
-    <!-- 星期 -->
-    <TextView
-        android:id="@+id/tv_alarm_day"
-        android:layout_width="wrap_content"
+
+    <!-- 上半部分：日期 + 时间 -->
+    <LinearLayout
+        android:id="@+id/layout_time"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_centerHorizontal="true"
-        android:layout_marginTop="42dp"
-        android:text="星期二"
-        android:textColor="#B8932F"
-        android:textStyle="bold"
-        android:textSize="18sp"/>
+        android:layout_marginTop="45dp"
+        android:gravity="center"
+        android:orientation="vertical">
 
-    <!-- 时间 -->
-    <TextView
-        android:id="@+id/tv_alarm_time"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_below="@id/tv_alarm_day"
-        android:layout_centerHorizontal="true"
-        android:layout_marginTop="8dp"
-        android:text="09:28"
-        android:textColor="#D7B33B"
-        android:textStyle="bold"
-        android:textSize="66sp"/>
 
-    <!-- Java保留，不显示 -->
-    <TextView
-        android:id="@+id/tv_alarm_label"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text=""
-        android:visibility="gone"/>
+        <!-- 日期 -->
+        <TextView
+            android:id="@+id/tv_alarm_day"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="星期二"
+            android:textColor="#C8A74A"
+            android:textSize="15sp"
+            android:textStyle="bold"/>
 
-    <!-- 底部按钮 -->
+
+        <!-- 时间 -->
+        <TextView
+            android:id="@+id/tv_alarm_time"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="22:36"
+            android:textColor="#D4AF37"
+            android:textSize="66sp"
+            android:textStyle="bold"/>
+
+
+        <!-- 保留给Java，不显示 -->
+        <TextView
+            android:id="@+id/tv_alarm_label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:visibility="gone"/>
+
+
+    </LinearLayout>
+
+
+
+    <!-- 底部按钮区域 -->
     <LinearLayout
         android:id="@+id/layout_buttons"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_alignParentBottom="true"
         android:layout_marginBottom="42dp"
+        android:paddingLeft="22dp"
+        android:paddingRight="22dp"
         android:gravity="center"
         android:orientation="horizontal">
 
+
+        <!-- 延后 -->
         <Button
             android:id="@+id/btn_snooze"
-            android:layout_width="118dp"
-            android:layout_height="56dp"
-            android:layout_marginEnd="10dp"
+            android:layout_width="0dp"
+            android:layout_height="62dp"
+            android:layout_weight="1"
+            android:layout_marginRight="8dp"
             android:background="@drawable/bg_alarm_snooze"
             android:text="延后"
             android:textAllCaps="false"
             android:textColor="#FFFFFF"
             android:textSize="22sp"/>
 
+
+
+        <!-- 停止 -->
         <Button
             android:id="@+id/btn_dismiss"
-            android:layout_width="118dp"
-            android:layout_height="56dp"
-            android:layout_marginStart="10dp"
+            android:layout_width="0dp"
+            android:layout_height="62dp"
+            android:layout_weight="1"
+            android:layout_marginLeft="8dp"
             android:background="@drawable/bg_alarm_stop"
             android:text="停止"
             android:textAllCaps="false"
             android:textColor="#FFFFFF"
             android:textSize="22sp"/>
 
+
     </LinearLayout>
+
 
 </RelativeLayout>
