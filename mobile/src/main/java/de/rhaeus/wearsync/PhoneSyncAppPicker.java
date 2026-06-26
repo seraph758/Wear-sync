@@ -10,7 +10,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
-public class PhoneSyncAppPick {
+public class PhoneSyncAppPicker {
 
     private static final String PREF="wearsync_prefs";
 
