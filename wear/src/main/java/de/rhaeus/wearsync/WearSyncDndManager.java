@@ -28,98 +28,162 @@ public class WearSyncDndManager {
      * 📥 模組一：更新聯動配置掩碼（先到達）
      * 🧩 替代了原本混亂的 handleIncomingMask，只純淨更新和儲存開關配置
      */
-    public static void updateConfigs(Context context, JSONObject json) {
+        public static void updateConfigs(JSONObject json) {
         if (json == null) return;
-        
-        int statusMask = json.optInt("status_mask", json.optInt("mask_value", -1));
-        if (statusMask == -1) return;
-
-        // 🎯 核心正解：第一位 (Bit 0) 是總聯動許可證！
-        isSyncAllowed = (statusMask & 0x01) != 0;       
-        if (!isSyncAllowed) {
-            WearLog.w(TAG, "🛑 [Mask 拋棄] 檢測到第一位 (Bit 0) 為 0，手機已關閉總聯動，後續全盤拋棄！");
-            return; 
+    
+        int statusMask = json.optInt("mask", -1);
+        if (statusMask == -1) {
+            WearLog.w(TAG, "⚠️ [Mask读取失败] 未找到mask");
+            return;
         }
-
-        // 位運算精準拆解後面幾位子功能開關狀態
-        isVibrateSwitchOn = (statusMask & 0x02) != 0;      // Bit 1 (值為 2)
-        isSleepLinkageOpen = (statusMask & 0x04) != 0;     // Bit 2 (值為 4)
-        isPowerSaveLinkageOpen = (statusMask & 0x08) != 0; // Bit 3 (值為 8)
-
-        WearLog.d(TAG, "📥 [配置就緒] 原始 Mask: " + statusMask + " ➔ 震動=" + isVibrateSwitchOn + ", 睡眠=" + isSleepLinkageOpen + ", 省電=" + isPowerSaveLinkageOpen);
-    }
+    
+        isSyncAllowed = (statusMask & 0x01) != 0;
+    
+        if (!isSyncAllowed) {
+            WearLog.w(TAG, "🛑 [Mask拦截] Bit0=0，总同步关闭");
+            return;
+        }
+    
+        isVibrateSwitchOn = (statusMask & 0x02) != 0;
+        isSleepLinkageOpen = (statusMask & 0x04) != 0;
+        isPowerSaveLinkageOpen = (statusMask & 0x08) != 0;
+    
+        WearLog.d(TAG,
+                "📥 [Mask解析] mask=" + statusMask
+                        + " 震动=" + isVibrateSwitchOn
+                        + " 睡眠=" + isSleepLinkageOpen
+                        + " 省电=" + isPowerSaveLinkageOpen);
+        }
 
     /**
      * 📥 模組二：接收原生 DND 狀態並強行指揮所有子聯動（後到達）
      * 🔥 100% 復刻舊代碼比對精髓，唯有狀態不相等時才驅動變更！
      * @param dndStatePhone 手機傳過來的系統原生 filter 狀態值 (1, 2, 3, 4)
      */
-    public static void executeDndSync(Context context, int dndStatePhone) {
-        // 🎯 生死防線：如果 Mask 總開關為 0，直接拋棄，不作任何執行
+     public static void executeDndSync(Context context, int dndStatePhone) {
+    
         if (!isSyncAllowed) {
-            WearLog.w(TAG, "🛑 [DND 狀態拋棄] 由於 Mask 總開關為 0，拒絕本次同步。");
+            WearLog.w(TAG, "🛑 [DND拦截] 总开关关闭");
             return;
         }
-
-        NotificationManager mNotificationManager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+    
+    
+        NotificationManager mNotificationManager =
+                (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+    
+    
         if (mNotificationManager == null) return;
-        
-        // 🎯 100% 復刻舊代碼安全範圍校驗
-        int filterState = mNotificationManager.getCurrentInterruptionFilter();
-        if (filterState < 0 || filterState > 4) {
-            WearLog.d(TAG, "DNDSync weird current dnd state: " + filterState);
+    
+    
+        int currentDndState =
+                mNotificationManager.getCurrentInterruptionFilter();
+    
+    
+        WearLog.d(TAG,
+                "🔍 [DND对比] 手机="
+                        + dndStatePhone
+                        + " 手表="
+                        + currentDndState);
+    
+    
+    
+        if (dndStatePhone == currentDndState) {
+    
+            WearLog.d(TAG,"✅ [DND一致] 不执行同步");
+            return;
+    
         }
-        int currentDndState = filterState;
-
-        WearLog.d(TAG, "🔍 [對比核心] 手機發來 dndStatePhone: " + dndStatePhone + " | 手錶當前 currentDndState: " + currentDndState);
-
-        // 🔥 【復刻舊代碼精髓】唯有當手機與手錶當前狀態「不相等」時，才引爆流水線
-        if (dndStatePhone != currentDndState) {
-            WearLog.d(TAG, "⚡ [狀態不相等] dndStatePhone != currentDndState: " + dndStatePhone + " != " + currentDndState + "，啟動聯動！");
-
-            // 🎯 核心防護：直接把鎖下在發信人身上，絕殺雙向死循環大風暴！
-            WearSyncNotificationService.isInternalUpdate = true;
-
-            // 1. 睡眠模式（就寢模式）自動化聯動 (只要勿擾變了，開關開著，就執行一次無障礙開關點擊)
-            if (isSleepLinkageOpen) {
-                WearLog.d(TAG, "🛌 [睡眠聯動] 執行無障礙點擊切換。");
-                toggleBedtimeMode(context);
-            }
-
-            // 2. 省電模式自動化聯動 (🔥 強制同步：完全參考手機原始 filter。>1 代表手機開了勿擾，省電同開；等於 1 代表關了，省電同關)
-            if (isPowerSaveLinkageOpen) {
-                boolean shouldPowerSaveOn = (dndStatePhone > 1);
-                int targetPowerMode = shouldPowerSaveOn ? 1 : 0;
-                Settings.Global.putInt(context.getContentResolver(), "low_power", targetPowerMode);
-                context.sendBroadcast(new Intent(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED));
-                WearLog.d(TAG, "🔋 [省電聯動] 已強制同步手錶本地省電狀態為: " + (shouldPowerSaveOn ? "開啟" : "關閉"));
-            }
-
-            // 3. 觸發勿擾同步震動 (只有當手機狀態是「開啟勿擾」時，且開關打開，才允許嗡一聲)
-            if (isVibrateSwitchOn && (dndStatePhone > 1)) {
-                WearLog.d(TAG, "📳 [勿擾震動] 條件成立，執行震動提示。");
-                vibrate(context);
-            } else {
-                WearLog.w(TAG, "🔇 [勿擾震動攔截] 手機為關閉勿擾，或手錶未勾選震動，封鎖震動。");
-            }
-
-            // 4. 最後硬性寫入手錶本地勿擾狀態 (100% 還原舊代碼)
-            if (mNotificationManager.isNotificationPolicyAccessGranted()) {
-                mNotificationManager.setInterruptionFilter(dndStatePhone);
-                WearLog.d(TAG, "🌗 [勿擾寫入] DND set to " + dndStatePhone);
-            } else {
-                WearLog.e(TAG, "attempting to set DND but access not granted");
-            }
-
-            // 5. 延遲解鎖，給手錶系統廣播徹底消散留出反應時間
-            new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                WearSyncNotificationService.isInternalUpdate = false;
-                WearLog.d(TAG, "🔓 [解鎖] 手錶防回傳死循環鎖已安全釋放。");
-            }, 2000);
-
+    
+    
+    
+        WearLog.d(TAG,
+                "⚡ [DND变化] 开始同步");
+    
+    
+        WearSyncNotificationService.isInternalUpdate = true;
+    
+    
+    
+        if (isSleepLinkageOpen) {
+    
+            WearLog.d(TAG,"🛌 [睡眠联动]执行");
+    
+            toggleBedtimeMode(context);
+    
+        }
+    
+    
+    
+        if (isPowerSaveLinkageOpen) {
+    
+            boolean enable =
+                    dndStatePhone > 1;
+    
+    
+            Settings.Global.putInt(
+                    context.getContentResolver(),
+                    "low_power",
+                    enable ? 1 : 0
+            );
+    
+    
+            context.sendBroadcast(
+                    new Intent(
+                            PowerManager.ACTION_POWER_SAVE_MODE_CHANGED
+                    )
+            );
+    
+    
+            WearLog.d(TAG,
+                    "🔋 [省电同步] "
+                            +(enable?"开启":"关闭"));
+    
+        }
+    
+    
+    
+        if (isVibrateSwitchOn && dndStatePhone > 1) {
+    
+            WearLog.d(TAG,"📳 [震动提示]");
+    
+            vibrate(context);
+    
+        }
+    
+    
+    
+        if (mNotificationManager.isNotificationPolicyAccessGranted()) {
+    
+    
+            mNotificationManager.setInterruptionFilter(
+                    dndStatePhone
+            );
+    
+    
+            WearLog.d(TAG,
+                    "🌗 [写入DND] "
+                            +dndStatePhone);
+    
+    
         } else {
-            WearLog.d(TAG, "✅ [對比吻合] 手機與手錶狀態完全相同，安全攔截，不作重複動作。");
+    
+            WearLog.e(TAG,
+                    "❌ 无DND权限");
+    
         }
+    
+    
+    
+        new Handler(Looper.getMainLooper())
+                .postDelayed(() -> {
+    
+                    WearSyncNotificationService.isInternalUpdate=false;
+    
+                    WearLog.d(TAG,
+                            "🔓 [锁释放]");
+    
+                },2000);
+    
     }
 
     /**
