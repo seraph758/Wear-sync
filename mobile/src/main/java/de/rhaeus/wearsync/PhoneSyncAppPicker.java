@@ -2,6 +2,7 @@ package de.rhaeus.wearsync;
 
 import android.app.AlertDialog;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 
@@ -10,35 +11,51 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
-public class PhoneSyncAppPicker extends Activity {
-    
-    @Override
-    protected void onCreate(Bundle savedInstanceState){
-        super.onCreate(savedInstanceState);
+public class PhoneSyncAppPicker {
 
-    private static final String PREF="wearsync_prefs";
+    private static final String PREF = "wearsync_prefs";
 
-    public interface Callback{
-        void onSelected(String pkg,String name);
+
+    public interface Callback {
+        void onSelected(String pkg, String name);
     }
 
 
-    private static class AppItem{
+
+    private static class AppItem {
 
         String name;
         String pkg;
 
+
         AppItem(String name,String pkg){
+
             this.name=name;
             this.pkg=pkg;
+
         }
     }
 
 
 
-    public static void show(Context context,Callback callback){
 
-        List<AppItem> apps=getClockApps(context);
+    public static void show(Context context, Callback callback){
+
+
+        if(!(context instanceof android.app.Activity)){
+
+            PhoneLog.e(
+                    "PhoneSyncAppPicker",
+                    "Context不是Activity，无法显示窗口"
+            );
+
+            return;
+        }
+
+
+
+        List<AppItem> apps = getClockApps(context);
+
 
 
         apps.add(
@@ -49,50 +66,65 @@ public class PhoneSyncAppPicker extends Activity {
         );
 
 
-        String[] names=new String[apps.size()];
+
+        String[] names =
+                new String[apps.size()];
+
 
 
         for(int i=0;i<apps.size();i++){
+
             names[i]=apps.get(i).name;
+
         }
 
 
 
         new AlertDialog.Builder(context)
                 .setTitle("选择闹钟应用")
-                .setItems(names,(dialog,which)->{
+                .setItems(
+                        names,
+                        (dialog,which)->{
 
 
-                    AppItem item=apps.get(which);
+                            AppItem item =
+                                    apps.get(which);
 
 
-                    if(item.pkg.equals("MORE")){
 
-                        showAllApps(
-                                context,
-                                callback
-                        );
-
-                        return;
-                    }
+                            if(item.pkg.equals("MORE")){
 
 
-                    save(
-                            context,
-                            item
-                    );
+                                showAllApps(
+                                        context,
+                                        callback
+                                );
+
+                                return;
+
+                            }
 
 
-                    if(callback!=null){
 
-                        callback.onSelected(
-                                item.pkg,
-                                item.name
-                        );
+                            save(
+                                    context,
+                                    item
+                            );
 
-                    }
 
-                })
+
+                            if(callback!=null){
+
+                                callback.onSelected(
+                                        item.pkg,
+                                        item.name
+                                );
+
+                            }
+
+
+                        }
+                )
                 .show();
 
     }
@@ -101,31 +133,45 @@ public class PhoneSyncAppPicker extends Activity {
 
 
 
+
     private static List<AppItem> getClockApps(Context context){
 
-        PackageManager pm=
+
+        PackageManager pm =
                 context.getPackageManager();
 
 
-        List<AppItem> result=
+        List<AppItem> result =
                 new ArrayList<>();
 
 
-        String[] defaults={
+
+        String[] defaults = {
+
 
                 "com.google.android.deskclock",
+
                 "com.coloros.alarmclock",
+
                 "com.android.deskclock"
 
         };
 
 
+
+
         for(String pkg:defaults){
+
 
             try{
 
-                ApplicationInfo info=
-                        pm.getApplicationInfo(pkg,0);
+
+                ApplicationInfo info =
+                        pm.getApplicationInfo(
+                                pkg,
+                                0
+                        );
+
 
 
                 result.add(
@@ -138,18 +184,24 @@ public class PhoneSyncAppPicker extends Activity {
 
             }catch(Exception ignored){}
 
+
         }
 
 
 
-        for(ApplicationInfo info:
+
+
+
+
+        for(ApplicationInfo info :
                 pm.getInstalledApplications(
                         PackageManager.GET_META_DATA
                 )){
 
 
-            String pkg=
+            String pkg =
                     info.packageName.toLowerCase();
+
 
 
             if(
@@ -157,8 +209,13 @@ public class PhoneSyncAppPicker extends Activity {
                     ||
                     pkg.contains("alarm"))
                     &&
-                    !contains(result,info.packageName)
+                    !contains(
+                            result,
+                            info.packageName
+                    )
             ){
+
+
 
                 result.add(
                         new AppItem(
@@ -167,16 +224,21 @@ public class PhoneSyncAppPicker extends Activity {
                         )
                 );
 
+
             }
 
         }
 
 
 
+
+
         Collections.sort(
                 result,
-                new Comparator<AppItem>(){
+                new Comparator<AppItem>() {
 
+
+                    @Override
                     public int compare(
                             AppItem a,
                             AppItem b
@@ -192,9 +254,15 @@ public class PhoneSyncAppPicker extends Activity {
         );
 
 
+
         return result;
 
+
     }
+
+
+
+
 
 
 
@@ -204,15 +272,20 @@ public class PhoneSyncAppPicker extends Activity {
             Callback callback
     ){
 
-        PackageManager pm=
+
+
+        PackageManager pm =
                 context.getPackageManager();
 
 
-        List<AppItem> list=
+
+        List<AppItem> list =
                 new ArrayList<>();
 
 
-        for(ApplicationInfo info:
+
+
+        for(ApplicationInfo info :
                 pm.getInstalledApplications(
                         PackageManager.GET_META_DATA
                 )){
@@ -225,59 +298,90 @@ public class PhoneSyncAppPicker extends Activity {
                     )
             );
 
+
         }
+
+
+
 
 
 
         Collections.sort(
                 list,
                 (a,b)->
+
                         a.name.compareToIgnoreCase(
                                 b.name
                         )
+
         );
 
 
 
-        String[] names=
+
+
+
+        String[] names =
                 new String[list.size()];
+
 
 
         for(int i=0;i<list.size();i++){
 
+
             names[i]=list.get(i).name;
+
 
         }
 
 
 
+
+
+
         new AlertDialog.Builder(context)
+
                 .setTitle("全部应用")
-                .setItems(names,(dialog,which)->{
+
+                .setItems(
+                        names,
+                        (dialog,which)->{
 
 
-                    AppItem item=list.get(which);
+                            AppItem item =
+                                    list.get(which);
 
 
-                    save(
-                            context,
-                            item
-                    );
+
+                            save(
+                                    context,
+                                    item
+                            );
 
 
-                    if(callback!=null){
 
-                        callback.onSelected(
-                                item.pkg,
-                                item.name
-                        );
+                            if(callback!=null){
 
-                    }
 
-                })
+                                callback.onSelected(
+                                        item.pkg,
+                                        item.name
+                                );
+
+
+                            }
+
+
+                        }
+                )
+
                 .show();
 
+
     }
+
+
+
 
 
 
@@ -288,22 +392,43 @@ public class PhoneSyncAppPicker extends Activity {
             AppItem item
     ){
 
-        context.getSharedPreferences(
-                PREF,
-                Context.MODE_PRIVATE
-        )
-        .edit()
-        .putString(
-                "alarm_package",
-                item.pkg
-        )
-        .putString(
-                "alarm_name",
-                item.name
-        )
-        .apply();
+
+        SharedPreferences prefs =
+                context.getSharedPreferences(
+                        PREF,
+                        Context.MODE_PRIVATE
+                );
+
+
+
+        prefs.edit()
+
+                .putString(
+                        "selected_alarm_package",
+                        item.pkg
+                )
+
+                .putString(
+                        "selected_alarm_name",
+                        item.name
+                )
+
+                .apply();
+
+
+
+        PhoneLog.d(
+                "PhoneSyncAppPicker",
+                "已保存闹钟应用: "
+                        + item.name
+                        +" / "
+                        +item.pkg
+        );
+
 
     }
+
+
 
 
 
@@ -313,16 +438,23 @@ public class PhoneSyncAppPicker extends Activity {
             String pkg
     ){
 
+
         for(AppItem item:list){
 
+
             if(item.pkg.equals(pkg)){
+
                 return true;
+
             }
 
         }
 
+
         return false;
 
+
     }
+
 
 }
