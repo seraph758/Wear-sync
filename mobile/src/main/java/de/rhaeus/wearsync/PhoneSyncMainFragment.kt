@@ -10,6 +10,8 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import android.app.Activity
+import android.content.ComponentName
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -42,6 +44,20 @@ class PhoneSyncMainFragment : Fragment() {
 
     private val uiLogDebugSwitch = mutableStateOf(PhoneLog.DEBUG)
     private val uiWearLogDebugSwitch = mutableStateOf(true)
+    private val alarmPickerLauncher =
+    registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        val pkg = it.data?.getStringExtra("selected_alarm_package")
+        val name = it.data?.getStringExtra("selected_alarm_name")
+
+        if(pkg != null){
+            requireContext()
+                .getSharedPreferences("dndsync_prefs",Context.MODE_PRIVATE)
+                .edit()
+                .putString("selected_alarm_package",pkg)
+                .putString("selected_alarm_name",name ?: pkg)
+                .apply()
+        }
+    }
 
     private val requestCameraPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
