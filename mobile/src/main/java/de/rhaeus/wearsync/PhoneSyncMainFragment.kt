@@ -205,9 +205,7 @@ class PhoneSyncMainFragment : Fragment() {
                                 mask=newMask
                                 sp.edit().putInt("dnd_sync_mask",newMask).apply()
                             
-                                val nm=requireContext().getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                                PhoneDndManager.syncDndToWear(requireContext(),nm.currentInterruptionFilter)
-                                PhoneLog.d("WearSync_Main","🚀 配置已更新，交由PhoneDndManager统一同步")
+                                     PhoneLog.d("WearSync_Main","⚙️ DND联动配置已保存 mask=$newMask")
                             }
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
