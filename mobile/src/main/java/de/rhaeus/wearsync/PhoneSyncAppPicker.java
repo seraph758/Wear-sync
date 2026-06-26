@@ -387,35 +387,33 @@ public class PhoneSyncAppPicker {
 
 
 
-    private static void save(
-            Context context,
-            AppItem item
-    ){
+private static void save(
+        Context context,
+        AppItem item
+){
 
-
-        SharedPreferences prefs =
-                context.getSharedPreferences(
-                        PREF,
-                        Context.MODE_PRIVATE
-                );
-
-
-
-        prefs.edit()
-
-                .putString(
-                        "selected_alarm_package",
-                        item.pkg
-                )
-
-                .putString(
-                        "selected_alarm_name",
-                        item.name
-                )
-
-                .apply();
-
-
+    context.getSharedPreferences(
+            "wearsync_prefs",
+            Context.MODE_PRIVATE
+    )
+    .edit()
+    .putString(
+            "alarm_package",
+            item.pkg
+    )
+    .putString(
+            "alarm_name",
+            item.name
+    )
+    .putString(
+            "selected_alarm_package",
+            item.pkg
+    )
+    .putString(
+            "selected_alarm_name",
+            item.name
+    )
+    .apply();
 
         PhoneLog.d(
                 "PhoneSyncAppPicker",
