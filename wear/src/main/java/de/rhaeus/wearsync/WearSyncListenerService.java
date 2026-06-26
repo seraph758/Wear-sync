@@ -67,10 +67,9 @@ public void onMessageReceived(@NonNull MessageEvent messageEvent) {
             // 2.判斷總開關
             // 3.同步震動/睡眠/省電
             // 4.寫入手錶DND
-            WearSyncDndManager.updateConfigs(this, json);
+            WearSyncDndManager.updateConfigs(json);
         
-            WearSyncDndManager.executeDndSync(
-                    this,
+            WearSyncDndManager.executeDndSync(             this,
                     dndStatePhone
             );
         
