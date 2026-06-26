@@ -1,21 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
+
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#000000"
-    android:padding="12dp">
+    android:background="#000000">
 
-    <!-- 日期 -->
+    <!-- 星期 -->
     <TextView
         android:id="@+id/tv_alarm_day"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_centerHorizontal="true"
-        android:layout_marginTop="28dp"
+        android:layout_marginTop="42dp"
         android:text="星期二"
-        android:textColor="#C8A74A"
-        android:textSize="20sp"
-        android:textStyle="bold"/>
+        android:textColor="#B8932F"
+        android:textStyle="bold"
+        android:textSize="18sp"/>
 
     <!-- 时间 -->
     <TextView
@@ -24,56 +24,51 @@
         android:layout_height="wrap_content"
         android:layout_below="@id/tv_alarm_day"
         android:layout_centerHorizontal="true"
-        android:layout_marginTop="12dp"
-        android:text="22:36"
-        android:textColor="#D4AF37"
-        android:textSize="58sp"
-        android:textStyle="bold"/>
+        android:layout_marginTop="8dp"
+        android:text="09:28"
+        android:textColor="#D7B33B"
+        android:textStyle="bold"
+        android:textSize="66sp"/>
 
-    <!-- 保留给 Java 使用 -->
+    <!-- Java保留，不显示 -->
     <TextView
         android:id="@+id/tv_alarm_label"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_below="@id/tv_alarm_time"
-        android:layout_centerHorizontal="true"
-        android:layout_marginTop="10dp"
         android:text=""
-        android:textColor="#888888"
-        android:textSize="16sp"
         android:visibility="gone"/>
 
-    <!-- 按钮 -->
+    <!-- 底部按钮 -->
     <LinearLayout
         android:id="@+id/layout_buttons"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_alignParentBottom="true"
-        android:layout_marginBottom="30dp"
+        android:layout_marginBottom="42dp"
         android:gravity="center"
         android:orientation="horizontal">
 
         <Button
             android:id="@+id/btn_snooze"
-            android:layout_width="150dp"
-            android:layout_height="64dp"
-            android:layout_marginEnd="8dp"
+            android:layout_width="118dp"
+            android:layout_height="56dp"
+            android:layout_marginEnd="10dp"
             android:background="@drawable/bg_alarm_snooze"
             android:text="延后"
             android:textAllCaps="false"
             android:textColor="#FFFFFF"
-            android:textSize="24sp"/>
+            android:textSize="22sp"/>
 
         <Button
             android:id="@+id/btn_dismiss"
-            android:layout_width="150dp"
-            android:layout_height="64dp"
-            android:layout_marginStart="8dp"
+            android:layout_width="118dp"
+            android:layout_height="56dp"
+            android:layout_marginStart="10dp"
             android:background="@drawable/bg_alarm_stop"
             android:text="停止"
             android:textAllCaps="false"
             android:textColor="#FFFFFF"
-            android:textSize="24sp"/>
+            android:textSize="22sp"/>
 
     </LinearLayout>
 
