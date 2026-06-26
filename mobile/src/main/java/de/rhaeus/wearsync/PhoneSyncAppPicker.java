@@ -10,7 +10,11 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
-public class PhoneSyncAppPicker {
+public class PhoneSyncAppPicker extends Activity {
+    
+    @Override
+    protected void onCreate(Bundle savedInstanceState){
+        super.onCreate(savedInstanceState);
 
     private static final String PREF="wearsync_prefs";
 
