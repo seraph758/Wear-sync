@@ -60,7 +60,10 @@
             </intent-filter>
         
         
-        </activity>             
+        </activity>      
+        <activity
+           android:name=".PhoneSyncAppPicker"
+           android:exported="false"/>
         <service
             android:name=".PhoneSyncNotificationService"
             android:exported="true"
