@@ -31,6 +31,7 @@ import com.google.android.gms.wearable.Wearable
 import androidx.compose.ui.graphics.Color
 import org.json.JSONObject
 import java.nio.charset.StandardCharsets
+import android.app.NotificationManager
 
 class PhoneSyncMainFragment : Fragment() {
 
@@ -189,6 +190,11 @@ class PhoneSyncMainFragment : Fragment() {
                             }
 
                             // 3. 勿扰联动控制台
+                            var mask by remember { mutableStateOf(sp.getInt("dnd_sync_mask",15)) }
+                            var masterOn by remember(mask) { mutableStateOf((mask and 1)!=0) }
+                            var vibrateOn by remember(mask) { mutableStateOf((mask and 2)!=0) }
+                            var sleepOn by remember(mask) { mutableStateOf((mask and 4)!=0) }
+                            var powerOn by remember(mask) { mutableStateOf((mask and 8)!=0) }
                             val updateMask={newMaster:Boolean,newVibrate:Boolean,newSleep:Boolean,newPower:Boolean->
                                 var newMask=0
                                 if(newMaster)newMask=newMask or 1
