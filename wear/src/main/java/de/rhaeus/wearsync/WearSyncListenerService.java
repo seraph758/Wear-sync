@@ -43,63 +43,40 @@ public void onMessageReceived(@NonNull MessageEvent messageEvent) {
         WearLog.d(TAG, "📥 [手表信令到港] ➔ type=[" + type + "], action=[" + action + "]");
 
         // =========================================================================
-        // 🎛️ 模組一：配置掩碼包到達（手機先發，負責把手機端的各個子開關意願存入暫存變量）
-        // =========================================================================
-        if ("status_mask".equalsIgnoreCase(type) || json.has("status_mask") || json.has("mask_value")) {
-            // 🎯 只純淨更新配置開關，不執行任何實質動作，不觸發狀態變更
-            WearSyncDndManager.updateConfigs(this, json);
-            return;
-        }
-
-        // =========================================================================
-        // 🌓 模組二：勿擾對齊與全自動化聯動模組（手機後發，攜帶系統原生 Filter 數值）
+        // 🌓 勿擾同步包（手機發送 dnd_state + mask 一體包）
         // =========================================================================
         if ("dnd".equalsIgnoreCase(type)) {
+        
             int dndStatePhone = json.optInt("dnd_state", -1);
-            if (dndStatePhone == -1) return;
-
-            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-            if (nm != null) {
-                // 🎯 100% 復刻舊代碼安全範圍校驗與狀態獲取
-                int filterState = nm.getCurrentInterruptionFilter();
-                if (filterState < 0 || filterState > 4) {
-                    WearLog.d(TAG, "DNDSync weird current dnd state: " + filterState);
-                }
-                int currentDndState = filterState;
-
-                WearLog.d(TAG, "🔍 [舊代碼對比精髓] 收到手機 dndStatePhone: " + dndStatePhone + " | 手錶當前 currentDndState: " + currentDndState);
-
-                // 🔥 【重歸正統】唯有當手機原生Filter與手錶當前Filter「不相等」時，才觸發一連串連鎖聯動
-                if (dndStatePhone != currentDndState) {
-                    WearLog.d(TAG, "⚡ [狀態不相等] 確有變更，引爆全自動化同步流水線！");
-
-                    // 🎯 物理防線：關上回傳大門，防止雙向回傳死循環大風暴
-                    WearSyncNotificationService.isInternalUpdate = true;
-
-                    // 🚀 執行集中聯動指揮官：內部搞定睡眠無障礙、省電強制同步、勿擾震動判斷
-                    WearSyncDndManager.executeDndSync(this, dndStatePhone);
-
-                    // 🌗 不論聯動腳本是否成功，手錶本體都要硬性寫入該原生勿擾狀態
-                    if (nm.isNotificationPolicyAccessGranted()) {
-                        nm.setInterruptionFilter(dndStatePhone);
-                        WearLog.d(TAG, "🌓 手表端勿扰对齐更新成功 ➔ " + dndStatePhone);
-                    } else {
-                        WearLog.e(TAG, "attempting to set DND but access not granted");
-                    }
-
-                    // ⏳ 安全防線：延時拉長到 2000ms，給系統廣播留出足夠的消散時間
-                    new Handler(getMainLooper()).postDelayed(() -> {
-                        WearSyncNotificationService.isInternalUpdate = false;
-                        WearLog.d(TAG, "🔓 [手錶正向鎖] 釋放，重新開啟逆向通道。");
-                    }, 2000);
-
-                } else {
-                    WearLog.d(TAG, "✅ [對比吻合] 手機與手錶 Filter 數值完全一致，判定為重複信號，安全攔截。");
-                }
+        
+            if (dndStatePhone == -1) {
+                WearLog.w(TAG, "⚠️ [DND同步] 收到勿擾包但缺少 dnd_state");
+                return;
             }
+        
+        
+            WearLog.d(TAG,
+                    "📥 [DND同步] 收到手機勿擾狀態="
+                            + dndStatePhone
+                            + " mask="
+                            + json.optInt("mask",-1));
+        
+        
+            // 交給DndManager：
+            // 1.解析mask
+            // 2.判斷總開關
+            // 3.同步震動/睡眠/省電
+            // 4.寫入手錶DND
+            WearSyncDndManager.updateConfigs(this, json);
+        
+            WearSyncDndManager.executeDndSync(
+                    this,
+                    dndStatePhone
+            );
+        
+        
             return;
         }
-
           // =========================================================================
         // 🔋 模组三：闹钟拦截控制模组（极致精简・快递员模式）
         // =========================================================================
