@@ -15,7 +15,7 @@ import java.util.List;
  */
 public class PhoneDndManager {
     private static final String TAG = "WearSync_PhoneDnd";
-    private static final String PREFS_NAME = "wearsync_prefs";
+    private static final String PREFS_NAME = "dndsync_prefs";
     private static final String KEY_MASK = "dnd_sync_mask";
     private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
 
