@@ -245,58 +245,136 @@ class PhoneSyncMainFragment : Fragment() {
                                 }
                             }
 
-                            // 4. 闹钟全域代点
-                            var customAlarmPkg by remember { mutableStateOf(sp.getString("custom_alarm_package", "com.google.android.deskclock") ?: "") }
+  // 4. 闹钟全域代点
+var selectedAlarmName by remember {
+    mutableStateOf(sp.getString("selected_alarm_name", "Google 时钟") ?: "Google 时钟")
+}
 
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(16.dp),
-                                colors = CardDefaults.cardColors(containerColor = cardBgColor)
-                            ) {
-                                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    Text("闹钟全域代点中心", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = textColor)
+var selectedAlarmPkg by remember {
+    mutableStateOf(sp.getString("selected_alarm_package", "com.google.android.deskclock") ?: "com.google.android.deskclock")
+}
 
-                                    OutlinedTextField(
-                                        value = customAlarmPkg,
-                                        onValueChange = {
-                                            customAlarmPkg = it
-                                            sp.edit().putString("custom_alarm_package", it).apply()
-                                        },
-                                        label = { Text("监控时钟源包名") },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        colors = OutlinedTextFieldDefaults.colors(
-                                            focusedBorderColor = textColor,
-                                            unfocusedBorderColor = subTextColor,
-                                            focusedLabelColor = textColor,
-                                            unfocusedLabelColor = subTextColor
-                                        )
-                                    )
+Card(
+    modifier = Modifier.fillMaxWidth(),
+    shape = RoundedCornerShape(16.dp),
+    colors = CardDefaults.cardColors(containerColor = cardBgColor)
+) {
 
-                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Button(
-                                            modifier = Modifier.weight(1f),
-                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
-                                            onClick = {
-                                                PhoneLog.d("WearSync_Main", "🎯 模拟发送【停止闹钟】物理拦截信令")
-                                                requireContext().sendBroadcast(Intent("de.rhaeus.wearsync.ACTION_ALARM_DISMISS_TRIGGER"))
-                                            }
-                                        ) {
-                                            Text("模拟停止闹钟", color = Color.White, fontSize = 12.sp)
-                                        }
+    Column(
+        modifier = Modifier.padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
 
-                                        Button(
-                                            modifier = Modifier.weight(1f),
-                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE65100)),
-                                            onClick = {
-                                                PhoneLog.d("WearSync_Main", "🎯 模拟发送【延后闹钟】物理拦截信令")
-                                                requireContext().sendBroadcast(Intent("de.rhaeus.wearsync.ACTION_ALARM_SNOOZE_TRIGGER"))
-                                            }
-                                        ) {
-                                            Text("模拟延后闹钟", color = Color.White, fontSize = 12.sp)
-                                        }
-                                    }
-                                }
-                            }
+        Text(
+            "闹钟全域代点中心",
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+            color = textColor
+        )
+
+
+        Button(
+            modifier = Modifier.fillMaxWidth(),
+            onClick = {
+
+                startActivity(
+                    Intent(
+                        requireContext(),
+                        PhoneSyncAppPicker::class.java
+                    )
+                )
+
+            }
+        ){
+
+            Text(
+                "当前时钟源: $selectedAlarmName",
+                fontSize = 13.sp
+            )
+
+        }
+
+
+        Text(
+            "包名: $selectedAlarmPkg",
+            fontSize = 11.sp,
+            color = subTextColor
+        )
+
+
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ){
+
+            Button(
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFC62828)
+                ),
+                onClick = {
+
+                    PhoneLog.d(
+                        "WearSync_Main",
+                        "🎯 模拟发送【停止闹钟】物理拦截信令"
+                    )
+
+
+                    requireContext().sendBroadcast(
+                        Intent(
+                            "de.rhaeus.wearsync.ACTION_ALARM_DISMISS_TRIGGER"
+                        )
+                    )
+
+                }
+            ){
+
+                Text(
+                    "模拟停止",
+                    color = Color.White,
+                    fontSize = 12.sp
+                )
+
+            }
+
+
+
+            Button(
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFE65100)
+                ),
+                onClick = {
+
+                    PhoneLog.d(
+                        "WearSync_Main",
+                        "🎯 模拟发送【延后闹钟】物理拦截信令"
+                    )
+
+
+                    requireContext().sendBroadcast(
+                        Intent(
+                            "de.rhaeus.wearsync.ACTION_ALARM_SNOOZE_TRIGGER"
+                        )
+                    )
+
+                }
+            ){
+
+                Text(
+                    "模拟延后",
+                    color = Color.White,
+                    fontSize = 12.sp
+                )
+
+            }
+
+        }
+
+    }
+
+}
 
                             // 5. 远程相机控场中心
                             Card(
