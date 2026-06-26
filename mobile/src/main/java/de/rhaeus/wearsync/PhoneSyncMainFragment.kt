@@ -189,43 +189,20 @@ class PhoneSyncMainFragment : Fragment() {
                             }
 
                             // 3. 勿扰联动控制台
-                            var mask by remember { mutableStateOf(sp.getInt("dnd_sync_mask", 15)) }
-                            var masterOn by remember(mask) { mutableStateOf((mask and 1) != 0) }
-                            var vibrateOn by remember(mask) { mutableStateOf((mask and 2) != 0) }
-                            var sleepOn by remember(mask) { mutableStateOf((mask and 4) != 0) }
-                            var powerOn by remember(mask) { mutableStateOf((mask and 8) != 0) }
-
-                            val updateMask = { newMaster: Boolean, newVibrate: Boolean, newSleep: Boolean, newPower: Boolean ->
-                                var newMask = 0
-                                if (newMaster) newMask = newMask or 1
-                                if (newVibrate) newMask = newMask or 2
-                                if (newSleep) newMask = newMask or 4
-                                if (newPower) newMask = newMask or 8
-
-                                mask = newMask
-                                sp.edit().putInt("dnd_sync_mask", newMask).apply()
-                                requireContext().sendBroadcast(Intent("de.rhaeus.wearsync.ACTION_MASK_CHANGED"))
-
-                                Thread {
-                                    try {
-                                        val json = JSONObject()
-                                        json.put("sender", "phone")
-                                        json.put("type", "status_mask")
-                                        json.put("dnd_sync_mask", newMask)
-                                        json.put("timestamp", System.currentTimeMillis())
-
-                                        val data = json.toString().toByteArray(StandardCharsets.UTF_8)
-                                        val nodeId = WearSyncState.getNodeId(requireContext())
-                                        if (!nodeId.isNullOrEmpty()) {
-                                            Wearable.getMessageClient(requireContext()).sendMessage(nodeId, "/wear-universal-sync", data)
-                                            PhoneLog.d("WearSync_Main", "🚀 [双端同步] 掩码值 $newMask 已投递")
-                                        }
-                                    } catch (e: Exception) {
-                                        PhoneLog.e("WearSync_Main", "🔴 同步失败", e)
-                                    }
-                                }.start()
+                            val updateMask={newMaster:Boolean,newVibrate:Boolean,newSleep:Boolean,newPower:Boolean->
+                                var newMask=0
+                                if(newMaster)newMask=newMask or 1
+                                if(newVibrate)newMask=newMask or 2
+                                if(newSleep)newMask=newMask or 4
+                                if(newPower)newMask=newMask or 8
+                            
+                                mask=newMask
+                                sp.edit().putInt("dnd_sync_mask",newMask).apply()
+                            
+                                val nm=requireContext().getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                                PhoneDndManager.syncDndToWear(requireContext(),nm.currentInterruptionFilter)
+                                PhoneLog.d("WearSync_Main","🚀 配置已更新，交由PhoneDndManager统一同步")
                             }
-
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(16.dp),
