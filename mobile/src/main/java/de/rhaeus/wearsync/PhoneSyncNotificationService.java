@@ -68,9 +68,17 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
         }
         String packageName = sbn.getPackageName();
 
-        if ("com.google.android.deskclock".equals(packageName) 
-            || "com.coloros.alarmclock".equals(packageName) 
-            || "com.android.deskclock".equals(packageName)) {
+        SharedPreferences prefs =
+        getSharedPreferences("dndsync_prefs",Context.MODE_PRIVATE);
+
+String selectedPkg =
+        prefs.getString(
+                "selected_alarm_package",
+                "com.google.android.deskclock"
+        );
+
+
+if(selectedPkg.equals(packageName)){
 
             PhoneLog.d(TAG, "⏰ [闹钟事件] 检测到目标包名闹钟弹出: " + packageName);
 
