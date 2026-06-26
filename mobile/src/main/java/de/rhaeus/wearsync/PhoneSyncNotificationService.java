@@ -41,7 +41,7 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
         super.onCreate();
         instance = this;
         PhoneLog.d(TAG, "🚀 [生命周期] PhoneSyncNotificationService 哨兵服务 -> onCreate() 已成功启动！");
-        
+
         try {
             NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
             if (nm != null) {
@@ -66,27 +66,16 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
             PhoneLog.w(TAG, "⚠️ [闹钟监听] 收到空通知事件 (StatusBarNotification is null)");
             return;
         }
-        String packageName = sbn.getPackageName();
+String packageName = sbn.getPackageName();
 
-        SharedPreferences prefs =
-        getSharedPreferences("dndsync_prefs",Context.MODE_PRIVATE);
+SharedPreferences prefs = getSharedPreferences("wearsync_prefs", Context.MODE_PRIVATE);
+String selectedPkg = prefs.getString("selected_alarm_package", "com.google.android.deskclock");
 
-String selectedPkg =
-        prefs.getString(
-                "selected_alarm_package",
-                "com.google.android.deskclock"
-        );
+if(!selectedPkg.equals(packageName)){
+    return;
+}
 
-
-if(selectedPkg.equals(packageName)){
-
-            PhoneLog.d(TAG, "⏰ [闹钟事件] 检测到目标包名闹钟弹出: " + packageName);
-
-            Notification notification = sbn.getNotification();
-            if (notification == null) {
-                PhoneLog.w(TAG, "⚠️ [闹钟事件] Notification 实体为空，拦截处理");
-                return;
-            }
+PhoneLog.d(TAG, "⏰ [闹钟事件] 检测到目标包名闹钟弹出: " + packageName);
 
             boolean isInsistent = (notification.flags & Notification.FLAG_INSISTENT) != 0;
             boolean isOngoing = (notification.flags & Notification.FLAG_ONGOING_EVENT) != 0;
@@ -99,7 +88,6 @@ if(selectedPkg.equals(packageName)){
                 return; 
             }
 
-            SharedPreferences prefs = getSharedPreferences("wearsync_prefs", Context.MODE_PRIVATE);
             String dismissKey = prefs.getString("alarm_dismiss_key", "停止").toLowerCase();
             String snoozeKey = prefs.getString("alarm_snooze_key", "延后").toLowerCase();
 
@@ -154,21 +142,18 @@ if(selectedPkg.equals(packageName)){
         super.onNotificationRemoved(sbn);
         if (sbn == null) return;
 
-        SharedPreferences prefs = getSharedPreferences("wearsync_prefs", Context.MODE_PRIVATE);
-        String targetPkg = prefs.getString("key_alarm_package_name", "com.google.android.deskclock");
-        String currentPkg = sbn.getPackageName();
+SharedPreferences prefs = getSharedPreferences("wearsync_prefs", Context.MODE_PRIVATE);
+String targetPkg = prefs.getString("selected_alarm_package", "com.google.android.deskclock");
+String currentPkg = sbn.getPackageName();
 
-        if (targetPkg.equalsIgnoreCase(currentPkg) 
-            || "com.android.deskclock".equals(currentPkg) 
-            || "com.coloros.alarmclock".equals(currentPkg)) {
+if(!targetPkg.equalsIgnoreCase(currentPkg)){
+    return;
+}
 
-            PhoneLog.d(TAG, "⏰ [哨兵拦截] 手机端闹钟通知消失，触发清除机制。消失包名: " + currentPkg);
+PhoneLog.d(TAG, "⏰ [哨兵拦截] 手机端闹钟通知消失，触发清除机制。消失包名: " + currentPkg);
 
-            stopAlarmWatchdog();
-            PhoneAlarmManager.notifyWatchAlarmDismissed(this);
-        }
-    }
-
+stopAlarmWatchdog();
+PhoneAlarmManager.notifyWatchAlarmDismissed(this);
     /**
      * 🎯 勿扰模式核心监听拦截站
      */
@@ -199,7 +184,7 @@ if(selectedPkg.equals(packageName)){
             PhoneLog.e(TAG, "❌ [致命崩潰] 在調用 PhoneDndManager 方法時發生異常！" + e.getMessage());
         }
     }
-    
+
     private void startAlarmWatchdog() {
         if (alarmWatchdogRunnable != null) return;
 
