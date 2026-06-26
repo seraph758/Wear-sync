@@ -11,7 +11,6 @@ import com.google.android.gms.wearable.CapabilityClient;
 import com.google.android.gms.wearable.Wearable;
 
 import android.app.NotificationManager;
-import android.content.Context; // 確保有這個
 
 public class WearSyncMainFragment extends PreferenceFragmentCompat {
     private static final String TAG = "WearSync_MainFragment";
@@ -48,16 +47,30 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
     @Override
     public void onResume() {
         super.onResume();
-        WearLog.d(TAG, "🔄 onResume: 刷新手表本地系统特权审批状态...");
-        
-        NotificationManager nm = (NotificationManager) requireContext().getSystemService(Context.NOTIFICATION_SERVICE);
-        if (nm != null && dndPref != null) {
-            boolean hasDnd = nm.isNotificationPolicyAccessGranted();
-            dndPref.setSummary(hasDnd ? "🟢 已获得系统勿扰读写权" : "🔴 未授权高级勿扰 (请长按给予读写权限)");
-        }
+        WearLog.d(TAG,"🔄 onResume: 刷新权限状态...");
+        updatePermissionStatus();
         registerConnectivityListener();
     }
-
+    private void updatePermissionStatus() {
+    
+        Context ctx = getContext();
+        if (ctx == null) return;
+    
+        NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
+    
+        if (dndPref != null && nm != null) {
+            boolean hasDnd = nm.isNotificationPolicyAccessGranted();
+            dndPref.setSummary(hasDnd ? "🟢 已获得系统通知读取权限" : "🔴 未授权系统通知权限（使用ADB授权）");
+            WearLog.d(TAG, "🌓 DND权限=" + hasDnd);
+        }
+    
+        boolean hasAccessibility = WearSyncAccessService.getSharedInstance() != null;
+    
+        if (accPref != null) {
+            accPref.setSummary(hasAccessibility ? "🟢 辅助功能已激活" : "🔴 辅助功能未激活");
+            WearLog.d(TAG, "♿ 无障碍权限=" + hasAccessibility);
+        }
+    }
     @Override
     public void onPause() {
         super.onPause();
