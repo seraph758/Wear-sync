@@ -201,8 +201,10 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
 
 
                 if(title.contains(dismissKey)
-                        || title.contains("stop")
-                        || title.contains("关闭")){
+        || title.contains("stop")
+        || title.contains("关闭")
+        || title.contains("停止")
+        || title.contains("dismiss")){
 
 
                     cachedDismissIntent =
