@@ -11,8 +11,8 @@ import android.os.Build;
 import android.os.Bundle;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
+import android.view.WindowManager;
 import android.widget.Button;
-import android.widget.RelativeLayout;
 import com.google.android.gms.tasks.Tasks;
 import com.google.android.gms.wearable.Node;
 import com.google.android.gms.wearable.Wearable;
@@ -24,7 +24,7 @@ import java.util.List;
 
 /**
  * 🎬 远程拍照手表观景窗/流媒体渲染 UI（MediaCodec 硬件解码 + 实时反向发信控制）
- * 极致动态日志全步进版：微秒级动态监控高频帧解码、输入输出网关及异步信令生命周期。
+ * 极致动态日志全步进版：微秒级动态监控高频帧解码、输入输出网关、窗口物理常亮锁定及异步信令生命周期。
  */
 public class WearCameraActivity extends Activity implements SurfaceHolder.Callback {
     private static final String TAG = "WearSync_WearCameraUI";
@@ -63,6 +63,12 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
         super.onCreate(savedInstanceState);
         
         WearCameraActivity.sActivityRef = new WeakReference<>(this);
+
+        // 💡 核心注入：在载入布局前，对当前 Window 强制灌入 FLAG_KEEP_SCREEN_ON 旗帜，锁死屏幕高亮
+        WearLog.w(TAG, "💡 [电源管理] 正在向当前 Window 注入 FLAG_KEEP_SCREEN_ON 常亮旗帜，强制压制手表的休眠机制...");
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        WearLog.d(TAG, "✨ [电源管理] 窗口高亮锁成功挂载，观景窗前台常亮已生效。");
+
         setContentView(R.layout.activity_wear_camera);
 
         surfaceView = findViewById(R.id.surfaceView);
@@ -86,7 +92,7 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
             registerReceiver(phoneKillReceiver, filter);
         }
         
-        // 重置解調計數
+        // 重置解调计数
         totalFramesDecoded = 0;
         isFirstFrameDecoded = false;
         WearLog.d(TAG, "🎬 [生命周期] onCreate 结束 ─── 手表端图传观景窗 Activity 全功能就绪。");
@@ -99,7 +105,8 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
             WearLog.d(TAG, "🖥️ [Surface状态] 检查 Surface 活体正常。正在移交底层初始化 H.264 解码器...");
             initDecoder(holder);
         } else {
-            WearLog.e(TAG, "❌ [Surface状态致命] 检测到 SurfaceHolder 或其内部 Surface 为 null！无法点火解調引擎。");
+            WearCameraActivity.this.releaseDecoder();
+            WearLog.e(TAG, "❌ [Surface状态致命] 检测到 SurfaceHolder 或其内部 Surface 为 null！无法点火解调引擎。");
         }
     }
 
@@ -126,7 +133,6 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
      */
     public void feedH264Data(byte[] data, int length) {
         if (!isDecoderRunning || mDecoder == null) {
-            // 边缘保护：若解調器未開啟，直接丟棄不予處理
             return;
         }
         try {
@@ -138,14 +144,13 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
                     inputBuffer.clear();
                     inputBuffer.put(data, 0, length);
                     
-                    // 填塞原始密文帧推进 H.264 异步解調佇列
+                    // 填塞原始密文帧推进 H.264 异步解调队列
                     mDecoder.queueInputBuffer(inputBufferIndex, 0, length, System.currentTimeMillis(), 0);
                 }
             } else {
-                // 如果返回 -1，说明解码器可能处于高负荷状态，当前没有闲置卡座
                 long now = System.currentTimeMillis();
                 if (now - lastLogTime > 4000) {
-                    WearLog.w(TAG, "⚠️ [图传卡顿警报] 解码器输入端卡座爆满 (dequeueInputBuffer == -1)，可能手錶晶片解調速度跟不上手機噴射速度。");
+                    WearLog.w(TAG, "⚠️ [图传卡顿警报] 解码器输入端卡座爆满 (dequeueInputBuffer == -1)，说明手表芯片解调速度跟不上手机喷射速度。");
                 }
             }
 
@@ -154,34 +159,31 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
             int outputBufferIndex = mDecoder.dequeueOutputBuffer(bufferInfo, 10000);
             
             while (outputBufferIndex >= 0) {
-                // 🚀 核心捕获：首帧解調成功錨點
                 if (!isFirstFrameDecoded) {
                     isFirstFrameDecoded = true;
-                    WearLog.d(TAG, "🔥 [硬解首帧大捷] 手表端成功完成第一帧 H.264 物理图传的渲染突破！");
+                    WearLog.w(TAG, "🔥 [硬解首帧大捷] 手表端成功完成第一帧 H.264 物理图传的渲染突破！");
                 }
 
-                // 傳入 true：命令解調器立刻將此緩衝區數據刷新推向 Surface 進行螢幕物理渲染
+                // 传入 true：命令解调器立刻将此缓冲区数据刷新推向 Surface 进行屏幕物理渲染
                 mDecoder.releaseOutputBuffer(outputBufferIndex, true);
                 
                 totalFramesDecoded++;
                 long now = System.currentTimeMillis();
-                // 每隔 4 秒印出一條計數快照，避免卡死日誌鏈
                 if (now - lastLogTime > 4000) {
                     WearLog.d(TAG, "📊 [硬解高频快照] 画面正在丝滑渲染，手表端累计已成功解码并刷新: " + totalFramesDecoded + " 帧画面。");
                     lastLogTime = now;
                 }
 
-                // 迴圈追撈當前佇列裡剩餘已解好但未釋放的緩衝區
                 outputBufferIndex = mDecoder.dequeueOutputBuffer(bufferInfo, 0);
             }
         } catch (Exception e) {
-            WearLog.e(TAG, "⚠️ [图传硬解异常] 帧流灌入硬解管线发生拥堵异常波動: " + e.getMessage());
+            WearLog.e(TAG, "⚠️ [图传硬解异常] 帧流灌入硬解管线发生拥堵异常波动: " + e.getMessage());
         }
     }
 
     @Override
     public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
-        WearLog.d(TAG, "🖥_ [Surface状态] surfaceChanged 触发 ➔ 画布几何尺寸或格式发生变更: w=" + width + ", h=" + height);
+        WearLog.d(TAG, "🖥️ [Surface状态] surfaceChanged 触发 ➔ 画布几何尺寸或格式发生变更: w=" + width + ", h=" + height);
     }
 
     @Override
@@ -203,7 +205,7 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
                 WearLog.w(TAG, "🧹 [安全熔断] 关闭解码器发生了不影响全局的边缘异常: " + e.getMessage());
             }
             mDecoder = null;
-            WearLog.d(TAG, "🛑 [安全熔断结束] 終解完成 ─── 解码器硬件资源已安全释放回收。");
+            WearLog.d(TAG, "🛑 [安全熔断结束] 终解完成 ─── 解码器硬件资源已安全释放回收。");
         }
     }
 
@@ -251,6 +253,11 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
         }
         isUserExiting = true;
         WearLog.w(TAG, "🧹 [清场熔断] ━━━━━━━━ 开启手表相机 UI 完整退出销毁机制 ━━━━━━━━");
+        
+        // 💡 核心回收：清空常亮旗帜，把屏幕控制权安全还给系统省电策略
+        WearLog.w(TAG, "💡 [电源管理] 正在从 Window 摘除 FLAG_KEEP_SCREEN_ON 常亮旗帜，恢复系统原生省电睡眠策略...");
+        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
         WearLog.w(TAG, "  └─ ⚙️ 参数设定 -> 是否反向通知手机同步关闭相机: " + (notifyPhone ? "【是/TRUE】" : "【否/FALSE】"));
 
         if (notifyPhone) {
@@ -266,7 +273,7 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
             WearLog.w(TAG, "🧹 [清场熔断] 注销广播时触发了边缘报错 (可能之前已被解绑): " + e.getMessage());
         }
         
-        // 彻底释放解調器
+        // 彻底释放解调器
         releaseDecoder();
         
         if (sActivityRef.get() == this) {
