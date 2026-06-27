@@ -60,137 +60,201 @@ public class WearSyncDndManager {
      * 🔥 100% 復刻舊代碼比對精髓，唯有狀態不相等時才驅動變更！
      * @param dndStatePhone 手機傳過來的系統原生 filter 狀態值 (1, 2, 3, 4)
      */
-     public static void executeDndSync(Context context, int dndStatePhone) {
-    
-        if (!isSyncAllowed) {
-            WearLog.w(TAG, "🛑 [DND拦截] 总开关关闭");
-            return;
-        }
-    
-    
-        NotificationManager mNotificationManager =
-                (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-    
-    
-        if (mNotificationManager == null) return;
-    
-    
-        int currentDndState =
-                mNotificationManager.getCurrentInterruptionFilter();
-    
-    
+public static void executeDndSync(Context context, int dndStatePhone) {
+
+    if (!isSyncAllowed) {
+        WearLog.w(TAG, "🛑 [DND拦截] 总开关关闭");
+        return;
+    }
+
+
+    NotificationManager mNotificationManager =
+            (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+
+
+    if (mNotificationManager == null) {
+        WearLog.e(TAG, "❌ NotificationManager 获取失败");
+        return;
+    }
+
+
+    int currentDndState =
+            mNotificationManager.getCurrentInterruptionFilter();
+
+
+    WearLog.d(TAG,
+            "🔍 [DND状态检查] 手机="
+                    + dndStatePhone
+                    + " 手表="
+                    + currentDndState
+                    + " mask震动="
+                    + isVibrateSwitchOn
+                    + " 睡眠="
+                    + isSleepLinkageOpen
+                    + " 省电="
+                    + isPowerSaveLinkageOpen);
+
+
+
+    /*
+     * 注意：
+     * 这里以前如果DND一致直接return，会导致：
+     * 省电不同步
+     * 睡眠不同步
+     * 关闭勿扰无法恢复省电
+     *
+     * 所以只记录，不退出
+     */
+    if (dndStatePhone == currentDndState) {
+
         WearLog.d(TAG,
-                "🔍 [DND对比] 手机="
-                        + dndStatePhone
-                        + " 手表="
-                        + currentDndState);
-    
-    
-    
-        if (dndStatePhone == currentDndState) {
-    
-            WearLog.d(TAG,"✅ [DND一致] 不执行同步");
-            return;
-    
-        }
-    
-    
-    
+                "✅ [DND一致] 继续执行子联动");
+
+    } else {
+
         WearLog.d(TAG,
                 "⚡ [DND变化] 开始同步");
-    
-    
-        WearSyncNotificationService.isInternalUpdate = true;
-    
-    
-    
-        if (isSleepLinkageOpen) {
-    
-            WearLog.d(TAG,"🛌 [睡眠联动]执行");
-    
-            toggleBedtimeMode(context);
-    
-        }
-    
-    
-    
-        if (isPowerSaveLinkageOpen) {
-    
-            boolean enable =
-                    dndStatePhone > 1;
-    
-    
-            Settings.Global.putInt(
-                    context.getContentResolver(),
-                    "low_power",
-                    enable ? 1 : 0
-            );
-    
-    
-            context.sendBroadcast(
-                    new Intent(
-                            PowerManager.ACTION_POWER_SAVE_MODE_CHANGED
-                    )
-            );
-    
-    
-            WearLog.d(TAG,
-                    "🔋 [省电同步] "
-                            +(enable?"开启":"关闭"));
-    
-        }
-    
-    
-    
-        WearLog.d(TAG,
-                "📳 [震动判断] master="
-                + isSyncAllowed
-                + " vibrate="
-                + isVibrateSwitchOn
-                + " dnd="
-                + dndStatePhone);
-        
-        if (isVibrateSwitchOn && dndStatePhone > 1) {
-            WearLog.d(TAG,"📳 [开始震动]");
-            vibrate(context);
-        } else {
-            WearLog.d(TAG,"🔇 [未满足震动条件]");
-        }
-    
-    
-        if (mNotificationManager.isNotificationPolicyAccessGranted()) {
-    
-    
-            mNotificationManager.setInterruptionFilter(
-                    dndStatePhone
-            );
-    
-    
-            WearLog.d(TAG,
-                    "🌗 [写入DND] "
-                            +dndStatePhone);
-    
-    
-        } else {
-    
-            WearLog.e(TAG,
-                    "❌ 无DND权限");
-    
-        }
-    
-    
-    
-        new Handler(Looper.getMainLooper())
-                .postDelayed(() -> {
-    
-                    WearSyncNotificationService.isInternalUpdate=false;
-    
-                    WearLog.d(TAG,
-                            "🔓 [锁释放]");
-    
-                },2000);
-    
+
     }
+
+
+
+    WearSyncNotificationService.isInternalUpdate = true;
+
+
+
+    /*
+     * 1. 优先震动
+     * 避免后面的省电/DND切换影响震动
+     */
+    WearLog.d(TAG,
+            "📳 [震动判断] 开关="
+                    + isVibrateSwitchOn
+                    + " dnd="
+                    + dndStatePhone);
+
+
+
+    if (isVibrateSwitchOn && dndStatePhone > 1) {
+
+        WearLog.d(TAG,
+                "📳 [开始震动]");
+
+        vibrate(context);
+
+    } else {
+
+        WearLog.d(TAG,
+                "🔇 [未满足震动条件]");
+
+    }
+
+
+
+
+    /*
+     * 2. 睡眠模式联动
+     */
+    if (isSleepLinkageOpen) {
+
+        WearLog.d(TAG,
+                "🛌 [睡眠联动]执行");
+
+        toggleBedtimeMode(context);
+
+    } else {
+
+        WearLog.d(TAG,
+                "🛌 [睡眠联动]关闭");
+
+    }
+
+
+
+
+    /*
+     * 3. 省电模式联动
+     */
+    if (isPowerSaveLinkageOpen) {
+
+
+        boolean enable =
+                dndStatePhone > 1;
+
+
+
+        Settings.Global.putInt(
+                context.getContentResolver(),
+                "low_power",
+                enable ? 1 : 0
+        );
+
+
+
+        context.sendBroadcast(
+                new Intent(
+                        PowerManager.ACTION_POWER_SAVE_MODE_CHANGED
+                )
+        );
+
+
+
+        WearLog.d(TAG,
+                "🔋 [省电同步] "
+                        +(enable ? "开启" : "关闭"));
+
+
+    } else {
+
+        WearLog.d(TAG,
+                "🔋 [省电联动]关闭");
+
+    }
+
+
+
+
+    /*
+     * 4. 最后写入手表DND状态
+     */
+    if (mNotificationManager.isNotificationPolicyAccessGranted()) {
+
+
+        mNotificationManager.setInterruptionFilter(
+                dndStatePhone
+        );
+
+
+        WearLog.d(TAG,
+                "🌗 [写入DND] "
+                        + dndStatePhone);
+
+
+    } else {
+
+
+        WearLog.e(TAG,
+                "❌ 无DND权限");
+
+    }
+
+
+
+
+    new Handler(Looper.getMainLooper())
+            .postDelayed(() -> {
+
+
+                WearSyncNotificationService.isInternalUpdate = false;
+
+
+                WearLog.d(TAG,
+                        "🔓 [锁释放]");
+
+
+            },2000);
+
+}
 
     /**
      * 🛌 透過無障礙模擬點擊切換手錶系統的就寢模式（睡眠模式）
