@@ -34,28 +34,45 @@ public class PhoneAlarmManager {
      */
     public static void handleWatchCommand(Context context, String commandType) {
         PhoneLog.d(TAG, "⚡ [闹钟逆向控制] 收到来自手表的物理代点口令: [" + commandType + "]");
+        
         try {
             if ("DISMISS".equalsIgnoreCase(commandType)) {
-                PhoneLog.d(TAG, "🔍 [闹钟逆向控制] 正在验证手机端 [停止] PendingIntent 缓存状态...");
-                if (PhoneSyncNotificationService.cachedDismissIntent != null) {
+                PhoneLog.d(TAG, "🔍 [闹钟逆向控制] 正在执行【停止】——尝试实时穿透通知栏...");
+                
+                // 🎯 调用新写的实时获取方法（不找静态变量）
+                boolean success = PhoneSyncNotificationService.triggerLiveAlarmAction(context, true);
+                
+                if (!success) {
+                    // 💥 终极保底：如果清晨全屏幕导致通知栏被隐藏/挂起没捞到，直接模拟按下音量减键
+                    PhoneLog.w(TAG, "⚠️ [实时通知未捞到] 触发全屏幕锁屏保底机制：模拟按下音量键让谷歌时钟闭嘴...");
+                    
+                    android.media.AudioManager audioManager = (android.media.AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
+                    if (audioManager != null) {
+                        // 在谷歌闹钟响铃时，按下音量减键在系统底层的默认行为就是 Dismiss（停止）闹钟
+                        audioManager.adjustStreamVolume(android.media.AudioManager.STREAM_ALARM, 
+                                                        android.media.AudioManager.ADJUST_LOWER, 
+                                                        android.media.AudioManager.FLAG_SHOW_UI);
+                    }
+                    // 补发通用时钟停止广播，双重保险
+                    context.sendBroadcast(new Intent("com.android.deskclock.ALARM_DONE"));
+                }
+                
+            } else if ("SNOOZE".equalsIgnoreCase(commandType)) {
+                PhoneLog.d(TAG, "🔍 [闹钟逆向控制] 正在执行【延后】——尝试实时穿透通知栏...");
+                
+                // 🎯 实时抓取延后按钮并引爆
+                boolean success = PhoneSyncNotificationService.triggerLiveAlarmAction(context, false);
+                
+                if (!success) {
+                    PhoneLog.w(TAG, "⚠️ [实时控制失败] 连延后也没捞到通知，补发标准延后广播");
+                    context.sendBroadcast(new Intent("com.android.deskclock.ALARM_SNOOZE"));
+                }
+            }
+        } catch (Exception e) {
+            PhoneLog.e(TAG, "🔴 [逆向控制崩溃] 处理手表按键口令时发生致命错误: " + e.getMessage(), e);
+        }
+    }
 
-    PhoneLog.d(
-        TAG,
-        "📌 cachedDismissIntent="
-        + PhoneSyncNotificationService.cachedDismissIntent
-    );
-
-    PhoneLog.d(
-        TAG,
-        "📌 isCanceled="
-        + PhoneSyncNotificationService.cachedDismissIntent.isCanceled()
-    );
-
-
-    PhoneLog.d(
-        TAG,
-        "🚀 [物理模拟成功] 正在跨进程向系统时钟注入【停止/关闭】按键信号！"
-    );
 
 
     PhoneSyncNotificationService.cachedDismissIntent.send();
