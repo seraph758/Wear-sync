@@ -1,7 +1,8 @@
 package de.rhaeus.wearsync;
 
 import android.content.Context;
-import android.util.Log;
+import android.content.Intent;
+import android.media.AudioManager;
 import com.google.android.gms.tasks.Tasks;
 import com.google.android.gms.wearable.Node;
 import com.google.android.gms.wearable.Wearable;
@@ -13,93 +14,80 @@ public class PhoneAlarmManager {
     private static final String TAG = "WearSync_PhoneAlarm";
 
     /**
-     * 当手机端系统闹钟响起时调用（由通知拦截哨兵服务触发）
+     * 當手機端系統鬧鐘響起時調用（由通知攔截哨兵服務觸發）
      */
     public static void notifyWatchAlarmRinging(Context context, String label, String time) {
-        PhoneLog.d(TAG, "🔔 [闹钟触发源] 接收到哨兵指令：手机闹钟正在狂轰乱炸 ➔ 标签: [" + label + "], 时间: [" + time + "]");
-        // 🎯 优化：从源头直接改用全新、对齐手表的暗号 "START_WEAR_ALARM"，彻底抛弃老旧中间名
+        PhoneLog.d(TAG, "🔔 [鬧鐘觸發源] 接收到哨兵指令：手機鬧鐘正在狂轟亂炸 ➔ 標籤: [" + label + "], 時間: [" + time + "]");
         sendAlarmSignalToWatch(context, "START_WEAR_ALARM", label, time);
     }
 
     /**
-     * 当用户主动在手机端关闭/延后闹钟，导致手机通知消失时，远端销毁手表闹钟 UI
+     * 當用戶主動在手機端關閉/延後鬧鐘，導致手機通知消失時，遠端銷毀手錶鬧鐘 UI
      */
     public static void notifyWatchAlarmDismissed(Context context) {
-        PhoneLog.d(TAG, "⏰ [闹钟撤销源] 接收到哨兵指令：手机端闹钟通知已消失（用户代点或滑动销毁），正在命令手表立刻停震销毁...");
+        PhoneLog.d(TAG, "⏰ [鬧鐘撤銷源] 接收到哨兵指令：手機端鬧鐘通知已消失，正在命令手錶立刻停震銷毀...");
         sendAlarmSignalToWatch(context, "FORCE_STOP_WEAR_ALARM", null, null);
     }
 
     /**
-     * 接收并执行来自手表的代点请求
+     * 接收並執行來自手錶的代點請求（超強日誌覆蓋版）
      */
     public static void handleWatchCommand(Context context, String commandType) {
-        PhoneLog.d(TAG, "⚡ [闹钟逆向控制] 收到来自手表的物理代点口令: [" + commandType + "]");
+        PhoneLog.d(TAG, "⚡ [逆向調度] ━━━ 收到來自手錶的逆向控制口令 ━━━ 口令內容: [" + commandType + "]");
         
         try {
             if ("DISMISS".equalsIgnoreCase(commandType)) {
-                PhoneLog.d(TAG, "🔍 [闹钟逆向控制] 正在执行【停止】——尝试实时穿透通知栏...");
+                PhoneLog.d(TAG, "🔍 [逆向調度] 判定口令為【停止/DISMISS】，啟動第一階段：實時通知欄擊穿...");
                 
-                // 🎯 调用新写的实时获取方法（不找静态变量）
+                // 🎯 調用實時獲取方法
                 boolean success = PhoneSyncNotificationService.triggerLiveAlarmAction(context, true);
                 
+                PhoneLog.d(TAG, "📊 [逆向調度] 第一階段通知欄穿透結果: " + (success ? "🎉 成功擊穿並執行！" : "❌ 失敗（未找到匹配通知）"));
+                
                 if (!success) {
-                    // 💥 终极保底：如果清晨全屏幕导致通知栏被隐藏/挂起没捞到，直接模拟按下音量减键
-                    PhoneLog.w(TAG, "⚠️ [实时通知未捞到] 触发全屏幕锁屏保底机制：模拟按下音量键让谷歌时钟闭嘴...");
+                    PhoneLog.w(TAG, "⚠️ [逆向調度] 進入第二階段：觸發清晨鎖屏保底機制（音量鍵模擬）...");
                     
-                    android.media.AudioManager audioManager = (android.media.AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
+                    AudioManager audioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
                     if (audioManager != null) {
-                        // 在谷歌闹钟响铃时，按下音量减键在系统底层的默认行为就是 Dismiss（停止）闹钟
-                        audioManager.adjustStreamVolume(android.media.AudioManager.STREAM_ALARM, 
-                                                        android.media.AudioManager.ADJUST_LOWER, 
-                                                        android.media.AudioManager.FLAG_SHOW_UI);
+                        PhoneLog.d(TAG, "  └─ 🔊 成功獲取 AudioManager，準備向下調整一格鬧鐘音量流...");
+                        // 模擬按下一格音量減鍵，擊穿谷歌時鐘全螢幕鎖定
+                        audioManager.adjustStreamVolume(AudioManager.STREAM_ALARM, 
+                                                        AudioManager.ADJUST_LOWER, 
+                                                        AudioManager.FLAG_SHOW_UI);
+                        PhoneLog.d(TAG, "  └─ ✅ 音量流按鍵信號已注入。");
+                    } else {
+                        PhoneLog.e(TAG, "  └─ ❌ [異常] 獲取 AudioManager 失敗，無法注入物理按鍵信號！");
                     }
-                    // 补发通用时钟停止广播，双重保险
+                    
+                    PhoneLog.d(TAG, "  └─ 📻 正在向全系統廣播發送大廠通用鬧鐘停止暗號 [ALARM_DONE]...");
                     context.sendBroadcast(new Intent("com.android.deskclock.ALARM_DONE"));
+                    PhoneLog.d(TAG, "  └─ ✅ 系統廣播發射完畢。");
                 }
                 
             } else if ("SNOOZE".equalsIgnoreCase(commandType)) {
-                PhoneLog.d(TAG, "🔍 [闹钟逆向控制] 正在执行【延后】——尝试实时穿透通知栏...");
+                PhoneLog.d(TAG, "🔍 [逆向調度] 判定口令為【延後/SNOOZE】，啟動實時通知欄擊穿...");
                 
-                // 🎯 实时抓取延后按钮并引爆
+                // 🎯 實時抓取延後按鈕並引爆
                 boolean success = PhoneSyncNotificationService.triggerLiveAlarmAction(context, false);
                 
+                PhoneLog.d(TAG, "📊 [逆向調度] 延後通知欄穿透結果: " + (success ? "🎉 成功擊穿並執行！" : "❌ 失敗（未找到匹配通知）"));
+                
                 if (!success) {
-                    PhoneLog.w(TAG, "⚠️ [实时控制失败] 连延后也没捞到通知，补发标准延后广播");
+                    PhoneLog.w(TAG, "⚠️ [逆向調度] 通知欄未撈到延後按鈕，觸發標準延後廣播保底机制...");
                     context.sendBroadcast(new Intent("com.android.deskclock.ALARM_SNOOZE"));
-                }
-            }
-        } catch (Exception e) {
-            PhoneLog.e(TAG, "🔴 [逆向控制崩溃] 处理手表按键口令时发生致命错误: " + e.getMessage(), e);
-        }
-    }
-
-
-
-    PhoneSyncNotificationService.cachedDismissIntent.send();
-
-
-
-                } else {
-                    PhoneLog.w(TAG, "⚠️ [物理模拟失败] 手机缓存的 cachedDismissIntent 为空！可能通知已被提前销毁");
-                }
-            } else if ("SNOOZE".equalsIgnoreCase(commandType)) {
-                PhoneLog.d(TAG, "🔍 [闹钟逆向控制] 正在验证手机端 [延后] PendingIntent 缓存状态...");
-                if (PhoneSyncNotificationService.cachedSnoozeIntent != null) {
-                    PhoneLog.d(TAG, "🚀 [物理模拟成功] 正在跨进程向系统时钟注入【延后/稍后】按键信号！");
-                    PhoneSyncNotificationService.cachedSnoozeIntent.send();
-                } else {
-                    PhoneLog.w(TAG, "⚠️ [物理模拟失败] 手机缓存的 cachedSnoozeIntent 为空！");
+                    PhoneLog.d(TAG, "  └─ ✅ 延後系統廣播 [ALARM_SNOOZE] 已補發。");
                 }
             } else {
-                PhoneLog.w(TAG, "⚠️ [闹钟逆向控制] 收到无法识别的未知手表口令: " + commandType);
+                PhoneLog.w(TAG, "⚠️ [逆向調度] 收到無法識別的未知手錶口令: [" + commandType + "]，不做任何處理。");
             }
         } catch (Exception e) {
-            PhoneLog.e(TAG, "🔴 [逆向控制崩溃] 执行通知栏模拟代点按键时发生致命错误: " + e.getMessage(), e);
+            PhoneLog.e(TAG, "🔴 [逆向調度崩潰] 處理手錶口令調度流時發生未知致命錯誤: " + e.getMessage(), e);
         }
+        PhoneLog.d(TAG, "🏁 [逆向調度] ━━━ 手錶口令處理工作流結束 ━━━");
     }
 
     /**
-     * 🛰️ 正向发射：严格对齐手表端真实接收协议的闹钟发射流
+     * 🛰️ 正向發射：嚴格對齊手錶端真實接收協議的鬧鐘發射流
      */
     private static void sendAlarmSignalToWatch(Context context, String actionStr, String label, String time) {
         new Thread(() -> {
@@ -107,44 +95,36 @@ public class PhoneAlarmManager {
                 JSONObject json = new JSONObject();
                 json.put("sender", "phone");
                 json.put("type", "alarm");
-                
-                // 🎯 彻底洗净：因为源头暗号已经完全对齐，不再需要任何繁琐的 if-else 转换逻辑，直接注入！
                 json.put("action", actionStr);
-                
-                // 严格对齐手表接收端的三个 key ("time", "label", "day_tips")
                 json.put("label", (label == null || label.isEmpty()) ? "闹钟" : label);
                 json.put("time", (time == null) ? "00:00" : time);
-                json.put("day_tips", ""); // 如果手机端有周几的提示可以填入，暂时填空确保不崩溃
+                json.put("day_tips", ""); 
                 json.put("timestamp", System.currentTimeMillis());
 
                 byte[] data = json.toString().getBytes(StandardCharsets.UTF_8);
-
-                // 优先从 WearSyncState 缓存中拿 NodeId，速度极快
                 String targetNodeId = WearSyncState.getNodeId(context);
 
                 if (targetNodeId != null && !targetNodeId.isEmpty()) {
-                    PhoneLog.d(TAG, "⚡ [闹钟发信] 命中 WearSyncState 缓存: " + targetNodeId + "，正在以纯净新协议秒发射 [" + actionStr + "]...");
+                    PhoneLog.d(TAG, "⚡ [鬧鐘正向發信] 命中緩存節點: " + targetNodeId + "，正在秒發射 [" + actionStr + "]...");
                     Tasks.await(Wearable.getMessageClient(context).sendMessage(targetNodeId, "/wear-universal-sync", data));
-                    PhoneLog.d(TAG, "🚀 [闹钟发信成功] 闹钟信号已安全投递到缓存通道。");
+                    PhoneLog.d(TAG, "🚀 [鬧鐘正向發信成功] 指令 [" + actionStr + "] 已成功安全投遞。");
                 } else {
-                    // 降级方案：物理扫描并踢醒手表蓝牙
-                    PhoneLog.w(TAG, "⚠️ [闹钟发信降级] 缓存中无可用节点，触发在线物理扫描...");
-                    java.util.List<com.google.android.gms.wearable.Node> nodes = 
-                            Tasks.await(Wearable.getNodeClient(context).getConnectedNodes());
+                    PhoneLog.w(TAG, "⚠️ [鬧鐘正向發信降級] 緩存中無可用節點，觸發在線物理掃描...");
+                    List<Node> nodes = Tasks.await(Wearable.getNodeClient(context).getConnectedNodes());
 
                     if (nodes != null && !nodes.isEmpty()) {
-                        for (com.google.android.gms.wearable.Node node : nodes) {
-                            PhoneLog.d(TAG, "  └─ 🚀 发现复活节点: " + node.getId() + "，刷新持久化缓存并灌入闹钟动作...");
+                        for (Node node : nodes) {
+                            PhoneLog.d(TAG, "  └─ 🚀 發現復活節點: " + node.getId() + "，刷新緩存並灌入鬧鐘動作...");
                             WearSyncState.setNodeId(context, node.getId());
                             Tasks.await(Wearable.getMessageClient(context).sendMessage(node.getId(), "/wear-universal-sync", data));
                         }
-                        PhoneLog.d(TAG, "🚀 [闹钟发信成功] 降级广播流发射完成。");
+                        PhoneLog.d(TAG, "🚀 [鬧鐘正向發信成功] 降級廣播流發射完成。");
                     } else {
-                        PhoneLog.w(TAG, "❌ [闹钟发信断联] 传输失败：没有发现任何可通信的手表。");
+                        PhoneLog.w(TAG, "❌ [鬧鐘正向發信斷聯] 傳輸失敗：沒有發現任何可通信的手錶。");
                     }
                 }
             } catch (Exception e) {
-                PhoneLog.e(TAG, "🔴 [闹钟正向发信失败] 协议校准打包异常: " + e.getMessage(), e);
+                PhoneLog.e(TAG, "🔴 [鬧鐘正向發信失敗] 協議校準打包異常: " + e.getMessage(), e);
             }
         }).start();
     }
