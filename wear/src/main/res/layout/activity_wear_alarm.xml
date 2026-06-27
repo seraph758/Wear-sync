@@ -27,6 +27,13 @@
             android:textColor="#C8A74A"
             android:textSize="15sp"
             android:textStyle="bold"/>
+        <TextView
+            android:id="@+id/tv_alarm_label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:visibility="gone"
+            android:text=""
+            android:textSize="14sp"/>
 
 
         <TextView
