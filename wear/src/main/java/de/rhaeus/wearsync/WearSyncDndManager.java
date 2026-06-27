@@ -209,7 +209,7 @@ if (isPowerSaveLinkageOpen) {
 
         }
 
-    },1500);
+    },5500);
 
 
 } else {
