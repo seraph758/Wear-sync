@@ -90,12 +90,13 @@ public class WearAlarmActivity extends Activity {
             try {
                 JSONObject json = new JSONObject(rawJson);
                 String time = json.optString("time", "00:00");
+                String label = json.optString("label", "闹钟");
                 String day = json.optString("day_tips", "");
 
                 if (tvAlarmTime != null) tvAlarmTime.setText(time);
                 if (tvAlarmDay != null) tvAlarmDay.setText(day);
 
-                WearLog.d(TAG, "📦 业务现场解包成功 ➔ 时间:[" + time + "], 标签:");
+                WearLog.d(TAG, "📦 业务现场解包成功 ➔ 时间:[" + time + "], 标签:[" + label + "]");
                 
                 // 确保震动在持续轰鸣
                 startWatchVibration();
