@@ -24,7 +24,6 @@ public class WearAlarmActivity extends Activity {
     private Vibrator vibrator;
     private TextView tvAlarmDay;
     private TextView tvAlarmTime;
-    private TextView tvAlarmLabel;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -40,7 +39,6 @@ public class WearAlarmActivity extends Activity {
 
         tvAlarmDay = findViewById(R.id.tv_alarm_day);
         tvAlarmTime = findViewById(R.id.tv_alarm_time);
-        tvAlarmLabel = findViewById(R.id.tv_alarm_label);
         Button btnDismiss = findViewById(R.id.btn_dismiss);
         Button btnSnooze = findViewById(R.id.btn_snooze);
 
@@ -92,14 +90,12 @@ public class WearAlarmActivity extends Activity {
             try {
                 JSONObject json = new JSONObject(rawJson);
                 String time = json.optString("time", "00:00");
-                String label = json.optString("label", "闹钟");
                 String day = json.optString("day_tips", "");
 
                 if (tvAlarmTime != null) tvAlarmTime.setText(time);
-                if (tvAlarmLabel != null) tvAlarmLabel.setText(label);
                 if (tvAlarmDay != null) tvAlarmDay.setText(day);
 
-                WearLog.d(TAG, "📦 业务现场解包成功 ➔ 时间:[" + time + "], 标签:[" + label + "]");
+                WearLog.d(TAG, "📦 业务现场解包成功 ➔ 时间:[" + time + "], 标签:");
                 
                 // 确保震动在持续轰鸣
                 startWatchVibration();
