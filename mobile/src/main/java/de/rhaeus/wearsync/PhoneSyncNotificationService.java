@@ -306,6 +306,13 @@ if (snoozeKey.trim().isEmpty()) {
                         "延后")
                         .toLowerCase();
 
+        if (dismissKey.trim().isEmpty()) {
+    dismissKey = "停止";
+}
+
+if (snoozeKey.trim().isEmpty()) {
+    snoozeKey = "延后";
+
 
 
 
