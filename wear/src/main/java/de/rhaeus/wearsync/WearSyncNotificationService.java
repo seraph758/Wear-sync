@@ -13,6 +13,7 @@ public class WearSyncNotificationService extends NotificationListenerService {
     private static final String TAG = "WearSync_WearNotification";
     private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
     public static boolean isInternalUpdate = false;
+    public static long lastInternalUpdateTime = 0;
 
     public static void sendDndReverseSyncToPhone(Context context, int interruptionFilter) {
         new Thread(() -> {
