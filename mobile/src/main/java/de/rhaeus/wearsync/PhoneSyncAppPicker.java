@@ -74,9 +74,12 @@ public class PhoneSyncAppPicker {
 
         for(int i=0;i<apps.size();i++){
 
-            names[i]=apps.get(i).name;
+                names[i]=
+                        apps.get(i).name
+                        + "\n"
+                        + apps.get(i).pkg;
 
-        }
+}
 
 
 
@@ -328,11 +331,12 @@ public class PhoneSyncAppPicker {
 
         for(int i=0;i<list.size();i++){
 
+            names[i]=
+                    list.get(i).name
+                    + "\n"
+                    + list.get(i).pkg;
 
-            names[i]=list.get(i).name;
-
-
-        }
+}
 
 
 
