@@ -22,6 +22,10 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
+/**
+ * 🎬 远程拍照手表观景窗/流媒体渲染 UI（MediaCodec 硬件解码 + 实时反向发信控制）
+ * 极致动态日志全步进版：微秒级动态监控高频帧解码、输入输出网关及异步信令生命周期。
+ */
 public class WearCameraActivity extends Activity implements SurfaceHolder.Callback {
     private static final String TAG = "WearSync_WearCameraUI";
     private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
@@ -31,13 +35,23 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
     private boolean isDecoderRunning = false;
     private boolean isUserExiting = false;
 
+    // 📊 用于防止高频解码日志淹没系统的统计计数器
+    private long totalFramesDecoded = 0;
+    private long lastLogTime = 0;
+    private boolean isFirstFrameDecoded = false;
+
     public static WeakReference<WearCameraActivity> sActivityRef = new WeakReference<>(null);
 
+    // 🛰️ 手机端强制挂断哨兵：接收来自手机因某种意外被迫熔断相机的全局广播
     private final BroadcastReceiver phoneKillReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            if (intent != null && "de.rhaeus.wearsync.ACTION_FORCE_QUIT_WEAR_CAMERA".equals(intent.getAction())) {
-                WearLog.d(TAG, "📥 收到手机端被迫挂断指令，正在无条件退出手表流媒体界面...");
+            if (intent == null) return;
+            String action = intent.getAction();
+            WearLog.w(TAG, "📥 [逆向熔断广播] 接收到全局通知 Action: [" + action + "]");
+            
+            if ("de.rhaeus.wearsync.ACTION_FORCE_QUIT_WEAR_CAMERA".equals(action)) {
+                WearLog.w(TAG, "📥 [逆向熔断广播] 🎯 确认命中手机端挂断指令！正在启动无条件退出机制...");
                 cleanExit(false);
             }
         }
@@ -45,94 +59,160 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        WearLog.d(TAG, "① [生命周期] onCreate 点火 ─── 手表观景窗 Activity 开始加载初始化...");
         super.onCreate(savedInstanceState);
+        
         WearCameraActivity.sActivityRef = new WeakReference<>(this);
         setContentView(R.layout.activity_wear_camera);
 
         surfaceView = findViewById(R.id.surfaceView);
+        WearLog.d(TAG, "⚙️ [UI挂载] 正在将 SurfaceHolder 渲染回调绑定至 Activity...");
         surfaceView.getHolder().addCallback(this);
 
         Button btnShutter = findViewById(R.id.btn_shutter);
         btnShutter.setOnClickListener(v -> {
-            WearLog.d(TAG, "🔘 用户按下手表快门，下发触发拍照脉冲");
+            WearLog.d(TAG, "🔘 [交互触发] ━━━ 用户按下手表物理/虚拟快门 ━━━ 准备向手机发射脉冲...");
             sendControlSignalToPhone("ACTION_TRIGGER_SHUTTER");
         });
 
-       
+        // 🛠️ 注册手机断开物理拦截广播
+        WearLog.d(TAG, "⚙️ [信令挂载] 正在构建逆向断开拦截器 IntentFilter...");
         IntentFilter filter = new IntentFilter("de.rhaeus.wearsync.ACTION_FORCE_QUIT_WEAR_CAMERA");
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            WearLog.d(TAG, "⚙️ [信令挂载] 当前系统 SDK: " + Build.VERSION.SDK_INT + " (>=26)，注入 RECEIVER_EXPORTED 旗帜注册动态广播...");
             registerReceiver(phoneKillReceiver, filter, Context.RECEIVER_EXPORTED);
         } else {
+            WearLog.d(TAG, "⚙️ [信令挂载] 当前旧版系统 SDK: " + Build.VERSION.SDK_INT + "，采用常规方式动态注册...");
             registerReceiver(phoneKillReceiver, filter);
         }
-        WearLog.d(TAG, "🎬 onCreate: 手表观景窗 Activity 完成初始化准备");
+        
+        // 重置解調計數
+        totalFramesDecoded = 0;
+        isFirstFrameDecoded = false;
+        WearLog.d(TAG, "🎬 [生命周期] onCreate 结束 ─── 手表端图传观景窗 Activity 全功能就绪。");
     }
 
     @Override
     public void surfaceCreated(SurfaceHolder holder) {
-        WearLog.d(TAG, "🖥️ Surface 硬件载体已成功构建，准备初始化 H264 视频解码器...");
-        initDecoder(holder);
+        WearLog.d(TAG, "🖥️ [Surface状态] ─── 物理 Surface 硬件画布载体已成功构建完成 ───");
+        if (holder != null && holder.getSurface() != null) {
+            WearLog.d(TAG, "🖥️ [Surface状态] 检查 Surface 活体正常。正在移交底层初始化 H.264 解码器...");
+            initDecoder(holder);
+        } else {
+            WearLog.e(TAG, "❌ [Surface状态致命] 检测到 SurfaceHolder 或其内部 Surface 为 null！无法点火解調引擎。");
+        }
     }
 
     private void initDecoder(SurfaceHolder holder) {
         try {
+            WearLog.d(TAG, "⚙️ [解码器配置] 开始配置 H.264 底层硬解引擎参数 (画幅规格: 640x480)...");
             mDecoder = MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);
             MediaFormat format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, 640, 480);
+            
+            WearLog.d(TAG, "⚙️ [解码器配置] 正在呼叫系统硬件多媒体库执行 mDecoder.configure()...");
             mDecoder.configure(format, holder.getSurface(), null, 0);
+            
+            WearLog.d(TAG, "🚀 [解码器点火] 正在呼叫 mDecoder.start()...");
             mDecoder.start();
             isDecoderRunning = true;
-            WearLog.d(TAG, "✨ H.264 底层硬解引擎成功起飞！");
+            WearLog.d(TAG, "✨ [解码器点火成功] H.264 底层硬解引擎成功起飞！等待接收来自手机的帧数据流...");
         } catch (Exception e) {
-            WearLog.e(TAG, "❌ 解码器初始化严重受阻: " + e.getMessage(), e);
+            WearLog.e(TAG, "❌ [解码器致命异常] 初始化硬解管线严重受阻，可能底层硬件能力不足或 Surface 被提前抢占: " + e.getMessage(), e);
         }
     }
 
+    /**
+     * 🚀 接收来自高速公路网关通道传输过来的 H.264 原生帧，注入解码器
+     */
     public void feedH264Data(byte[] data, int length) {
-        if (!isDecoderRunning || mDecoder == null) return;
+        if (!isDecoderRunning || mDecoder == null) {
+            // 边缘保护：若解調器未開啟，直接丟棄不予處理
+            return;
+        }
         try {
+            // 1. 抽取输入端空闲小卡座 (Timeout: 10毫秒)
             int inputBufferIndex = mDecoder.dequeueInputBuffer(10000);
             if (inputBufferIndex >= 0) {
                 ByteBuffer inputBuffer = mDecoder.getInputBuffer(inputBufferIndex);
                 if (inputBuffer != null) {
                     inputBuffer.clear();
                     inputBuffer.put(data, 0, length);
+                    
+                    // 填塞原始密文帧推进 H.264 异步解調佇列
                     mDecoder.queueInputBuffer(inputBufferIndex, 0, length, System.currentTimeMillis(), 0);
                 }
+            } else {
+                // 如果返回 -1，说明解码器可能处于高负荷状态，当前没有闲置卡座
+                long now = System.currentTimeMillis();
+                if (now - lastLogTime > 4000) {
+                    WearLog.w(TAG, "⚠️ [图传卡顿警报] 解码器输入端卡座爆满 (dequeueInputBuffer == -1)，可能手錶晶片解調速度跟不上手機噴射速度。");
+                }
             }
+
+            // 2. 抽取输出端已解调完成的像素裸流画面并渲染
             MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
             int outputBufferIndex = mDecoder.dequeueOutputBuffer(bufferInfo, 10000);
+            
             while (outputBufferIndex >= 0) {
+                // 🚀 核心捕获：首帧解調成功錨點
+                if (!isFirstFrameDecoded) {
+                    isFirstFrameDecoded = true;
+                    WearLog.d(TAG, "🔥 [硬解首帧大捷] 手表端成功完成第一帧 H.264 物理图传的渲染突破！");
+                }
+
+                // 傳入 true：命令解調器立刻將此緩衝區數據刷新推向 Surface 進行螢幕物理渲染
                 mDecoder.releaseOutputBuffer(outputBufferIndex, true);
+                
+                totalFramesDecoded++;
+                long now = System.currentTimeMillis();
+                // 每隔 4 秒印出一條計數快照，避免卡死日誌鏈
+                if (now - lastLogTime > 4000) {
+                    WearLog.d(TAG, "📊 [硬解高频快照] 画面正在丝滑渲染，手表端累计已成功解码并刷新: " + totalFramesDecoded + " 帧画面。");
+                    lastLogTime = now;
+                }
+
+                // 迴圈追撈當前佇列裡剩餘已解好但未釋放的緩衝區
                 outputBufferIndex = mDecoder.dequeueOutputBuffer(bufferInfo, 0);
             }
         } catch (Exception e) {
-            WearLog.e(TAG, "⚠️ 帧流灌入硬解管线发生拥堵波动: " + e.getMessage());
+            WearLog.e(TAG, "⚠️ [图传硬解异常] 帧流灌入硬解管线发生拥堵异常波動: " + e.getMessage());
         }
     }
 
     @Override
-    public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {}
+    public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
+        WearLog.d(TAG, "🖥_ [Surface状态] surfaceChanged 触发 ➔ 画布几何尺寸或格式发生变更: w=" + width + ", h=" + height);
+    }
 
     @Override
     public void surfaceDestroyed(SurfaceHolder holder) {
-        WearLog.w(TAG, "🖥️ Surface 被销毁，正在强制熔断解码管线...");
+        WearLog.w(TAG, "🖥️ [Surface状态] ─── Surface 硬件载体被系统强行销毁 ───");
+        WearLog.w(TAG, "🖥️ [Surface状态] 正在强力执行系统级熔断清理，彻底拆卸解码管线...");
         releaseDecoder();
     }
 
     private void releaseDecoder() {
+        WearLog.w(TAG, "🧹 [安全熔断] 正在关闭并释放 mDecoder 硬件解码资源...");
         isDecoderRunning = false;
         if (mDecoder != null) {
             try {
                 mDecoder.stop();
                 mDecoder.release();
-            } catch (Exception ignored) {}
+                WearLog.w(TAG, "🧹 [安全熔断] 硬件解码器内存物理卡座已完全断开脱离。");
+            } catch (Exception e) {
+                WearLog.w(TAG, "🧹 [安全熔断] 关闭解码器发生了不影响全局的边缘异常: " + e.getMessage());
+            }
             mDecoder = null;
-            WearLog.d(TAG, "🛑 解码器硬件资源已安全释放回收");
+            WearLog.d(TAG, "🛑 [安全熔断结束] 終解完成 ─── 解码器硬件资源已安全释放回收。");
         }
     }
 
+    /**
+     * 📡 反向控场：向手机端反向穿透发送拍照控制信令
+     */
     private void sendControlSignalToPhone(String actionCommand) {
         new Thread(() -> {
+            WearLog.d(TAG, "🧵 [背景信令线程] 异步控制发送线程启动，当前准备投递指令: [" + actionCommand + "]");
             try {
                 JSONObject json = new JSONObject();
                 json.put("sender", "wear");
@@ -141,45 +221,75 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
                 json.put("timestamp", System.currentTimeMillis());
 
                 byte[] payload = json.toString().getBytes(StandardCharsets.UTF_8);
+                
+                WearLog.d(TAG, "📡 [信令发送中] 正在呼叫 getNodeClient().getConnectedNodes() 寻找配对的手机节点...");
                 List<Node> nodes = Tasks.await(Wearable.getNodeClient(this).getConnectedNodes());
-                if (nodes != null) {
+                
+                if (nodes != null && !nodes.isEmpty()) {
+                    WearLog.d(TAG, "📊 [信令发送中] 发现处于在线激活状态的手表配对手机节点数量: " + nodes.size());
                     for (Node n : nodes) {
+                        WearLog.d(TAG, "📡 [信令发送中] 正在通过高速 Google Message 物理网关注入字节包 ➔ 目标手机 ID: [" + n.getId() + "] ➔ 路径: [" + UNIVERSAL_SYNC_PATH + "]");
                         Wearable.getMessageClient(this).sendMessage(n.getId(), UNIVERSAL_SYNC_PATH, payload);
                     }
+                    WearLog.d(TAG, "🚀 [信令发送大捷] 控制信号 [" + actionCommand + "] 已成功扔进系统底层穿透发射通道。");
+                } else {
+                    WearLog.e(TAG, "❌ [信令发送失败] 物理链路扫描结束，未发现任何处于配对连线状态的手机节点！信令丢弃。");
                 }
             } catch (Exception e) {
-                WearLog.e(TAG, "❌ 向手机端投递相机控场指令失败", e);
+                WearLog.e(TAG, "🔴 [信令发送致命] 向手机端投递相机全局控场指令遭遇崩溃阻断: " + e.getMessage(), e);
             }
         }).start();
     }
 
+    /**
+     * 🧹 全局纯净安全退出回收器
+     */
     private void cleanExit(boolean notifyPhone) {
-        if (isUserExiting) return;
+        if (isUserExiting) {
+            WearLog.d(TAG, "🧹 [清场熔断] 触发保护：当前正处于退出进程中，拒绝二次重入。");
+            return;
+        }
         isUserExiting = true;
-        WearLog.d(TAG, "🧹 正在启动手表相机退出机制...");
+        WearLog.w(TAG, "🧹 [清场熔断] ━━━━━━━━ 开启手表相机 UI 完整退出销毁机制 ━━━━━━━━");
+        WearLog.w(TAG, "  └─ ⚙️ 参数设定 -> 是否反向通知手机同步关闭相机: " + (notifyPhone ? "【是/TRUE】" : "【否/FALSE】"));
 
         if (notifyPhone) {
+            WearLog.d(TAG, "🧹 [清场熔断] 正在呼叫反向信令，命令手机端立即同步熔断 PhoneSyncCameraService...");
             sendControlSignalToPhone("STOP_CAMERA");
         }
+        
         try {
+            WearLog.d(TAG, "🧹 [清场熔断] 正在摘除动态挂载的逆向 phoneKillReceiver 广播接收器...");
             unregisterReceiver(phoneKillReceiver);
-        } catch (Exception ignored) {}
+            WearLog.d(TAG, "🧹 [清场熔断] 广播接收器注销成功。");
+        } catch (Exception e) {
+            WearLog.w(TAG, "🧹 [清场熔断] 注销广播时触发了边缘报错 (可能之前已被解绑): " + e.getMessage());
+        }
+        
+        // 彻底释放解調器
         releaseDecoder();
+        
         if (sActivityRef.get() == this) {
+            WearLog.d(TAG, "🧹 [清场熔断] 正在擦除全域弱引用 Activity 句柄卡槽 (sActivityRef)...");
             sActivityRef.clear();
         }
+        
+        WearLog.w(TAG, "🏳️ [清场熔断完毕] 正在调用 finishAndRemoveTask() 将任务彻底从手表堆栈和最近任务栏连根拔除。");
         finishAndRemoveTask();
     }
 
     @Override
     public void onBackPressed() {
+        WearLog.w(TAG, "🔙 [交互触发] 用户主动在手表屏幕按下【返回键/滑动返回】，判定为主动中止退出...");
         cleanExit(true);
         super.onBackPressed();
     }
 
     @Override
     protected void onDestroy() {
+        WearLog.w(TAG, "🏳️ [生命周期] onDestroy 触发：监测到手表 UI 堆栈准备销毁...");
         cleanExit(false);
         super.onDestroy();
+        WearLog.w(TAG, "🏳️ [生命周期] onDestroy ─── 手表端图传观景窗 Activity 全生命周期安全终结 ───");
     }
 }
