@@ -49,7 +49,7 @@
         android:paddingBottom="16dp" 
         android:orientation="horizontal">
 
-        <TextView
+        <Button
             android:id="@+id/btn_snooze"
             android:layout_width="0dp"
             android:layout_height="54dp"
@@ -62,7 +62,7 @@
             android:textSize="18sp"
             android:textStyle="bold"/>
 
-        <TextView
+        <Button
             android:id="@+id/btn_dismiss"
             android:layout_width="0dp"
             android:layout_height="54dp"
