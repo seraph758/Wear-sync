@@ -171,9 +171,9 @@ public class PhoneSyncListenerService extends WearableListenerService {
             androidx.wear.remote.interactions.RemoteActivityHelper helper =
                     new androidx.wear.remote.interactions.RemoteActivityHelper(this, REMOTE_EXECUTOR);
 
-            PhoneLog.d(TAG, "⚙️ [穿透發射中] 正在建構遠端跳板協議 URI Schema: [wearsync://camera/]");
+            PhoneLog.d(TAG, "⚙️ [穿透發射中] 正在建構遠端跳板協議 URI Schema: [wearsync://camera]");
             Intent intent = new Intent(Intent.ACTION_VIEW);
-            intent.setData(android.net.Uri.parse("wearsync://camera/"));
+            intent.setData(android.net.Uri.parse("wearsync://camera"));
             
             PhoneLog.d(TAG, "⚙️ [穿透發射中] 正在注入多重 Activity 啟動 Flags (NEW_TASK | CLEAR_TOP | SINGLE_TOP)...");
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK 
