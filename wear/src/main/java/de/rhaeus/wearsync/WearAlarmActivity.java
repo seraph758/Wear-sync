@@ -91,10 +91,17 @@ public class WearAlarmActivity extends Activity {
                 JSONObject json = new JSONObject(rawJson);
                 String time = json.optString("time", "00:00");
                 String label = json.optString("label", "闹钟");
-                String day = json.optString("day_tips", "");
+                String monthDay = json.optString("month_day", "");
+                String week = json.optString("day_tips", "");
 
                 if (tvAlarmTime != null) tvAlarmTime.setText(time);
-                if (tvAlarmDay != null) tvAlarmDay.setText(day);
+                if (tvAlarmDay != null) {
+                    if (!monthDay.isEmpty()) {
+                        tvAlarmDay.setText(monthDay + "  " + week);
+                    } else {
+                        tvAlarmDay.setText(week);
+                    }
+                }
 
                 WearLog.d(TAG, "📦 业务现场解包成功 ➔ 时间:[" + time + "], 标签:[" + label + "]");
                 
