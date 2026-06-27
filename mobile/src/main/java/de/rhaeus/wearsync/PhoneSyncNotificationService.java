@@ -270,21 +270,28 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
         || title.contains("dismiss")){
 
 
-                    cachedDismissIntent =
-                            action.actionIntent;
+    PhoneLog.d(
+        TAG,
+        "🎯 发现停止按钮: "
+        + action.title
+    );
 
 
-                }
+}
 
 
-                else if(title.contains(snoozeKey)
-                        || title.contains("snooze")){
+else if(title.contains(snoozeKey)
+        || title.contains("snooze")
+        || title.contains("稍后")){
 
 
-                    cachedSnoozeIntent =
-                            action.actionIntent;
+    PhoneLog.d(
+        TAG,
+        "🎯 发现延后按钮: "
+        + action.title
+    );
 
-                }
+}
 
 
             }
