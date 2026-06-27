@@ -394,188 +394,79 @@ Card(
         )
 
 
-
-        // 2. 停止关键字
-
-        OutlinedTextField(
-
-            value = dismissKeyText,
-
-
-            onValueChange = { newValue ->
-
-
-                dismissKeyText = newValue
-
-
-
-                val saveValue =
-                    if(newValue.trim().isEmpty()){
-
-                        "停止"
-
-                    }else{
-
-                        newValue.trim()
-
-                    }
-
-
-
-                sp.edit()
-                    .putString(
-                        "alarm_dismiss_key",
-                        saveValue
-                    )
-                    .apply()
-
-
-
-                PhoneLog.d(
-                    "WearSync_Main",
-                    "💾 保存停止关键字: $saveValue"
-                )
-
-
-            },
-
-
-            label = {
-
-                Text(
-                    "停止关键字"
-                )
-
-            },
-
-
-            placeholder = {
-
-                Text(
-                    "例如：停止 / 关闭 / stop"
-                )
-
-            },
-
-
-            singleLine = true,
-
-
-            modifier = Modifier.fillMaxWidth(),
-
-
-            textStyle = TextStyle(
-                fontSize = 14.sp,
-                color = textColor
-            )
-
-        )
-
-
-
-
-        // 3. 延后关键字
-
-
-        OutlinedTextField(
-
-
-            value = snoozeKeyText,
-
-
-            onValueChange = { newValue ->
-
-
-                snoozeKeyText = newValue
-
-
-
-                val saveValue =
-                    if(newValue.trim().isEmpty()){
-
-                        "延后"
-
-                    }else{
-
-                        newValue.trim()
-
-                    }
-
-
-
-                sp.edit()
-                    .putString(
-                        "alarm_snooze_key",
-                        saveValue
-                    )
-                    .apply()
-
-
-
-                PhoneLog.d(
-                    "WearSync_Main",
-                    "💾 保存延后关键字: $saveValue"
-                )
-
-            },
-
-
-
-            label = {
-
-                Text(
-                    "延后关键字"
-                )
-
-            },
-
-
-            placeholder = {
-
-                Text(
-                    "例如：延后 / 稍后 / snooze"
-                )
-
-            },
-
-
-            singleLine = true,
-
-
-            modifier = Modifier.fillMaxWidth(),
-
-
-            textStyle = TextStyle(
-                fontSize = 14.sp,
-                color = textColor
-            )
-
-
-        )
-
-
-
-
-        HorizontalDivider(
-            color = textColor.copy(alpha = 0.1f),
-            thickness = 1.dp
-        )
-
-
-
-
-
-        Text(
-
-            "🧪 业务流联调测试面板 (模拟手表端按键)",
-
-            fontSize = 13.sp,
-
-            fontWeight = FontWeight.SemiBold,
-
+// 使用 Row 让内部组件水平并排
+Row(
+    modifier = Modifier
+        .fillMaxWidth()
+        .padding(vertical = 8.dp), // 给这一行上下加一点点间距
+    horizontalArrangement = Arrangement.spacedBy(8.dp) // 自动让两个输入框之间留出 8dp 的间距
+) {
+
+    // 2. 停止关键字（左侧）
+    OutlinedTextField(
+        value = dismissKeyText,
+        onValueChange = { newValue ->
+            dismissKeyText = newValue
+            val saveValue = if(newValue.trim().isEmpty()){
+                "停止"
+            } else {
+                newValue.trim()
+            }
+            sp.edit()
+                .putString("alarm_dismiss_key", saveValue)
+                .apply()
+            PhoneLog.d("WearSync_Main", "💾 保存停止关键字: $saveValue")
+        },
+        label = { Text("停止关键字") },
+        placeholder = { Text("例如：停止") }, // 并排后空间变小，建议提示词精简一下
+        singleLine = true,
+        // ⭐ 关键：改为 weight(1f)，让其平分空间
+        modifier = Modifier.weight(1f), 
+        textStyle = TextStyle(
+            fontSize = 14.sp,
             color = textColor
-
         )
+    )
+
+    // 3. 延后关键字（右侧）
+    OutlinedTextField(
+        value = snoozeKeyText,
+        onValueChange = { newValue ->
+            snoozeKeyText = newValue
+            val saveValue = if(newValue.trim().isEmpty()){
+                "延后"
+            } else {
+                newValue.trim()
+            }
+            sp.edit()
+                .putString("alarm_snooze_key", saveValue)
+                .apply()
+            PhoneLog.d("WearSync_Main", "💾 保存延后关键字: $saveValue")
+        },
+        label = { Text("延后关键字") },
+        placeholder = { Text("例如：延后") }, // 并排后空间变小，建议提示词精简一下
+        singleLine = true,
+        // ⭐ 关键：改为 weight(1f)，让其平分空间
+        modifier = Modifier.weight(1f), 
+        textStyle = TextStyle(
+            fontSize = 14.sp,
+            color = textColor
+        )
+    )
+}
+
+// 下面依然接你原来的分割线
+HorizontalDivider(
+    color = textColor.copy(alpha = 0.1f),
+    thickness = 1.dp
+)
+
+Text(
+    "🧪 业务流联调测试面板 (模拟手表端按键)",
+    fontSize = 13.sp,
+    fontWeight = FontWeight.SemiBold,
+    color = textColor
+)
 
 
 
