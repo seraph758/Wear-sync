@@ -28,63 +28,121 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
      * 🎯 新增：供 PhoneAlarmManager 调用的实时逆向控制核心方法
      * 抛弃静态缓存，直接实时穿透通知栏获取最新的 Intent
      */
+    /**
+     * 🎯 [全步進日誌版] 供 PhoneAlarmManager 調用的即時逆向控制核心方法
+     * 拋棄靜態變數，直接實時全量掃描通知欄
+     */
     public static boolean triggerLiveAlarmAction(Context context, boolean isDismissCommand) {
+        String cmdName = isDismissCommand ? "【停止/DISMISS】" : "【延後/SNOOZE】";
+        PhoneLog.d(TAG, "🔍 [即時控制] ━━━ 進入實時通知欄解析流 ━━━ 正在準備執行: " + cmdName);
+
         PhoneSyncNotificationService serviceInstance = getInstance();
         if (serviceInstance == null) {
-            PhoneLog.e(TAG, "❌ 实时控制失败：PhoneSyncNotificationService 实例未就绪（可能服务被彻底杀死了）");
+            PhoneLog.e(TAG, "❌ [即時控制攔截] 核心服務實例 (instance) 為 null！說明哨兵服務可能被系統徹底殺死或未啟動。");
             return false;
         }
+        PhoneLog.d(TAG, "✅ [即時控制] 核心服務實例健康存在，開始讀取用戶配置...");
 
         SharedPreferences prefs = context.getSharedPreferences("wearsync_prefs", Context.MODE_PRIVATE);
         String targetPkg = prefs.getString("selected_alarm_package", "com.google.android.deskclock");
-        
         String dismissKey = prefs.getString("alarm_dismiss_key", "停止").toLowerCase();
         String snoozeKey = prefs.getString("alarm_snooze_key", "延后").toLowerCase();
 
+        PhoneLog.d(TAG, "📌 [即時控制配置] 目標鬧鐘包名: [" + targetPkg + "], 停止關鍵字: [" + dismissKey + "], 延後關鍵字: [" + snoozeKey + "]");
+
         try {
-            // 🚀 核心黑科技：实时捞取当前系统通知栏活着的所有通知
+            PhoneLog.d(TAG, "🚀 [即時控制] 正在調用系統 getActiveNotifications() 抓取當前快照...");
             StatusBarNotification[] activeNotifications = serviceInstance.getActiveNotifications();
-            if (activeNotifications == null || activeNotifications.length == 0) {
-                PhoneLog.w(TAG, "⚠️ 实时控制失败：当前通知栏空空如也，没有任何活跃通知");
+            
+            if (activeNotifications == null) {
+                PhoneLog.w(TAG, "⚠️ [即時控制結束] 系統返回的通知陣列為 null（極端異常）");
                 return false;
             }
+            
+            PhoneLog.d(TAG, "📊 [即時控制] 當前通知欄總共有 " + activeNotifications.length + " 個活躍通知，開始逐一篩選...");
 
-            for (StatusBarNotification sbn : activeNotifications) {
-                if (sbn == null || !targetPkg.equalsIgnoreCase(sbn.getPackageName())) {
-                    continue; // 不是目标时钟应用的通知，跳过
+            for (int i = 0; i < activeNotifications.length; i++) {
+                StatusBarNotification sbn = activeNotifications[i];
+                if (sbn == null) {
+                    PhoneLog.d(TAG, "  └─ 🛑 第 " + i + " 個通知物件為 null，跳過");
+                    continue;
                 }
 
-                Notification notification = sbn.getNotification();
-                if (notification == null || notification.actions == null) continue;
+                String currentPkg = sbn.getPackageName();
+                PhoneLog.d(TAG, "  └─ 🔍 檢查第 " + i + " 個通知，包名: [" + currentPkg + "], ID: " + sbn.getId());
 
-                // 遍历当前这个活着的目标闹钟的所有按钮
-                for (Notification.Action action : notification.actions) {
-                    if (action.title == null || action.actionIntent == null) continue;
+                if (!targetPkg.equalsIgnoreCase(currentPkg)) {
+                    // 不是目標鬧鐘，不打印太多干擾日誌
+                    continue; 
+                }
+
+                PhoneLog.d(TAG, "     🎯 [命中目標包] 成功定位到目標鬧鐘通知！開始解析內部的 Notification 物件...");
+                Notification notification = sbn.getNotification();
+                if (notification == null) {
+                    PhoneLog.w(TAG, "     ❌ [異常] 該鬧鐘的 Notification 數據結構為 null！");
+                    continue;
+                }
+
+                if (notification.actions == null || notification.actions.length == 0) {
+                    PhoneLog.w(TAG, "     ❌ [攔截失敗] 該鬧鐘通知目前沒有攜帶任何操作按鈕 (actions == null)！");
+                    continue;
+                }
+
+                PhoneLog.d(TAG, "     📦 發現該鬧鐘通知包含 " + notification.actions.length + " 個 Action 按鈕，開始逐個匹配字串...");
+
+                // 遍歷當前這個活著的鬧鐘的所有按鈕
+                for (int j = 0; j < notification.actions.length; j++) {
+                    Notification.Action action = notification.actions[j];
+                    if (action == null) {
+                        PhoneLog.d(TAG, "        └─ 🛑 Action [" + j + "] 為 null");
+                        continue;
+                    }
+
+                    if (action.title == null) {
+                        PhoneLog.d(TAG, "        └─ ⚠️ Action [" + j + "] 的 title 為 null，無法進行文字匹配");
+                        continue;
+                    }
 
                     String title = action.title.toString().toLowerCase();
+                    PhoneLog.d(TAG, "        └─ 🏷️ Action [" + j + "] 原始標籤: [" + action.title + "], 轉小寫後: [" + title + "]");
 
                     if (isDismissCommand) {
-                        // 判定为停止指令
-                        if (title.contains(dismissKey) || title.contains("stop") || title.contains("关闭") || title.contains("dismiss")) {
-                            PhoneLog.d(TAG, "🔥 [实时击穿成功] 抓到最新有效的【停止】Intent，立刻注入执行！ActionTitle=" + action.title);
+                        // 判定為停止指令
+                        if (title.contains(dismissKey) || title.contains("stop") || title.contains("关闭") || title.contains("停止")|| title.contains("dismiss") || title.contains("清除")) {
+                            PhoneLog.d(TAG, "        🔥 [🔥🔥 匹配成功 🔥🔥] 成功鎖定【停止】意圖！按鈕文字: [" + action.title + "]");
+                            if (action.actionIntent == null) {
+                                PhoneLog.e(TAG, "        ❌ [致命] 雖然找到了停止按鈕，但其 actionIntent 為 null，無法引爆！");
+                                return false;
+                            }
+                            PhoneLog.d(TAG, "        🚀 [發射] 正在跨進程調用 actionIntent.send() 強行按掉手機鬧鐘...");
                             action.actionIntent.send();
+                            PhoneLog.d(TAG, "        🏁 [結束] 穿透控制圓滿成功！");
                             return true;
                         }
                     } else {
-                        // 判定为延后指令
-                        if (title.contains(snoozeKey) || title.contains("snooze") || title.contains("稍后")) {
-                            PhoneLog.d(TAG, "🔥 [实时击穿成功] 抓到最新有效的【延后】Intent，立刻注入执行！ActionTitle=" + action.title);
+                        // 判定為延後指令
+                        if (title.contains(snoozeKey) || title.contains("snooze") || title.contains("延后") || title.contains("稍后")) {
+                            PhoneLog.d(TAG, "        🔥 [🔥🔥 匹配成功 🔥🔥] 成功鎖定【延後】意圖！按鈕文字: [" + action.title + "]");
+                            if (action.actionIntent == null) {
+                                PhoneLog.e(TAG, "        ❌ [致命] 雖然找到了延後按鈕，但其 actionIntent 為 null，無法引爆！");
+                                return false;
+                            }
+                            PhoneLog.d(TAG, "        🚀 [發射] 正在跨進程調用 actionIntent.send() 延後手機鬧鐘...");
                             action.actionIntent.send();
+                            PhoneLog.d(TAG, "        🏁 [結束] 穿透控制圓滿成功！");
                             return true;
                         }
                     }
                 }
+                PhoneLog.w(TAG, "     ⚠️ [匹配結束] 遍歷了該鬧鐘的所有按鈕，但沒有任何一個操作字串能與口令匹配成功。");
             }
+            PhoneLog.w(TAG, "⚠️ [全面搜尋結束] 遍歷了整條通知欄，未找到任何屬於 [" + targetPkg + "] 的活躍通知。");
         } catch (Exception e) {
-            PhoneLog.e(TAG, "🔴 实时解析执行通知栏 Action 发生致命崩溃: " + e.getMessage(), e);
+            PhoneLog.e(TAG, "🔴 [即時控制崩潰] 實時解析執行通知欄 Action 發生致命異常: " + e.getMessage(), e);
         }
         return false;
     }
+
 
 
     private final Handler alarmWatchdogHandler = new Handler(Looper.getMainLooper());
