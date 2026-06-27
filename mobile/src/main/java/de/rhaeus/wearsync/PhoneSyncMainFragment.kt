@@ -34,6 +34,7 @@ import androidx.compose.ui.graphics.Color
 import org.json.JSONObject
 import java.nio.charset.StandardCharsets
 import android.app.NotificationManager
+import androidx.compose.ui.text.TextStyle
 
 class PhoneSyncMainFragment : Fragment() {
 
