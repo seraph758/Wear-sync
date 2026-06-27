@@ -9,6 +9,9 @@ import com.google.android.gms.wearable.Wearable;
 import org.json.JSONObject;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 
 public class PhoneAlarmManager {
     private static final String TAG = "WearSync_PhoneAlarm";
@@ -16,7 +19,7 @@ public class PhoneAlarmManager {
     /**
      * 當手機端系統鬧鐘響起時調用（由通知攔截哨兵服務觸發）
      */
-    public static void notifyWatchAlarmRinging(Context context, String label, String time) {
+    public static void notifyWatchAlarmRinging(Context context, String time) {
         PhoneLog.d(TAG, "🔔 [鬧鐘觸發源] 接收到哨兵指令：手機鬧鐘正在狂轟亂炸 ➔ 標籤: [" + label + "], 時間: [" + time + "]");
         sendAlarmSignalToWatch(context, "START_WEAR_ALARM", label, time);
     }
@@ -96,9 +99,19 @@ public class PhoneAlarmManager {
                 json.put("sender", "phone");
                 json.put("type", "alarm");
                 json.put("action", actionStr);
-                json.put("label", (label == null || label.isEmpty()) ? "闹钟" : label);
                 json.put("time", (time == null) ? "00:00" : time);
-                json.put("day_tips", ""); 
+                Date now = new Date();
+
+                SimpleDateFormat monthDayFormat =
+                        new SimpleDateFormat("M月d日", Locale.getDefault());
+                
+                SimpleDateFormat weekFormat =
+                        new SimpleDateFormat("EEE", Locale.CHINA);
+                
+                String week = weekFormat.format(now).replace("星期", "周");
+                
+                json.put("month_day", monthDayFormat.format(now));
+                json.put("day_tips", week);
                 json.put("timestamp", System.currentTimeMillis());
 
                 byte[] data = json.toString().getBytes(StandardCharsets.UTF_8);
