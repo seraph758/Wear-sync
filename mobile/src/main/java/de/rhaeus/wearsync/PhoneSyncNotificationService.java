@@ -47,6 +47,14 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
         String targetPkg = prefs.getString("selected_alarm_package", "com.google.android.deskclock");
         String dismissKey = prefs.getString("alarm_dismiss_key", "停止").toLowerCase();
         String snoozeKey = prefs.getString("alarm_snooze_key", "延后").toLowerCase();
+        // 🔒 防止关键字被保存为空
+if (dismissKey.trim().isEmpty()) {
+    dismissKey = "停止";
+}
+
+if (snoozeKey.trim().isEmpty()) {
+    snoozeKey = "延后";
+}
 
         PhoneLog.d(TAG, "📌 [即時控制配置] 目標鬧鐘包名: [" + targetPkg + "], 停止關鍵字: [" + dismissKey + "], 延後關鍵字: [" + snoozeKey + "]");
 
