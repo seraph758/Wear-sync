@@ -261,33 +261,65 @@ class PhoneSyncMainFragment : Fragment() {
                                 }
                             }
 
-  // 🎯 4. 闹钟全域代点中心（终极完整版：自定义关键字 + 真实逻辑模拟测试）
+  // 🎯 4. 闹钟全域代点中心（终极完整版：自定义关键字 + 模拟手表真实消息流）
+
 var selectedAlarmName by remember {
-    mutableStateOf(sp.getString("selected_alarm_name", "Google 时钟") ?: "Google 时钟")
+    mutableStateOf(
+        sp.getString(
+            "selected_alarm_name",
+            "Google 时钟"
+        ) ?: "Google 时钟"
+    )
 }
 
+
 var selectedAlarmPkg by remember {
-    mutableStateOf(sp.getString("selected_alarm_package", "com.google.android.deskclock") ?: "com.google.android.deskclock")
+    mutableStateOf(
+        sp.getString(
+            "selected_alarm_package",
+            "com.google.android.deskclock"
+        ) ?: "com.google.android.deskclock"
+    )
 }
+
 
 // 自定义关键字状态
 var dismissKeyText by remember {
-    mutableStateOf(sp.getString("alarm_dismiss_key", "停止") ?: "停止")
+    mutableStateOf(
+        sp.getString(
+            "alarm_dismiss_key",
+            "停止"
+        ) ?: "停止"
+    )
 }
 
+
 var snoozeKeyText by remember {
-    mutableStateOf(sp.getString("alarm_snooze_key", "延后") ?: "延后")
+    mutableStateOf(
+        sp.getString(
+            "alarm_snooze_key",
+            "延后"
+        ) ?: "延后"
+    )
 }
+
+
 
 Card(
     modifier = Modifier.fillMaxWidth(),
     shape = RoundedCornerShape(16.dp),
-    colors = CardDefaults.cardColors(containerColor = cardBgColor)
+    colors = CardDefaults.cardColors(
+        containerColor = cardBgColor
+    )
 ) {
+
+
     Column(
         modifier = Modifier.padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+
+
         Text(
             "闹钟全域代点中心",
             fontSize = 16.sp,
@@ -295,20 +327,57 @@ Card(
             color = textColor
         )
 
-        // 1. 时钟源选择按钮
+
+
+        // 1. 时钟源选择
+
         Button(
             modifier = Modifier.fillMaxWidth(),
             onClick = {
-                PhoneSyncAppPicker.show(requireContext()) { pkg, name ->
+
+
+                PhoneSyncAppPicker.show(
+                    requireContext()
+                ){ pkg,name ->
+
+
                     selectedAlarmName = name
                     selectedAlarmPkg = pkg
-                    sp.edit().putString("selected_alarm_package", pkg).putString("selected_alarm_name", name).apply()
-                    PhoneLog.d("WearSync_Main", "🎯 切换时钟源为: $name [$pkg]")
+
+
+                    sp.edit()
+                        .putString(
+                            "selected_alarm_package",
+                            pkg
+                        )
+                        .putString(
+                            "selected_alarm_name",
+                            name
+                        )
+                        .apply()
+
+
+
+                    PhoneLog.d(
+                        "WearSync_Main",
+                        "🎯 切换时钟源: $name [$pkg]"
+                    )
+
                 }
+
+
             }
-        ) {
-            Text("当前时钟源: $selectedAlarmName", fontSize = 13.sp)
+
+        ){
+
+            Text(
+                "当前时钟源: $selectedAlarmName",
+                fontSize = 13.sp
+            )
+
         }
+
+
 
         Text(
             "目标包名: $selectedAlarmPkg",
@@ -316,156 +385,469 @@ Card(
             color = subTextColor
         )
 
-        HorizontalDivider(color = textColor.copy(alpha = 0.1f), thickness = 1.dp)
 
-        // 2. 停止关键字自定义输入框
+
+        HorizontalDivider(
+            color = textColor.copy(alpha = 0.1f),
+            thickness = 1.dp
+        )
+
+
+
+        // 2. 停止关键字
+
         OutlinedTextField(
+
             value = dismissKeyText,
+
+
             onValueChange = { newValue ->
 
-    dismissKeyText = newValue
 
-    val saveValue =
-        if (newValue.trim().isEmpty()) {
-            "停止"
-        } else {
-            newValue.trim()
-        }
+                dismissKeyText = newValue
 
-    sp.edit()
-        .putString("alarm_dismiss_key", saveValue)
-        .apply()
 
-    PhoneLog.d(
-        "WearSync_Main",
-        "💾 已保存 [停止] 触发关键字: $saveValue"
-    )
-            }
-            label = { Text("停止关键字 (如: 停止, 关闭, 滑动)", fontSize = 12.sp) },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-            textStyle = TextStyle(fontSize = 14.sp, color = textColor)
-        )
 
-        // 3. 延后关键字自定义输入框
-        OutlinedTextField(
-            value = snoozeKeyText,
-            onValueChange = { newValue ->
+                val saveValue =
+                    if(newValue.trim().isEmpty()){
 
-    snoozeKeyText = newValue
+                        "停止"
 
-    val saveValue =
-        if (newValue.trim().isEmpty()) {
-            "延后"
-        } else {
-            newValue.trim()
-        }
+                    }else{
 
-    sp.edit()
-        .putString("alarm_snooze_key", saveValue)
-        .apply()
+                        newValue.trim()
 
-    PhoneLog.d(
-        "WearSync_Main",
-        "💾 已保存 [延后] 触发关键字: $saveValue"
-    )
-}
+                    }
+
+
+
+                sp.edit()
+                    .putString(
+                        "alarm_dismiss_key",
+                        saveValue
+                    )
+                    .apply()
+
+
+
+                PhoneLog.d(
+                    "WearSync_Main",
+                    "💾 保存停止关键字: $saveValue"
+                )
+
+
             },
-            label = { Text("延后关键字 (如: 延后, 稍后, snooze)", fontSize = 12.sp) },
+
+
+            label = {
+
+                Text(
+                    "停止关键字"
+                )
+
+            },
+
+
+            placeholder = {
+
+                Text(
+                    "例如：停止 / 关闭 / stop"
+                )
+
+            },
+
+
             singleLine = true,
+
+
             modifier = Modifier.fillMaxWidth(),
-            textStyle = TextStyle(fontSize = 14.sp, color = textColor)
+
+
+            textStyle = TextStyle(
+                fontSize = 14.sp,
+                color = textColor
+            )
+
         )
 
-        HorizontalDivider(color = textColor.copy(alpha = 0.1f), thickness = 1.dp)
+
+
+
+        // 3. 延后关键字
+
+
+        OutlinedTextField(
+
+
+            value = snoozeKeyText,
+
+
+            onValueChange = { newValue ->
+
+
+                snoozeKeyText = newValue
+
+
+
+                val saveValue =
+                    if(newValue.trim().isEmpty()){
+
+                        "延后"
+
+                    }else{
+
+                        newValue.trim()
+
+                    }
+
+
+
+                sp.edit()
+                    .putString(
+                        "alarm_snooze_key",
+                        saveValue
+                    )
+                    .apply()
+
+
+
+                PhoneLog.d(
+                    "WearSync_Main",
+                    "💾 保存延后关键字: $saveValue"
+                )
+
+            },
+
+
+
+            label = {
+
+                Text(
+                    "延后关键字"
+                )
+
+            },
+
+
+            placeholder = {
+
+                Text(
+                    "例如：延后 / 稍后 / snooze"
+                )
+
+            },
+
+
+            singleLine = true,
+
+
+            modifier = Modifier.fillMaxWidth(),
+
+
+            textStyle = TextStyle(
+                fontSize = 14.sp,
+                color = textColor
+            )
+
+
+        )
+
+
+
+
+        HorizontalDivider(
+            color = textColor.copy(alpha = 0.1f),
+            thickness = 1.dp
+        )
+
+
+
+
 
         Text(
-            "🧪 业务流联调测试面板 (模拟手表端按键按下)",
+
+            "🧪 业务流联调测试面板 (模拟手表端按键)",
+
             fontSize = 13.sp,
+
             fontWeight = FontWeight.SemiBold,
+
             color = textColor
+
         )
 
-        // 4. 🔥 【完美重回】双联调测试按钮
+
+
+
+
+
+        // 4. 模拟手表真实消息
+
         Row(
+
             modifier = Modifier.fillMaxWidth(),
+
             horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Button(
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
-                onClick = {
-                    PhoneLog.d("WearSync_Main", "🧪 [UI测试] 用户点击了 [模拟停止]，正在模拟手表向手机注入 DISMISS 业务流...")
-                    
-                    // 🎯 直接调用后台真实的逆向控制中心，让其读取刚刚输入的 dismissKeyText 进行实时破壳测试
-                    JSONObject json = new JSONObject();
-json.put("sender", "watch");
-json.put("type", "alarm");
-json.put("action", "DISMISS");
-json.put("timestamp", System.currentTimeMillis());
 
-PhoneLog.d(
-    "WearSync_Main",
-    "🧪 模拟手表发送 DISMISS 指令"
-);
-
-byte[] data =
-        json.toString()
-        .getBytes(StandardCharsets.UTF_8);
+        ){
 
 
-// 调用你手机端接收入口
-WearMessageReceiver.handleMessage(
-        requireContext(),
-        data
-);
-                }
-            ) {
-                Text("模拟停止测试", color = Color.White, fontSize = 12.sp)
-            }
 
             Button(
+
                 modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE65100)),
+
+
+                colors = ButtonDefaults.buttonColors(
+
+                    containerColor = Color(0xFFC62828)
+
+                ),
+
+
+
                 onClick = {
-                    PhoneLog.d("WearSync_Main", "🧪 [UI测试] 用户点击了 [模拟延后]，正在模拟手表向手机注入 SNOOZE 业务流...")
-                    
-                    // 🎯 直接调用后台真实的逆向控制中心，让其读取刚刚输入的 snoozeKeyText 进行实时延后测试
-                    JSONObject json = new JSONObject();
-json.put("sender", "watch");
-json.put("type", "alarm");
-json.put("action", "SNOOZE");
-json.put("timestamp", System.currentTimeMillis());
-
-PhoneLog.d(
-    "WearSync_Main",
-    "🧪 模拟手表发送 SNOOZE 指令"
-);
-
-byte[] data =
-        json.toString()
-        .getBytes(StandardCharsets.UTF_8);
 
 
-WearMessageReceiver.handleMessage(
-        requireContext(),
-        data
-);
+                    try{
+
+
+                        val json =
+                            JSONObject()
+
+
+
+                        json.put(
+                            "sender",
+                            "watch"
+                        )
+
+
+                        json.put(
+                            "type",
+                            "alarm"
+                        )
+
+
+                        json.put(
+                            "action",
+                            "DISMISS"
+                        )
+
+
+                        json.put(
+                            "timestamp",
+                            System.currentTimeMillis()
+                        )
+
+
+
+                        val data =
+
+                            json.toString()
+                                .toByteArray(
+                                    StandardCharsets.UTF_8
+                                )
+
+
+
+                        PhoneLog.d(
+
+                            "WearSync_Main",
+
+                            "🧪 模拟手表发送 DISMISS"
+
+                        )
+
+
+
+                        WearMessageReceiver.handleMessage(
+
+                            requireContext(),
+
+                            data
+
+                        )
+
+
+
+                    }catch(e:Exception){
+
+
+
+                        PhoneLog.e(
+
+                            "WearSync_Main",
+
+                            "模拟停止失败: ${e.message}"
+
+                        )
+
+
+                    }
+
+
                 }
-            ) {
-                Text("模拟延后测试", color = Color.White, fontSize = 12.sp)
+
+            ){
+
+
+                Text(
+
+                    "模拟停止测试",
+
+                    color = Color.White,
+
+                    fontSize = 12.sp
+
+                )
+
             }
+
+
+
+
+
+
+
+            Button(
+
+
+                modifier = Modifier.weight(1f),
+
+
+                colors = ButtonDefaults.buttonColors(
+
+                    containerColor = Color(0xFFE65100)
+
+                ),
+
+
+
+                onClick = {
+
+
+                    try{
+
+
+                        val json =
+                            JSONObject()
+
+
+
+                        json.put(
+                            "sender",
+                            "watch"
+                        )
+
+
+                        json.put(
+                            "type",
+                            "alarm"
+                        )
+
+
+                        json.put(
+                            "action",
+                            "SNOOZE"
+                        )
+
+
+                        json.put(
+                            "timestamp",
+                            System.currentTimeMillis()
+                        )
+
+
+
+                        val data =
+
+                            json.toString()
+                                .toByteArray(
+                                    StandardCharsets.UTF_8
+                                )
+
+
+
+                        PhoneLog.d(
+
+                            "WearSync_Main",
+
+                            "🧪 模拟手表发送 SNOOZE"
+
+                        )
+
+
+
+                        WearMessageReceiver.handleMessage(
+
+                            requireContext(),
+
+                            data
+
+                        )
+
+
+
+                    }catch(e:Exception){
+
+
+
+                        PhoneLog.e(
+
+                            "WearSync_Main",
+
+                            "模拟延后失败: ${e.message}"
+
+                        )
+
+
+                    }
+
+
+                }
+
+
+            ){
+
+
+                Text(
+
+                    "模拟延后测试",
+
+                    color = Color.White,
+
+                    fontSize = 12.sp
+
+                )
+
+
+            }
+
+
         }
-        
-        Text(
-            "💡 测试方法：无需等到明早。现在手设一个 1 分钟后的本地闹钟，当手机闹钟响起时，直接点击上方按钮。如果配置正确，第一阶段会直接匹配输入框字串将其点灭；如果没匹配上，第二阶段音量键保底也会强行让闹钟闭嘴。整个流程会在 Logcat 中清晰可见！",
-            fontSize = 10.sp,
-            color = subTextColor,
-            lineHeight = 14.sp
-        )
-    }
-}
 
+
+
+
+
+        Text(
+
+            "💡 测试：设置一个即将响起的闹钟，响起后点击测试按钮，观察是否和手表真实点击流程一致。",
+
+            fontSize = 10.sp,
+
+            color = subTextColor,
+
+            lineHeight = 14.sp
+
+        )
+
+
+
+    }
+
+}
 
                             // 5. 远程相机控场中心
                             Card(
