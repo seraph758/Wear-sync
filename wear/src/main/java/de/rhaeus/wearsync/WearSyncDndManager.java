@@ -173,44 +173,50 @@ public static void executeDndSync(Context context, int dndStatePhone) {
 
 
     /*
-     * 3. 省电模式联动
-     */
-    if (isPowerSaveLinkageOpen) {
+ * 3. 省电模式联动
+ * 延迟执行，避免抢占DND系统服务
+ */
+if (isPowerSaveLinkageOpen) {
+
+    boolean enable = dndStatePhone > 1;
+
+    new Handler(Looper.getMainLooper()).postDelayed(() -> {
+
+        try {
+
+            Settings.Global.putInt(
+                    context.getContentResolver(),
+                    "low_power",
+                    enable ? 1 : 0
+            );
+
+            context.sendBroadcast(
+                    new Intent(
+                            PowerManager.ACTION_POWER_SAVE_MODE_CHANGED
+                    )
+            );
+
+            WearLog.d(TAG,
+                    "🔋 [省电异步同步] "
+                            +(enable ? "开启" : "关闭"));
+
+        } catch(Exception e){
+
+            WearLog.e(TAG,
+                    "❌ [省电同步失败] "
+                            + e.getMessage());
+
+        }
+
+    },1500);
 
 
-        boolean enable =
-                dndStatePhone > 1;
+} else {
 
+    WearLog.d(TAG,
+            "🔋 [省电联动]关闭");
 
-
-        Settings.Global.putInt(
-                context.getContentResolver(),
-                "low_power",
-                enable ? 1 : 0
-        );
-
-
-
-        context.sendBroadcast(
-                new Intent(
-                        PowerManager.ACTION_POWER_SAVE_MODE_CHANGED
-                )
-        );
-
-
-
-        WearLog.d(TAG,
-                "🔋 [省电同步] "
-                        +(enable ? "开启" : "关闭"));
-
-
-    } else {
-
-        WearLog.d(TAG,
-                "🔋 [省电联动]关闭");
-
-    }
-
+}
 
 
 
