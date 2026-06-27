@@ -568,7 +568,7 @@ else if(title.contains(snoozeKey)
 
                             alarmWatchdogHandler.postDelayed(
                                     this,
-                                    4000);
+                                    8000);
 
                         }
 
@@ -580,7 +580,7 @@ else if(title.contains(snoozeKey)
 
         alarmWatchdogHandler.postDelayed(
                 alarmWatchdogRunnable,
-                4000);
+                8000);
 
     }
 
