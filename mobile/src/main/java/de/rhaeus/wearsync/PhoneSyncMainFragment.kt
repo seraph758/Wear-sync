@@ -322,10 +322,25 @@ Card(
         OutlinedTextField(
             value = dismissKeyText,
             onValueChange = { newValue ->
-                dismissKeyText = newValue
-                sp.edit().putString("alarm_dismiss_key", newValue).apply() // 实时保存
-                PhoneLog.d("WearSync_Main", "💾 已保存 [停止] 触发关键字: $newValue")
-            },
+
+    dismissKeyText = newValue
+
+    val saveValue =
+        if (newValue.trim().isEmpty()) {
+            "停止"
+        } else {
+            newValue.trim()
+        }
+
+    sp.edit()
+        .putString("alarm_dismiss_key", saveValue)
+        .apply()
+
+    PhoneLog.d(
+        "WearSync_Main",
+        "💾 已保存 [停止] 触发关键字: $saveValue"
+    )
+            }
             label = { Text("停止关键字 (如: 停止, 关闭, 滑动)", fontSize = 12.sp) },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
@@ -336,9 +351,25 @@ Card(
         OutlinedTextField(
             value = snoozeKeyText,
             onValueChange = { newValue ->
-                snoozeKeyText = newValue
-                sp.edit().putString("alarm_snooze_key", newValue).apply() // 实时保存
-                PhoneLog.d("WearSync_Main", "💾 已保存 [延后] 触发关键字: $newValue")
+
+    snoozeKeyText = newValue
+
+    val saveValue =
+        if (newValue.trim().isEmpty()) {
+            "延后"
+        } else {
+            newValue.trim()
+        }
+
+    sp.edit()
+        .putString("alarm_snooze_key", saveValue)
+        .apply()
+
+    PhoneLog.d(
+        "WearSync_Main",
+        "💾 已保存 [延后] 触发关键字: $saveValue"
+    )
+}
             },
             label = { Text("延后关键字 (如: 延后, 稍后, snooze)", fontSize = 12.sp) },
             singleLine = true,
@@ -367,7 +398,27 @@ Card(
                     PhoneLog.d("WearSync_Main", "🧪 [UI测试] 用户点击了 [模拟停止]，正在模拟手表向手机注入 DISMISS 业务流...")
                     
                     // 🎯 直接调用后台真实的逆向控制中心，让其读取刚刚输入的 dismissKeyText 进行实时破壳测试
-                    PhoneAlarmManager.handleWatchCommand(requireContext(), "DISMISS")
+                    JSONObject json = new JSONObject();
+json.put("sender", "watch");
+json.put("type", "alarm");
+json.put("action", "DISMISS");
+json.put("timestamp", System.currentTimeMillis());
+
+PhoneLog.d(
+    "WearSync_Main",
+    "🧪 模拟手表发送 DISMISS 指令"
+);
+
+byte[] data =
+        json.toString()
+        .getBytes(StandardCharsets.UTF_8);
+
+
+// 调用你手机端接收入口
+WearMessageReceiver.handleMessage(
+        requireContext(),
+        data
+);
                 }
             ) {
                 Text("模拟停止测试", color = Color.White, fontSize = 12.sp)
@@ -380,7 +431,26 @@ Card(
                     PhoneLog.d("WearSync_Main", "🧪 [UI测试] 用户点击了 [模拟延后]，正在模拟手表向手机注入 SNOOZE 业务流...")
                     
                     // 🎯 直接调用后台真实的逆向控制中心，让其读取刚刚输入的 snoozeKeyText 进行实时延后测试
-                    PhoneAlarmManager.handleWatchCommand(requireContext(), "SNOOZE")
+                    JSONObject json = new JSONObject();
+json.put("sender", "watch");
+json.put("type", "alarm");
+json.put("action", "SNOOZE");
+json.put("timestamp", System.currentTimeMillis());
+
+PhoneLog.d(
+    "WearSync_Main",
+    "🧪 模拟手表发送 SNOOZE 指令"
+);
+
+byte[] data =
+        json.toString()
+        .getBytes(StandardCharsets.UTF_8);
+
+
+WearMessageReceiver.handleMessage(
+        requireContext(),
+        data
+);
                 }
             ) {
                 Text("模拟延后测试", color = Color.White, fontSize = 12.sp)
