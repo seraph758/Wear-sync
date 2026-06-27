@@ -120,7 +120,8 @@ public static void executeDndSync(Context context, int dndStatePhone) {
 
 
     WearSyncNotificationService.isInternalUpdate = true;
-
+    WearSyncNotificationService.lastInternalUpdateTime =
+        System.currentTimeMillis();
 
 
     /*
@@ -254,12 +255,9 @@ if (isPowerSaveLinkageOpen) {
                 WearSyncNotificationService.isInternalUpdate = false;
 
 
-                WearLog.d(TAG,
-                        "🔓 [锁释放]");
+                           WearLog.d(TAG,"🔓 内部同步锁释放");
 
-
-            },2000);
-
+        },7000);
 }
 
     /**
