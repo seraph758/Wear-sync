@@ -90,7 +90,6 @@ public class WearAlarmActivity extends Activity {
             try {
                 JSONObject json = new JSONObject(rawJson);
                 String time = json.optString("time", "00:00");
-                String label = json.optString("label", "闹钟");
                 String monthDay = json.optString("month_day", "");
                 String week = json.optString("day_tips", "");
 
@@ -103,7 +102,7 @@ public class WearAlarmActivity extends Activity {
                     }
                 }
 
-                WearLog.d(TAG, "📦 业务现场解包成功 ➔ 时间:[" + time + "], 标签:[" + label + "]");
+                WearLog.d(TAG, "📦 业务现场解包成功 ➔ 时间:[" + time + "]");
                 
                 // 确保震动在持续轰鸣
                 startWatchVibration();
