@@ -41,7 +41,16 @@ public class WearSyncNotificationService extends NotificationListenerService {
     public void onInterruptionFilterChanged(int interruptionFilter) {
         super.onInterruptionFilterChanged(interruptionFilter);
         if (isInternalUpdate) {
-            WearLog.d(TAG, "🔒 判定内部流转激荡锁，跳过反向循环轰炸");
+        
+            long delta =
+                    System.currentTimeMillis()
+                            - lastInternalUpdateTime;
+        
+            WearLog.d(TAG,
+                    "🔒 内部同步 "
+                    + delta
+                    + "ms");
+        
             return;
         }
         sendDndReverseSyncToPhone(this, interruptionFilter);
