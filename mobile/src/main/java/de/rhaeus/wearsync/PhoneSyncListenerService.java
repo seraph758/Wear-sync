@@ -89,72 +89,115 @@ public class PhoneSyncListenerService extends WearableListenerService {
                 PhoneAlarmManager.handleWatchCommand(this, action);
                 return;
             }
-            // ==========================================
-            // 📸 模组三：远程相机协议控制
-            // ==========================================
+           // =================================================================
+            // 📸 模組三：遠端相機協定控制（全步進日誌極致除錯版）
+            // =================================================================
             if ("camera".equalsIgnoreCase(type) || "camera_control".equalsIgnoreCase(type)) {
-                // 子动作 A：启动手机相机服务
+                PhoneLog.d(TAG, "📸 [相機控制流] ━━━ 接收到相機模組信令 ━━━ 動作類型: [" + action + "]");
+                
+                // 子動作 A：啟動手機相機服務
                 if ("START_CAMERA".equalsIgnoreCase(action) || "START_CAMERA_UI".equalsIgnoreCase(action)) {
+                    PhoneLog.d(TAG, "🔍 [相機尋址] 準備獲取手錶節點 ID...");
                     String nodeId = WearSyncState.getNodeId(this);
 
                     if (nodeId == null || nodeId.isEmpty()) {
-                        PhoneLog.w(TAG, "⚠️ [相机寻址降级] 当前全局节点 ID 为空，立刻触发多路轮询扫描...");
+                        PhoneLog.w(TAG, "⚠️ [相機尋址降級] 當前全域節點 ID 快存為空！立刻啟動非同步背景多路輪詢掃描...");
+                        
                         new Thread(() -> {
+                            PhoneLog.d(TAG, "🧵 [背景執行緒] 輪詢執行緒已啟動，正在調用 Wearable.getNodeClient().getConnectedNodes()...");
                             try {
                                 List<Node> nodes = Tasks.await(Wearable.getNodeClient(this).getConnectedNodes());
-                                if (nodes != null && !nodes.isEmpty()) {
+                                
+                                if (nodes == null) {
+                                    PhoneLog.e(TAG, "❌ [背景尋址異常] 系統返回的連接節點列表 (List<Node>) 為 null！");
+                                    return;
+                                }
+                                
+                                PhoneLog.d(TAG, "📊 [背景尋址掃描] 探測結束，當前在線配對的手錶節點數量: " + nodes.size());
+                                
+                                if (!nodes.isEmpty()) {
                                     String id = nodes.get(0).getId();
+                                    String name = nodes.get(0).getDisplayName();
+                                    PhoneLog.d(TAG, "🎯 [背景尋址成功] 成功撈到首個活體節點! 名稱: [" + name + "], ID: [" + id + "]");
+                                    
+                                    PhoneLog.d(TAG, "💾 [背景尋址同步] 正在將新節點 ID 寫入 WearSyncState 快存...");
                                     WearSyncState.setNodeId(this, id);
-                                    PhoneLog.d(TAG, "🔍 [相机寻址成功] 在线探测到可用节点: " + id + "，准备远程穿透 Activity...");
+                                    
+                                    PhoneLog.d(TAG, "🚀 [背景尋址轉交] 準備向該節點注入遠端 Activity 穿透指令...");
                                     executeRemoteActivityLaunch(id);
                                 } else {
-                                    PhoneLog.w(TAG, "❌ [相机寻址断联] 未能扫描到任何处于连线状态的手表节点！");
+                                    PhoneLog.w(TAG, "❌ [背景尋址斷聯] 掃描完畢，但未發現任何處於藍牙/Wi-Fi 連線狀態的手錶節點！");
                                 }
                             } catch (Exception e) {
-                                PhoneLog.e(TAG, "🔴 [相机寻址崩溃] 在线轮询节点遭遇致命异常: " + e.getMessage(), e);
+                                PhoneLog.e(TAG, "🔴 [背景尋址崩潰] 在線異步輪詢手錶節點遭遇致命異常: " + e.getMessage(), e);
                             }
                         }).start();
                     } else {
-                        PhoneLog.d(TAG, "⚡ [相机寻址命中] 命中活跃手表缓存: " + nodeId + "，直接启动远程穿透...");
+                        PhoneLog.d(TAG, "⚡ [相機尋址命中] 成功命中活躍手錶快存 ID: [" + nodeId + "]，直接跳過掃描啟動穿透...");
                         executeRemoteActivityLaunch(nodeId);
                     }
-                }
-                // 子动作 B：停止手机相机服务
+                } 
+                // 子動作 B：停止手機相機服務
                 else if ("STOP_CAMERA".equalsIgnoreCase(action) || "FORCE_QUIT_CAMERA".equalsIgnoreCase(action)) {
-                    PhoneLog.d(TAG, "🛑 [相机核心流转] 收到手表退出指令，正在向 PhoneSyncCameraService 发送安全关闭中断命令...");
+                    PhoneLog.d(TAG, "🛑 [相機核心流轉] 收到手錶端主動退出指令！準備中斷手機端相機服務...");
+                    
+                    PhoneLog.d(TAG, "📦 [相機核心流转] 正在建構封裝意圖 ➔ 目的類別: PhoneSyncCameraService.class");
                     Intent stopIntent = new Intent(this, PhoneSyncCameraService.class);
+                    
+                    PhoneLog.d(TAG, "📦 [相機核心流转] 正在注入 Action 行動暗號: [de.rhaeus.wearsync.ACTION_STOP_CAMERA]");
                     stopIntent.setAction("de.rhaeus.wearsync.ACTION_STOP_CAMERA");
+                    
+                    PhoneLog.d(TAG, "🚀 [相機核心流转] 正在調用 startService() 向相機服務發送安全關閉中斷命令...");
                     startService(stopIntent);
+                    PhoneLog.d(TAG, "✅ [相機核心流转] 中斷指令已成功發射出去。");
+                } else {
+                    PhoneLog.w(TAG, "⚠️ [相機控制流] 收到未知的相機子動作 action: [" + action + "]，不做任何處理。");
                 }
                 return;
             }
 
         } catch (Exception e) {
-            PhoneLog.e(TAG, "🔴 [信令解析失败] 处理手錶底层密文或业务流转时发生异常: " + e.getMessage(), e);
+            PhoneLog.e(TAG, "🔴 [信令解析失敗] 處理相機模組底層密文或業務流轉時發生異常: " + e.getMessage(), e);
         }
     }
 
     /**
-     * 🛰️ 通过谷歌穿透引擎 (RemoteActivityHelper) 强制唤醒手表的配对拍照 Activity
+     * 🛰️ 通過谷歌穿透引擎 (RemoteActivityHelper) 強制喚醒手表的配對拍照 Activity
      */
     private void executeRemoteActivityLaunch(String nodeId) {
-        PhoneLog.d(TAG, "🚀 [穿透发射中] 准备通过微端通道穿透启动远端手表 Activity -> 目标节点: " + nodeId);
+        PhoneLog.d(TAG, "🚀 [穿透發射中] ━━━ 進入穿透啟動核心流 ━━━ 準備擊穿手錶端 Activity ➔ 目標節點: [" + nodeId + "]");
         try {
+            PhoneLog.d(TAG, "⚙️ [穿透發射中] 正在初始化 RemoteActivityHelper 並綁定執行緒池...");
             androidx.wear.remote.interactions.RemoteActivityHelper helper =
                     new androidx.wear.remote.interactions.RemoteActivityHelper(this, REMOTE_EXECUTOR);
 
+            PhoneLog.d(TAG, "⚙️ [穿透發射中] 正在建構遠端跳板協議 URI Schema: [wearsync://camera/]");
             Intent intent = new Intent(Intent.ACTION_VIEW);
             intent.setData(android.net.Uri.parse("wearsync://camera/"));
+            
+            PhoneLog.d(TAG, "⚙️ [穿透發射中] 正在注入多重 Activity 啟動 Flags (NEW_TASK | CLEAR_TOP | SINGLE_TOP)...");
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK 
                     | Intent.FLAG_ACTIVITY_CLEAR_TOP 
                     | Intent.FLAG_ACTIVITY_SINGLE_TOP);
 
-            helper.startRemoteActivity(intent, nodeId).addListener(() -> {
-                PhoneLog.d(TAG, "✨ [穿透成功] 谷歌微端底层确认：wearsync://camera/ 远程跳板指令已成功送达目标手表节点");
+            PhoneLog.d(TAG, "📡 [穿透發射中] 正在調用 startRemoteActivity() 跨裝置投遞穿透包...");
+            com.google.common.util.concurrent.ListenableFuture<Void> future = helper.startRemoteActivity(intent, nodeId);
+            
+            PhoneLog.d(TAG, "⏳ [穿透發射中] 穿透異步任務已掛起，正在註冊底層接線員偵聽器 (Callback Listener)...");
+            future.addListener(() -> {
+                try {
+                    // 調用 future.get() 可以確認任務是成功還是拋出異常
+                    future.get();
+                    PhoneLog.d(TAG, "✨ [穿透成功] ━━━ 遠端解鎖大捷 ━━━ 谷歌微端底層回報：手錶端的 wearsync://camera/ 跳板 Activity 已被強制拉起並聚焦！");
+                } catch (Exception e) {
+                    PhoneLog.e(TAG, "🔴 [穿透監聽報錯] 穿透任務送達後，手錶端拉起 Activity 失敗: " + e.getMessage(), e);
+                }
             }, REMOTE_EXECUTOR);
+            
+            PhoneLog.d(TAG, "✅ [穿透發射中] 偵聽器掛載完畢，等待手錶端底層激勵回音。");
 
         } catch (Exception e) {
-            PhoneLog.e(TAG, "🔴 [穿透失败] 调用 RemoteActivityHelper 发生致命阻断: " + e.getMessage(), e);
+            PhoneLog.e(TAG, "🔴 [穿透失敗] 調用 RemoteActivityHelper 投遞階段發生致命阻斷: " + e.getMessage(), e);
         }
     }
 }
