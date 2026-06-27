@@ -20,9 +20,7 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
 
     private static PhoneSyncNotificationService instance;
 
-        // 🎯 1. 彻底删掉顶部的这俩静态变数
-    // public static android.app.PendingIntent cachedDismissIntent = null;
-    // public static android.app.PendingIntent cachedSnoozeIntent = null;
+        
 
     /**
      * 🎯 新增：供 PhoneAlarmManager 调用的实时逆向控制核心方法
