@@ -661,13 +661,10 @@ Card(
 
 
 
-                        WearMessageReceiver.handleMessage(
-
-                            requireContext(),
-
-                            data
-
-                        )
+                        PhoneAlarmManager.handleWatchCommand(
+    requireContext(),
+    "DISMISS"
+)
 
 
 
@@ -779,13 +776,10 @@ Card(
 
 
 
-                        WearMessageReceiver.handleMessage(
-
-                            requireContext(),
-
-                            data
-
-                        )
+                        PhoneAlarmManager.handleWatchCommand(
+    requireContext(),
+    "DISMISS"
+)
 
 
 
