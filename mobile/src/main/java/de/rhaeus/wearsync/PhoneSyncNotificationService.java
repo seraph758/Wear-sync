@@ -4,7 +4,6 @@ import android.app.Notification;
 import android.app.NotificationManager;
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.service.notification.NotificationListenerService;
@@ -157,9 +156,7 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
 
     private boolean isAlarmCurrentlyRinging = false;
 
-    private String cachedAlarmTitle = "";
-    private String cachedAlarmText = "";
-
+    
 
     public static PhoneSyncNotificationService getInstance() {
         return instance;
@@ -289,7 +286,10 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
             return;
 
         }
-
+        if(isAlarmCurrentlyRinging){
+            PhoneLog.d(TAG,"闹钟已经运行，忽略重复通知");
+            return;
+        }
 
 
         String dismissKey =
@@ -373,68 +373,14 @@ if (snoozeKey.trim().isEmpty()) {
 
 
 
-        Bundle extras =
-                notification.extras;
 
 
-        String alarmTitle="";
-        String alarmText="";
-
-
-
-        if(extras != null){
-
-
-            CharSequence t =
-                    extras.getCharSequence(
-                            Notification.EXTRA_TITLE);
-
-
-            if(t != null)
-                alarmTitle=t.toString();
-
-
-
-            CharSequence c =
-                    extras.getCharSequence(
-                            Notification.EXTRA_TEXT);
-
-
-            if(c != null)
-                alarmText=c.toString();
-
-        }
-
-
-
-
-        if(alarmText.isEmpty()){
-
-
-            SimpleDateFormat sdf =
-                    new SimpleDateFormat(
-                            "HH:mm",
-                            Locale.getDefault());
-
-
-            alarmText =
-                    sdf.format(new Date());
-
-        }
-
-
-
-
-        cachedAlarmTitle = alarmTitle;
-
-        cachedAlarmText = alarmText;
-
-
-
-        PhoneAlarmManager.notifyWatchAlarmRinging(
-                this,
-                alarmText);
-
+       
+       PhoneAlarmManager.notifyWatchAlarmRinging(
+        this,
+        new SimpleDateFormat(
+                "HH:mm",
+                Locale.getDefault()).format(new Date()));
 
 
         isAlarmCurrentlyRinging=true;
@@ -560,13 +506,12 @@ if (snoozeKey.trim().isEmpty()) {
 
                             PhoneAlarmManager.notifyWatchAlarmRinging(
                                     PhoneSyncNotificationService.this,
-                                    cachedAlarmText);
-
+                                    new SimpleDateFormat("HH:mm", Locale.getDefault()).format(new Date()));
 
 
                             alarmWatchdogHandler.postDelayed(
                                     this,
-                                    8000);
+                                    6000);
 
                         }
 
@@ -578,7 +523,7 @@ if (snoozeKey.trim().isEmpty()) {
 
         alarmWatchdogHandler.postDelayed(
                 alarmWatchdogRunnable,
-                8000);
+                6000);
 
     }
 
