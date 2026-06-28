@@ -114,9 +114,8 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
         } 
         else if (ACTION_STOP_CAMERA.equals(action)) {
             PhoneLog.w(TAG, "🛑 [熔断触发] 接收到主动安全退出中断指令！准备执行自我终结...");
-            releaseCameraAndPipeline();
-            stopForeground(STOP_FOREGROUND_REMOVE);
-            stopSelf();
+                stopForeground(true);   // 如果当前是前台 Service，先取消前台状态
+                stopSelf();
         } else {
             PhoneLog.w(TAG, "⚠️ [位置信令] 收到未知的异常 Action: [" + action + "]，丢弃不做处理。");
         }
