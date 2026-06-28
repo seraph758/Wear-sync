@@ -73,34 +73,31 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
                 WearLog.w(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         
                 try {
-                    WearLog.d(TAG, "① 正在准备启动本地 WearCameraActivity...");
-        
-                    Intent intent = new Intent(requireContext(), WearCameraActivity.class);
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        
-                    startActivity(intent);
-        
-                    WearLog.d(TAG, "✅ 本地 WearCameraActivity 启动请求已发出。");
-
-                    new WearSyncRemoteCameraHandler(getContext())
-                    .openPhoneCamera();
+                        WearLog.d(TAG, "① 正在准备启动本地 WearCameraActivity...");
                     
-                    WearLog.d(TAG, "WearSyncRemoteCameraHandler启动请求已发出。");
-
-                } catch (Exception e) {
-                    WearLog.e(TAG, "❌ 本地 WearCameraActivity 启动失败：" + e.getMessage(), e);
-                }
-        
-                try {
-                    WearLog.d(TAG, "② 正在准备调用 WearSyncRemoteCameraHandler.openPhoneCamera()...");
-        
-                    new WearSyncRemoteCameraHandler(requireContext()).openPhoneCamera();
-        
-                    WearLog.d(TAG, "✅ openPhoneCamera() 已调用完成，等待 RemoteActivityHelper 回执。");
-        
-                } catch (Exception e) {
-                    WearLog.e(TAG, "❌ openPhoneCamera() 调用失败：" + e.getMessage(), e);
-                }
+                        Intent intent = new Intent(requireContext(), WearCameraActivity.class);
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    
+                        startActivity(intent);
+                    
+                        WearLog.d(TAG, "✅ 本地 WearCameraActivity 启动请求已发出。");
+                    
+                    } catch (Exception e) {
+                        WearLog.e(TAG, "❌ 本地 WearCameraActivity 启动失败：" + e.getMessage(), e);
+                    }
+                    
+                    
+                    try {
+                        WearLog.d(TAG, "② 正在调用 WearSyncRemoteCameraHandler.openPhoneCamera()...");
+                    
+                        new WearSyncRemoteCameraHandler(requireContext())
+                                .openPhoneCamera();
+                    
+                        WearLog.d(TAG, "✅ openPhoneCamera() 已调用完成");
+                    
+                    } catch (Exception e) {
+                        WearLog.e(TAG, "❌ openPhoneCamera调用失败：" + e.getMessage(), e);
+                    }
         
                         WearLog.w(TAG, "📸 [远端相机入口] 点击事件处理结束。");
         
