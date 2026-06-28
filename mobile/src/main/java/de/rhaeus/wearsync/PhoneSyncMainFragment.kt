@@ -468,10 +468,7 @@ class PhoneSyncMainFragment : Fragment() {
                                 color = textColor
                             )
                             
-                            
-                            
-                            
-                            
+                           
                             
                                     // 4. 模拟手表真实消息
                             
@@ -800,8 +797,16 @@ class PhoneSyncMainFragment : Fragment() {
                                                     PhoneLog.w("WearSync_Main", "🧹 [手动控场] 用户点击【强制关闭相机】➔ 本地全面熔断并通知手表下线")
                                                     
                                                     // 1. 强行击杀手机本地的 Service
-                                                    requireContext().stopService(Intent(requireContext(), PhoneSyncCameraService::class.java))
-                                        
+                                                    val stopIntent =
+                                                        Intent(requireContext(), PhoneSyncCameraService::class.java).apply {
+                                                            action = PhoneSyncCameraService.ACTION_STOP_CAMERA
+                                                        }
+                                                    
+                                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                                        requireContext().startForegroundService(stopIntent)
+                                                    } else {
+                                                        requireContext().startService(stopIntent)
+                                                    }                                        
                                                     // 2. ⚡ 异步透传：跨蓝牙总线命令手表立刻销毁 WearCameraActivity
                                                     Thread {
                                                         try {
