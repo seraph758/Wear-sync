@@ -6,15 +6,16 @@
     android:background="#000000"
     android:orientation="vertical">
 
-    <!-- 上部：日期+时间（65%） -->
+    <!-- 上部：日期+时间（68%） -->
     <LinearLayout
         android:id="@+id/layout_time"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="6.5"
+        android:layout_weight="6."
         android:gravity="center"
         android:orientation="vertical"
-        android:paddingBottom="10dp">
+        android:paddingTop="28dp"
+        >
 
         <TextView
             android:id="@+id/tv_alarm_day"
@@ -23,39 +24,49 @@
             android:text="6月27日 周六"
             android:textColor="#C8A74A"
             android:textSize="16sp"
-            android:textStyle="bold"/>
+            android:textStyle="bold"
+            
+            android:shadowColor="#A0000000"
+            android:shadowDx="0dp"
+            android:shadowDy="1dp"
+            android:shadowRadius="3dp"/>
 
         <TextView
             android:id="@+id/tv_alarm_time"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="1dp"
             android:autoSizeTextType="uniform"
             android:autoSizeMinTextSize="48sp"
-            android:autoSizeMaxTextSize="92sp"
+            android:autoSizeMaxTextSize="104sp"
             android:gravity="center"
             android:text="22:36"
             android:textColor="#D4AF37"
-            android:textStyle="bold"/>
+            android:textStyle="bold"
+
+            android:shadowColor="#A0000000"
+            android:shadowDx="0dp"
+            android:shadowDy="2dp"
+            android:shadowRadius="6dp"/>/>
 
         <!-- 保留给 Java -->
         
 
     </LinearLayout>
 
-    <!-- 下部：按钮（35%） -->
+    <!-- 下部：按钮（32%） -->
     <LinearLayout
         android:id="@+id/layout_buttons"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="3.5"
+        android:layout_weight="3.2"
         android:gravity="center"
         android:orientation="horizontal"
         android:paddingLeft="18dp"
         android:paddingRight="18dp"
-        android:paddingTop="10dp"
-        android:paddingBottom="16dp">
+        android:paddingTop="0dp"
+        android:paddingBottom="34dp">
 
         <Button
             android:id="@+id/btn_snooze"
