@@ -46,13 +46,13 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
         String dismissKey = prefs.getString("alarm_dismiss_key", "停止").toLowerCase();
         String snoozeKey = prefs.getString("alarm_snooze_key", "延后").toLowerCase();
         // 🔒 防止关键字被保存为空
-if (dismissKey.trim().isEmpty()) {
-    dismissKey = "停止";
-}
-
-if (snoozeKey.trim().isEmpty()) {
-    snoozeKey = "延后";
-}
+        if (dismissKey.trim().isEmpty()) {
+            dismissKey = "停止";
+        }
+        
+        if (snoozeKey.trim().isEmpty()) {
+            snoozeKey = "延后";
+        }
 
         PhoneLog.d(TAG, "📌 [即時控制配置] 目標鬧鐘包名: [" + targetPkg + "], 停止關鍵字: [" + dismissKey + "], 延後關鍵字: [" + snoozeKey + "]");
 
@@ -340,35 +340,35 @@ if (snoozeKey.trim().isEmpty()) {
         || title.contains("停止")
         || title.contains("dismiss")){
 
-
-    PhoneLog.d(
-        TAG,
-        "🎯 发现停止按钮: "
-        + action.title
-    );
-
-
-}
-
-
-else if(title.contains(snoozeKey)
-        || title.contains("snooze")
-        || title.contains("稍后")){
-
-
-    PhoneLog.d(
-        TAG,
-        "🎯 发现延后按钮: "
-        + action.title
-    );
-
-}
-
-
+            
+                PhoneLog.d(
+                    TAG,
+                    "🎯 发现停止按钮: "
+                    + action.title
+                );
+            
+            
             }
-
-
-        }
+            
+            
+            else if(title.contains(snoozeKey)
+                    || title.contains("snooze")
+                    || title.contains("稍后")){
+            
+            
+                PhoneLog.d(
+                    TAG,
+                    "🎯 发现延后按钮: "
+                    + action.title
+                );
+            
+            }
+            
+            
+                        }
+            
+            
+                    }
 
 
 
@@ -433,7 +433,6 @@ else if(title.contains(snoozeKey)
 
         PhoneAlarmManager.notifyWatchAlarmRinging(
                 this,
-                alarmTitle,
                 alarmText);
 
 
@@ -561,7 +560,6 @@ else if(title.contains(snoozeKey)
 
                             PhoneAlarmManager.notifyWatchAlarmRinging(
                                     PhoneSyncNotificationService.this,
-                                    cachedAlarmTitle,
                                     cachedAlarmText);
 
 
