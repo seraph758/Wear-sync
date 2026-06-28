@@ -82,7 +82,7 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
         
                     WearLog.d(TAG, "✅ 本地 WearCameraActivity 启动请求已发出。");
 
-                    new WearSyncRemoteCameraHandler(this)
+                    new WearSyncRemoteCameraHandler(getContext())
                     .openPhoneCamera();
                     
                     WearLog.d(TAG, "WearSyncRemoteCameraHandler启动请求已发出。");
