@@ -27,9 +27,9 @@
             android:textStyle="bold"
             
             android:shadowColor="#A0000000"
-            android:shadowDx="0dp"
-            android:shadowDy="1dp"
-            android:shadowRadius="3dp"/>
+            android:shadowDx="0"
+            android:shadowDy="1"
+            android:shadowRadius="3"/>
 
         <TextView
             android:id="@+id/tv_alarm_time"
@@ -46,9 +46,9 @@
             android:textStyle="bold"
 
             android:shadowColor="#A0000000"
-            android:shadowDx="0dp"
-            android:shadowDy="2dp"
-            android:shadowRadius="6dp"/>/>
+            android:shadowDx="0"
+            android:shadowDy="2"
+            android:shadowRadius="6"/>
 
         <!-- 保留给 Java -->
         
