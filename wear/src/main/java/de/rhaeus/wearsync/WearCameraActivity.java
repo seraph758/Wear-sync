@@ -29,7 +29,7 @@ import java.util.List;
 public class WearCameraActivity extends Activity implements SurfaceHolder.Callback {
     private static final String TAG = "WearSync_WearCameraUI";
     private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
-    private static CameraActive instance;
+    private static WearCameraActivity instance;
     private SurfaceView surfaceView;
     private MediaCodec mDecoder;
     private boolean isDecoderRunning = false;
