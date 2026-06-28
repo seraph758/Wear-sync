@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.os.Build
 import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.View
@@ -797,16 +798,10 @@ class PhoneSyncMainFragment : Fragment() {
                                                     PhoneLog.w("WearSync_Main", "🧹 [手动控场] 用户点击【强制关闭相机】➔ 本地全面熔断并通知手表下线")
                                                     
                                                     // 1. 强行击杀手机本地的 Service
-                                                    val stopIntent =
-                                                        Intent(requireContext(), PhoneSyncCameraService::class.java).apply {
+                                                    val stopIntent = Intent(requireContext(), PhoneSyncCameraService::class.java).apply {
                                                             action = PhoneSyncCameraService.ACTION_STOP_CAMERA
                                                         }
-                                                    
-                                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                                        requireContext().startForegroundService(stopIntent)
-                                                    } else {
-                                                        requireContext().startService(stopIntent)
-                                                    }                                        
+                                                        requireContext().startService(stopIntent)                                  
                                                     // 2. ⚡ 异步透传：跨蓝牙总线命令手表立刻销毁 WearCameraActivity
                                                     Thread {
                                                         try {
