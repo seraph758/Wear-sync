@@ -29,7 +29,7 @@ import java.util.List;
 public class WearCameraActivity extends Activity implements SurfaceHolder.Callback {
     private static final String TAG = "WearSync_WearCameraUI";
     private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
-
+    private static CameraActive instance;
     private SurfaceView surfaceView;
     private MediaCodec mDecoder;
     private boolean isDecoderRunning = false;
@@ -61,7 +61,7 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
     protected void onCreate(Bundle savedInstanceState) {
         WearLog.d(TAG, "① [生命周期] onCreate 点火 ─── 手表观景窗 Activity 开始加载初始化...");
         super.onCreate(savedInstanceState);
-        
+        instance=this;
         WearCameraActivity.sActivityRef = new WeakReference<>(this);
 
         // 💡 核心注入：在载入布局前，对当前 Window 强制灌入 FLAG_KEEP_SCREEN_ON 旗帜，锁死屏幕高亮
@@ -295,7 +295,10 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
     @Override
     protected void onDestroy() {
         WearLog.w(TAG, "🏳️ [生命周期] onDestroy 触发：监测到手表 UI 堆栈准备销毁...");
-        cleanExit(false);
+        if(instance==this){
+                instance=null;
+            }
+       cleanExit(false);
         super.onDestroy();
         WearLog.w(TAG, "🏳️ [生命周期] onDestroy ─── 手表端图传观景窗 Activity 全生命周期安全终结 ───");
     }
