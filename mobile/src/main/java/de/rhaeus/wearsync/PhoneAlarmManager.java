@@ -29,7 +29,7 @@ public class PhoneAlarmManager {
      */
     public static void notifyWatchAlarmDismissed(Context context) {
         PhoneLog.d(TAG, "⏰ [鬧鐘撤銷源] 接收到哨兵指令：手機端鬧鐘通知已消失，正在命令手錶立刻停震銷毀...");
-        sendAlarmSignalToWatch(context, "FORCE_STOP_WEAR_ALARM", null, null);
+        sendAlarmSignalToWatch(context, "FORCE_STOP_WEAR_ALARM", null);
     }
 
     /**
