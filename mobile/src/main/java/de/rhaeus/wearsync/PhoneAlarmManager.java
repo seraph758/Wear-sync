@@ -20,8 +20,8 @@ public class PhoneAlarmManager {
      * 當手機端系統鬧鐘響起時調用（由通知攔截哨兵服務觸發）
      */
     public static void notifyWatchAlarmRinging(Context context, String time) {
-        PhoneLog.d(TAG, "🔔 [鬧鐘觸發源] 接收到哨兵指令：手機鬧鐘正在狂轟亂炸 ➔ 標籤: [" + label + "], 時間: [" + time + "]");
-        sendAlarmSignalToWatch(context, "START_WEAR_ALARM", label, time);
+        PhoneLog.d(TAG, "🔔 [鬧鐘觸發源] 接收到哨兵指令：手機鬧鐘正在狂轟亂炸 ➔ 標籤: [" + "], 時間: [" + time + "]");
+        sendAlarmSignalToWatch(context, "START_WEAR_ALARM", time);
     }
 
     /**
@@ -92,7 +92,7 @@ public class PhoneAlarmManager {
     /**
      * 🛰️ 正向發射：嚴格對齊手錶端真實接收協議的鬧鐘發射流
      */
-    private static void sendAlarmSignalToWatch(Context context, String actionStr, String label, String time) {
+    private static void sendAlarmSignalToWatch(Context context, String actionStr, String time) {
         new Thread(() -> {
             try {
                 JSONObject json = new JSONObject();
