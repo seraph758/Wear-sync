@@ -20,7 +20,7 @@ import java.util.List;
 public class WearAlarmActivity extends Activity {
     private static final String TAG = "WearSync_WearAlarmUI";
     private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
-
+    private static WearAlarmActivity instance;
     private Vibrator vibrator;
     private TextView tvAlarmDay;
     private TextView tvAlarmTime;
@@ -28,6 +28,7 @@ public class WearAlarmActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        instance = this;
         WearLog.d(TAG, "🎬 onCreate: 手表闹钟接管界面全屏顶屏中...");
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
@@ -163,6 +164,9 @@ public class WearAlarmActivity extends Activity {
     protected void onDestroy() {
         if (vibrator != null) vibrator.cancel();
         WearLog.d(TAG, "🏳️ onDestroy: 闹钟接管界面完全释放、优雅退出");
+        if(instance == this){
+                instance = null;
+            }
         super.onDestroy();
     }
 }
