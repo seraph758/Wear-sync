@@ -59,11 +59,57 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
                 return true;
             });
         }
+        // ========================================================================
+        // 📸 远端相机控制入口
+        // ========================================================================
+        Preference cameraPref = findPreference("camera_control_key");
+        if (cameraPref != null) {
+            WearLog.d(TAG, "📸 [交互挂载] 成功找到 camera_control_key，正在注册点击监听器...");
         
-        WearLog.d(TAG, "⚙️ [底层初始化] 正在引导加载谷歌微端物理链路异步探针...");
-        setupConnectionCheck();
-        WearLog.d(TAG, "① [生命周期] onCreatePreferences 配置完毕。");
-    }
+            cameraPref.setOnPreferenceClickListener(preference -> {
+        
+                WearLog.w(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                WearLog.w(TAG, "📸 [远端相机入口] 用户点击【远端相机控制】");
+                WearLog.w(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        
+                try {
+                    WearLog.d(TAG, "① 正在准备启动本地 WearCameraActivity...");
+        
+                    Intent intent = new Intent(requireContext(), WearCameraActivity.class);
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        
+                    startActivity(intent);
+        
+                    WearLog.d(TAG, "✅ 本地 WearCameraActivity 启动请求已发出。");
+        
+                } catch (Exception e) {
+                    WearLog.e(TAG, "❌ 本地 WearCameraActivity 启动失败：" + e.getMessage(), e);
+                }
+        
+                try {
+                    WearLog.d(TAG, "② 正在准备调用 WearSyncRemoteCameraHandler.openPhoneCamera()...");
+        
+                    new WearSyncRemoteCameraHandler(requireContext()).openPhoneCamera();
+        
+                    WearLog.d(TAG, "✅ openPhoneCamera() 已调用完成，等待 RemoteActivityHelper 回执。");
+        
+                } catch (Exception e) {
+                    WearLog.e(TAG, "❌ openPhoneCamera() 调用失败：" + e.getMessage(), e);
+                }
+        
+                        WearLog.w(TAG, "📸 [远端相机入口] 点击事件处理结束。");
+        
+                        return true;
+                    });
+                
+                } else {
+                    WearLog.e(TAG, "❌ [交互挂载失败] 未找到 Preference：camera_control_key");
+                }
+                
+                WearLog.d(TAG, "⚙️ [底层初始化] 正在引导加载谷歌微端物理链路异步探针...");
+                setupConnectionCheck();
+                WearLog.d(TAG, "① [生命周期] onCreatePreferences 配置完毕。");
+            }
 
     @Override
     public void onResume() {
