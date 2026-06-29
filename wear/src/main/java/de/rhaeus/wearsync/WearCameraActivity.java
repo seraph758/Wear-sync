@@ -21,6 +21,7 @@ import java.lang.ref.WeakReference;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import android.os.PowerManager;
 
 /**
  * 🎬 远程拍照手表观景窗/流媒体渲染 UI（MediaCodec 硬件解码 + 实时反向发信控制）
@@ -34,7 +35,9 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
     private MediaCodec mDecoder;
     private boolean isDecoderRunning = false;
     private boolean isUserExiting = false;
-
+    private PowerManager.WakeLock wakeLock;
+    private long activityCreateTime;
+    
     // 📊 用于防止高频解码日志淹没系统的统计计数器
     private long totalFramesDecoded = 0;
     private long lastLogTime = 0;
@@ -60,13 +63,41 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         WearLog.d(TAG, "① [生命周期] onCreate 点火 ─── 手表观景窗 Activity 开始加载初始化...");
+        activityCreateTime = System.currentTimeMillis();
+        WearLog.d(TAG, "CAM-001 Activity onCreate");
         super.onCreate(savedInstanceState);
+        setShowWhenLocked(true);
+        setTurnScreenOn(true);
         instance=this;
         WearCameraActivity.sActivityRef = new WeakReference<>(this);
 
         // 💡 核心注入：在载入布局前，对当前 Window 强制灌入 FLAG_KEEP_SCREEN_ON 旗帜，锁死屏幕高亮
         WearLog.w(TAG, "💡 [电源管理] 正在向当前 Window 注入 FLAG_KEEP_SCREEN_ON 常亮旗帜，强制压制手表的休眠机制...");
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            
+            try {
+                PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+            
+                if (pm != null) {
+            
+                    wakeLock = pm.newWakeLock(
+                            PowerManager.SCREEN_BRIGHT_WAKE_LOCK
+                                    | PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                            TAG + ":CameraWake");
+            
+                    wakeLock.acquire(10 * 60 * 1000L);
+            
+                    WearLog.d(TAG,
+                            "💡 WakeLock 已获取，强制点亮屏幕并保持唤醒");
+                }
+            
+            } catch (Exception e) {
+            
+                WearLog.e(TAG,
+                        "获取 WakeLock 失败: "
+                                + e.getMessage());
+            
+            }   
         WearLog.d(TAG, "✨ [电源管理] 窗口高亮锁成功挂载，观景窗前台常亮已生效。");
 
         setContentView(R.layout.activity_wear_camera);
@@ -96,6 +127,21 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
         totalFramesDecoded = 0;
         isFirstFrameDecoded = false;
         WearLog.d(TAG, "🎬 [生命周期] onCreate 结束 ─── 手表端图传观景窗 Activity 全功能就绪。");
+    }
+    @Override
+    protected void onResume() {
+        super.onResume();
+    
+        WearLog.d(TAG,
+                "📺 Activity 已进入前台，Surface="
+                        + (surfaceView != null));
+    }
+    @Override
+    protected void onPause() {
+        super.onPause();
+    
+        WearLog.d(TAG,
+                "📺 Activity onPause()");
     }
 
     @Override
@@ -133,6 +179,8 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
      */
     public void feedH264Data(byte[] data, int length) {
         if (!isDecoderRunning || mDecoder == null) {
+                WearLog.w(TAG,
+            "收到视频帧，但解码器尚未准备完成");
             return;
         }
         try {
@@ -257,6 +305,22 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
         // 💡 核心回收：清空常亮旗帜，把屏幕控制权安全还给系统省电策略
         WearLog.w(TAG, "💡 [电源管理] 正在从 Window 摘除 FLAG_KEEP_SCREEN_ON 常亮旗帜，恢复系统原生省电睡眠策略...");
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        if (wakeLock != null) {
+        
+            try {
+        
+                if (wakeLock.isHeld()) {
+                    wakeLock.release();
+        
+                    WearLog.d(TAG,
+                            "💡 WakeLock 已释放");
+                }
+        
+            } catch (Exception ignored) {
+            }
+        
+            wakeLock = null;
+        }
 
         WearLog.w(TAG, "  └─ ⚙️ 参数设定 -> 是否反向通知手机同步关闭相机: " + (notifyPhone ? "【是/TRUE】" : "【否/FALSE】"));
 
