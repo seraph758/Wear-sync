@@ -36,57 +36,7 @@ public class PhoneAlarmManager {
      * 接收並執行來自手錶的代點請求（超強日誌覆蓋版）
      */
     public static void handleWatchCommand(Context context, String commandType) {
-        PhoneLog.d(TAG, "⚡ [逆向調度] ━━━ 收到來自手錶的逆向控制口令 ━━━ 口令內容: [" + commandType + "]");
-        
-        try {
-            if ("DISMISS".equalsIgnoreCase(commandType)) {
-                PhoneLog.d(TAG, "🔍 [逆向調度] 判定口令為【停止/DISMISS】，啟動第一階段：實時通知欄擊穿...");
-                
-                // 🎯 調用實時獲取方法
-                boolean success = PhoneSyncNotificationService.triggerLiveAlarmAction(context, true);
-                
-                PhoneLog.d(TAG, "📊 [逆向調度] 第一階段通知欄穿透結果: " + (success ? "🎉 成功擊穿並執行！" : "❌ 失敗（未找到匹配通知）"));
-                    
-                if (!success) {
-                    PhoneLog.w(TAG, "⚠️ [逆向調度] 進入第二階段：觸發清晨鎖屏保底機制（音量鍵模擬）...");
-                    
-                    AudioManager audioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
-                    if (audioManager != null) {
-                        PhoneLog.d(TAG, "  └─ 🔊 成功獲取 AudioManager，準備向下調整一格鬧鐘音量流...");
-                        // 模擬按下一格音量減鍵，擊穿谷歌時鐘全螢幕鎖定
-                        audioManager.adjustStreamVolume(AudioManager.STREAM_ALARM, 
-                                                        AudioManager.ADJUST_LOWER, 
-                                                        AudioManager.FLAG_SHOW_UI);
-                        PhoneLog.d(TAG, "  └─ ✅ 音量流按鍵信號已注入。");
-                    } else {
-                        PhoneLog.e(TAG, "  └─ ❌ [異常] 獲取 AudioManager 失敗，無法注入物理按鍵信號！");
-                    }
-                    
-                    PhoneLog.d(TAG, "  └─ 📻 正在向全系統廣播發送大廠通用鬧鐘停止暗號 [ALARM_DONE]...");
-                    context.sendBroadcast(new Intent("com.android.deskclock.ALARM_DONE"));
-                    PhoneLog.d(TAG, "  └─ ✅ 系統廣播發射完畢。");
-                }
-                
-            } else if ("SNOOZE".equalsIgnoreCase(commandType)) {
-                PhoneLog.d(TAG, "🔍 [逆向調度] 判定口令為【延後/SNOOZE】，啟動實時通知欄擊穿...");
-                
-                // 🎯 實時抓取延後按鈕並引爆
-                boolean success = PhoneSyncNotificationService.triggerLiveAlarmAction(context, false);
-                
-                PhoneLog.d(TAG, "📊 [逆向調度] 延後通知欄穿透結果: " + (success ? "🎉 成功擊穿並執行！" : "❌ 失敗（未找到匹配通知）"));
-                
-                if (!success) {
-                    PhoneLog.w(TAG, "⚠️ [逆向調度] 通知欄未撈到延後按鈕，觸發標準延後廣播保底机制...");
-                    context.sendBroadcast(new Intent("com.android.deskclock.ALARM_SNOOZE"));
-                    PhoneLog.d(TAG, "  └─ ✅ 延後系統廣播 [ALARM_SNOOZE] 已補發。");
-                }
-            } else {
-                PhoneLog.w(TAG, "⚠️ [逆向調度] 收到無法識別的未知手錶口令: [" + commandType + "]，不做任何處理。");
-            }
-        } catch (Exception e) {
-            PhoneLog.e(TAG, "🔴 [逆向調度崩潰] 處理手錶口令調度流時發生未知致命錯誤: " + e.getMessage(), e);
-        }
-        PhoneLog.d(TAG, "🏁 [逆向調度] ━━━ 手錶口令處理工作流結束 ━━━");
+    executeAlarmAction(context, commandType);
     }
 
     /**
