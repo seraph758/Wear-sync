@@ -46,7 +46,7 @@ public class PhoneAlarmManager {
                 boolean success = PhoneSyncNotificationService.triggerLiveAlarmAction(context, true);
                 
                 PhoneLog.d(TAG, "📊 [逆向調度] 第一階段通知欄穿透結果: " + (success ? "🎉 成功擊穿並執行！" : "❌ 失敗（未找到匹配通知）"));
-                
+                    
                 if (!success) {
                     PhoneLog.w(TAG, "⚠️ [逆向調度] 進入第二階段：觸發清晨鎖屏保底機制（音量鍵模擬）...");
                     
@@ -140,5 +140,43 @@ public class PhoneAlarmManager {
                 PhoneLog.e(TAG, "🔴 [鬧鐘正向發信失敗] 協議校準打包異常: " + e.getMessage(), e);
             }
         }).start();
+    }
+        public static void executeAlarmAction(Context context, String action) {
+        PhoneLog.d(TAG, "🧭 [统一执行入口] action=" + action);
+    
+        try {
+            if ("DISMISS".equalsIgnoreCase(action)) {
+    
+                boolean success = PhoneSyncNotificationService.triggerLiveAlarmAction(context, true);
+    
+                if (!success) {
+                    PhoneLog.w(TAG, "⚠️ 代点失败 → 启动fallback");
+    
+                    AudioManager audioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
+                    if (audioManager != null) {
+                        audioManager.adjustStreamVolume(
+                                AudioManager.STREAM_ALARM,
+                                AudioManager.ADJUST_LOWER,
+                                AudioManager.FLAG_SHOW_UI
+                        );
+                    }
+    
+                    context.sendBroadcast(new Intent("com.android.deskclock.ALARM_DONE"));
+                }
+    
+            } else if ("SNOOZE".equalsIgnoreCase(action)) {
+    
+                boolean success = PhoneSyncNotificationService.triggerLiveAlarmAction(context, false);
+    
+                if (!success) {
+                    PhoneLog.w(TAG, "⚠️ 延后代点失败 → fallback广播");
+    
+                    context.sendBroadcast(new Intent("com.android.deskclock.ALARM_SNOOZE"));
+                }
+            }
+    
+        } catch (Exception e) {
+            PhoneLog.e(TAG, "❌ executeAlarmAction异常", e);
+        }
     }
 }
