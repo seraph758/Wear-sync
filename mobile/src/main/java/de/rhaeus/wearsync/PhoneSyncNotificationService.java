@@ -154,6 +154,7 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
 
     private Runnable alarmWatchdogRunnable = null;
 
+    @Deprecated
     private boolean isAlarmCurrentlyRinging = false;
 
     
@@ -382,10 +383,10 @@ if (snoozeKey.trim().isEmpty()) {
                 "HH:mm",
                 Locale.getDefault()).format(new Date()));
 
-
-        isAlarmCurrentlyRinging=true;
-
-
+        PhoneSyncAlarmState.enterRinging();
+        
+        isAlarmCurrentlyRinging = true;
+        
         startAlarmWatchdog();
 
 
@@ -436,6 +437,7 @@ if (snoozeKey.trim().isEmpty()) {
 
         stopAlarmWatchdog();
 
+        PhoneSyncAlarmState.enterStopping();
 
         PhoneAlarmManager.notifyWatchAlarmDismissed(this);
 
@@ -501,7 +503,7 @@ if (snoozeKey.trim().isEmpty()) {
                     public void run(){
 
 
-                        if(isAlarmCurrentlyRinging){
+                       if (PhoneSyncAlarmState.isRinging()) {
 
 
                             PhoneAlarmManager.notifyWatchAlarmRinging(
@@ -532,6 +534,7 @@ if (snoozeKey.trim().isEmpty()) {
 
     private void stopAlarmWatchdog(){
 
+        PhoneSyncAlarmState.reset();
 
         isAlarmCurrentlyRinging=false;
 
