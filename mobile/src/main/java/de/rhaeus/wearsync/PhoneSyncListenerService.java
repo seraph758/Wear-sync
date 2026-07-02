@@ -86,7 +86,7 @@ public class PhoneSyncListenerService extends WearableListenerService {
                 PhoneLog.d(TAG, "⏰ [闹钟核心流转] 捕获到手表闹钟信令 ➔ 动作: [" + action + "]，全权移交 PhoneAlarmManager 调度！");
                 
                 // 🔥 闭着眼睛直接转发，让 AlarmManager 内部去判定 DISMISS 或 SNOOZE
-                PhoneAlarmManager.handleWatchCommand(this, action);
+                PhoneAlarmManager.executeAlarmAction(this, action);                
                 return;
             }
            // =================================================================
