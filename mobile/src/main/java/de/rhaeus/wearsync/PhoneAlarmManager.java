@@ -1,8 +1,6 @@
 package de.rhaeus.wearsync;
 
 import android.content.Context;
-import android.content.Intent;
-import android.media.AudioManager;
 import com.google.android.gms.tasks.Tasks;
 import com.google.android.gms.wearable.Node;
 import com.google.android.gms.wearable.Wearable;
@@ -93,7 +91,37 @@ public class PhoneAlarmManager {
         }).start();
     }
         public static void executeAlarmAction(Context context, String action) {
-        PhoneLog.d(TAG, "🧭 [统一执行入口] action=" + action);
-    
+            PhoneLog.d(TAG, "🧭 [统一执行入口] action=" + action);
+           if ("DISMISS".equalsIgnoreCase(action)) {
+            
+                boolean success =
+                        PhoneSyncNotificationService.triggerLiveAlarmAction(
+                                context,
+                                true
+                        );
+            
+                PhoneLog.d(TAG,
+                        "DISMISS执行结果=" + success);
+            
+            }
+            else if ("SNOOZE".equalsIgnoreCase(action)) {
+            
+                boolean success =
+                        PhoneSyncNotificationService.triggerLiveAlarmAction(
+                                context,
+                                false
+                        );
+            
+                PhoneLog.d(TAG,
+                        "SNOOZE执行结果=" + success);
+            
+            }
+            else {
+            
+                PhoneLog.w(TAG,
+                        "未知闹钟动作：" + action);
+            
+            }
+                
     }
 }
