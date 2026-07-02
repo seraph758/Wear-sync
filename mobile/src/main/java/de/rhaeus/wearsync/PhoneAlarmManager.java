@@ -36,6 +36,7 @@ public class PhoneAlarmManager {
      * 接收並執行來自手錶的代點請求（超強日誌覆蓋版）
      */
     public static void handleWatchCommand(Context context, String commandType) {
+        PhoneLog.d(TAG, "⚡ handleWatchCommand -> executeAlarmAction");
     executeAlarmAction(context, commandType);
     }
 
@@ -94,39 +95,5 @@ public class PhoneAlarmManager {
         public static void executeAlarmAction(Context context, String action) {
         PhoneLog.d(TAG, "🧭 [统一执行入口] action=" + action);
     
-        try {
-            if ("DISMISS".equalsIgnoreCase(action)) {
-    
-                boolean success = PhoneSyncNotificationService.triggerLiveAlarmAction(context, true);
-    
-                if (!success) {
-                    PhoneLog.w(TAG, "⚠️ 代点失败 → 启动fallback");
-    
-                    AudioManager audioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
-                    if (audioManager != null) {
-                        audioManager.adjustStreamVolume(
-                                AudioManager.STREAM_ALARM,
-                                AudioManager.ADJUST_LOWER,
-                                AudioManager.FLAG_SHOW_UI
-                        );
-                    }
-    
-                    context.sendBroadcast(new Intent("com.android.deskclock.ALARM_DONE"));
-                }
-    
-            } else if ("SNOOZE".equalsIgnoreCase(action)) {
-    
-                boolean success = PhoneSyncNotificationService.triggerLiveAlarmAction(context, false);
-    
-                if (!success) {
-                    PhoneLog.w(TAG, "⚠️ 延后代点失败 → fallback广播");
-    
-                    context.sendBroadcast(new Intent("com.android.deskclock.ALARM_SNOOZE"));
-                }
-            }
-    
-        } catch (Exception e) {
-            PhoneLog.e(TAG, "❌ executeAlarmAction异常", e);
-        }
     }
 }
