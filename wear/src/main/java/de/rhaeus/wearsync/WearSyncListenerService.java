@@ -83,6 +83,12 @@ public void onMessageReceived(@NonNull MessageEvent messageEvent) {
             WearLog.d(TAG, "⏰ 收到手机闹钟信令，正在将其无损打包并直发 WearAlarmActivity ➔ " + action);
                 
                 Intent alarmIntent = new Intent(this, WearAlarmActivity.class);
+                alarmIntent.addFlags(
+                        Intent.FLAG_ACTIVITY_NEW_TASK |
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP |
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP
+                );
+                startActivity(alarmIntent);
                 // 🎯 核心精简：直接把原始 JSON 字符串塞进去，所有的解析和自毁都让 Activity 现场自己做！
                 alarmIntent.putExtra("raw_alarm_json", json.toString());
                 alarmIntent.putExtra("alarm_action", action);
