@@ -29,191 +29,188 @@ public class PhoneSyncListenerService extends WearableListenerService {
 
     @Override
     public void onMessageReceived(MessageEvent messageEvent) {
+    
         if (messageEvent != null && messageEvent.getSourceNodeId() != null) {
-            // 自动捕获当前处于活跃状态的手表 ID 并刷新全局变量
             WearSyncState.setNodeId(this, messageEvent.getSourceNodeId());
         }
-
+    
         if (messageEvent == null || !UNIVERSAL_SYNC_PATH.equals(messageEvent.getPath())) {
             super.onMessageReceived(messageEvent);
             return;
         }
-
+    
         try {
             String jsonStr = new String(messageEvent.getData(), StandardCharsets.UTF_8);
             JSONObject json = new JSONObject(jsonStr);
-
+    
             String sender = json.optString("sender", "");
+            if ("phone".equalsIgnoreCase(sender)) return;
+    
             String type = json.optString("type", "");
             String action = json.optString("action", "");
+    
+            PhoneLog.d(TAG, "📥 [信令到港] type=" + type + ", action=" + action);
+    
+            routeMessage(json, type, action);
+    
+        } catch (Exception e) {
+            PhoneLog.e(TAG, "🔴 [信令解析失败]", e);
+        }
+    }
 
-            // 过滤掉手机自身发出的回环广播数据，防止死循环
-            if ("phone".equalsIgnoreCase(sender)) {
-                return;
-            }
-
-            PhoneLog.d(TAG, "📥 [信令到港] 收到来自手表的底层信令 ➔ type=[" + type + "], action=[" + action + "]");
 
             // ==========================================
             // 🔋 模组一：勿扰状态逆向同步 (托管至 PhoneDndManager)
             // ==========================================
-            if ("dnd".equalsIgnoreCase(type)) {
-                int value = json.has("dnd_profile_value") 
-                        ? json.optInt("dnd_profile_value", -1) 
-                        : json.optInt("dnd_state", -1);
+                private void routeMessage(JSONObject json, String type, String action) {
+                
+                    switch (type.toLowerCase()) {
+                
+                        case "dnd":
+                            handleDnd(json);
+                            break;
+                
+                        case "alarm":
+                        case "alarm_action":
+                            handleAlarm(json, action);
+                            break;
+                
+                        case "camera":
+                        case "camera_control":
+                            handleCamera(json, action);
+                            break;
+                
+                        default:
+                            PhoneLog.w(TAG, "未知type：" + type);
+                    }
+                }
+            private void handleDnd(JSONObject json) {
 
+                int value = json.has("dnd_profile_value")
+                        ? json.optInt("dnd_profile_value", -1)
+                        : json.optInt("dnd_state", -1);
+            
                 if (value == -1) {
-                    PhoneLog.w(TAG, "⚠️ [勿扰信令异常] 勿扰状态解析值为 -1，放弃执行");
+                    PhoneLog.w(TAG, "⚠️ [DND] value invalid");
                     return;
                 }
-
-                PhoneLog.d(TAG, "🌓 [勿扰核心流转] 收到手表逆向同步请求 ➔ 目标系统值: " + value + "，正在移交 PhoneDndManager...");
-                
-                // 1. 开启防循环锁
+            
+                PhoneLog.d(TAG, "🌓 [DND] sync value=" + value);
+            
                 isInternalUpdate = true;
-
-                // 2. 🔥 移交专属管理器处理手机勿扰的修改
                 PhoneDndManager.handleIncomingAction(this, value);
-
-                // 3. 延迟 1.5 秒解锁，防止双向回环激荡
-                new Handler(getMainLooper()).postDelayed(() -> isInternalUpdate = false, 1500);
-                return;
+            
+                new Handler(getMainLooper()).postDelayed(
+                        () -> isInternalUpdate = false,
+                        1500
+                );
             }
             // ==========================================
             // ⏰ 模组二：闹钟远端代点控制 (解耦极简版)
             // ==========================================
-            if ("alarm".equalsIgnoreCase(type) || "alarm_action".equalsIgnoreCase(type)) {
-                PhoneLog.d(TAG, "⏰ [闹钟核心流转] 捕获到手表闹钟信令 ➔ 动作: [" + action + "]，全权移交 PhoneAlarmManager 调度！");
-                
-                // 🔥 闭着眼睛直接转发，让 AlarmManager 内部去判定 DISMISS 或 SNOOZE
-                PhoneAlarmManager.executeAlarmAction(this, action);                
-                return;
+           private void handleAlarm(JSONObject json, String action) {
+
+                PhoneLog.d(TAG, "⏰ [ALARM] action=" + action);
+            
+                PhoneAlarmManager.executeAlarmAction(this, action);
             }
            // =================================================================
             // 📸 模組三：遠端相機協定控制（全步進日誌極致除錯版）
             // =================================================================
-            if ("camera".equalsIgnoreCase(type) || "camera_control".equalsIgnoreCase(type)) {
+            private void handleCamera(JSONObject json, String action) {
 
-                if ("CAMERA_READY".equalsIgnoreCase(action)) {
-
-                    PhoneLog.d(TAG, "CAM-P002 收到 CAMERA_READY");
+            if ("CAMERA_READY".equalsIgnoreCase(action)) {
+        
+                PhoneLog.d(TAG, "CAM-P002 CAMERA_READY");
+        
                 String nodeId = WearSyncState.getNodeId(this);
-
-                Intent serviceIntent = new Intent(this, PhoneSyncCameraService.class);
-                serviceIntent.setAction(PhoneSyncCameraService.ACTION_START_CAMERA);
-                startService(serviceIntent);
-                
+        
+                Intent intent = new Intent(this, PhoneSyncCameraService.class);
+                intent.setAction(PhoneSyncCameraService.ACTION_START_CAMERA);
+                startService(intent);
+        
                 new Handler(getMainLooper()).postDelayed(() -> {
-                
                     if (PhoneSyncCameraService.instance != null) {
                         PhoneSyncCameraService.instance.startStreaming(nodeId);
                     }
-                
-                },300);
-                
-                    return;
-                }
-                PhoneLog.d(TAG, "📸 [相機控制流] ━━━ 接收到相機模組信令 ━━━ 動作類型: [" + action + "]");
-                if ("STREAM_START".equalsIgnoreCase(action)) {
-
-                    PhoneLog.d(TAG, "P-020 收到 STREAM_START");
-                
-                    if (PhoneSyncCameraService.instance != null) {
-                
-                        String nodeId = WearSyncState.getNodeId(this);
-                
-                        if (nodeId == null || nodeId.isEmpty()) {
-                            PhoneLog.e(TAG, "STREAM_START 时 nodeId 为空");
-                            return;
-                        }
-                        
-                        PhoneSyncCameraService.instance.openChannelAndStream(nodeId);
-                
-                    } else {
-                
-                        PhoneLog.e(TAG, "CameraService 未启动");
-                
-                    }
-                
-                    return;
-                }
-                // 子動作 A：啟動手機相機服務
-                if ("START_CAMERA".equalsIgnoreCase(action) || "START_CAMERA_UI".equalsIgnoreCase(action)) {
-                    PhoneLog.d(TAG, "🔍 [相機尋址] 準備獲取手錶節點 ID...");
-                    String nodeId = WearSyncState.getNodeId(this);
-
-                    if (nodeId == null || nodeId.isEmpty()) {
-                        PhoneLog.w(TAG, "⚠️ [相機尋址降級] 當前全域節點 ID 快存為空！立刻啟動非同步背景多路輪詢掃描...");
-                        
-                        new Thread(() -> {
-                            PhoneLog.d(TAG, "🧵 [背景執行緒] 輪詢執行緒已啟動，正在調用 Wearable.getNodeClient().getConnectedNodes()...");
-                            try {
-                                List<Node> nodes = Tasks.await(Wearable.getNodeClient(this).getConnectedNodes());
-                                
-                                if (nodes == null) {
-                                    PhoneLog.e(TAG, "❌ [背景尋址異常] 系統返回的連接節點列表 (List<Node>) 為 null！");
-                                    return;
-                                }
-                                
-                                PhoneLog.d(TAG, "📊 [背景尋址掃描] 探測結束，當前在線配對的手錶節點數量: " + nodes.size());
-                                
-                                if (!nodes.isEmpty()) {
-                                    String id = nodes.get(0).getId();
-                                    String name = nodes.get(0).getDisplayName();
-                                    PhoneLog.d(TAG, "🎯 [背景尋址成功] 成功撈到首個活體節點! 名稱: [" + name + "], ID: [" + id + "]");
-                                    
-                                    PhoneLog.d(TAG, "💾 [背景尋址同步] 正在將新節點 ID 寫入 WearSyncState 快存...");
-                                    WearSyncState.setNodeId(this, id);
-                                    
-                                    PhoneLog.d(TAG, "🚀 [背景尋址轉交] 準備向該節點注入遠端 Activity 穿透指令...");
-                                    executeRemoteActivityLaunch(id);
-                                } else {
-                                    PhoneLog.w(TAG, "❌ [背景尋址斷聯] 掃描完畢，但未發現任何處於藍牙/Wi-Fi 連線狀態的手錶節點！");
-                                }
-                            } catch (Exception e) {
-                                PhoneLog.e(TAG, "🔴 [背景尋址崩潰] 在線異步輪詢手錶節點遭遇致命異常: " + e.getMessage(), e);
-                            }
-                        }).start();
-                    } else {
-                        PhoneLog.d(TAG, "⚡ [相機尋址命中] 成功命中活躍手錶快存 ID: [" + nodeId + "]，直接跳過掃描啟動穿透...");
-                        JSONObject json = new JSONObject();
-                        json.put("sender","phone");
-                        json.put("type","camera_control");
-                        json.put("action","CAMERA_HANDSHAKE");
-                        
-                        Wearable.getMessageClient(this).sendMessage(
-                                nodeId,
-                                UNIVERSAL_SYNC_PATH,
-                                json.toString().getBytes(StandardCharsets.UTF_8)
-                        );
-                        
-                        PhoneLog.d(TAG,"CAM-P001 CAMERA_HANDSHAKE 已发送");
-                        executeRemoteActivityLaunch(nodeId);
-                    }
-                } 
-                // 子動作 B：停止手機相機服務
-                else if ("STOP_CAMERA".equalsIgnoreCase(action) || "FORCE_QUIT_CAMERA".equalsIgnoreCase(action)) {
-                    PhoneLog.d(TAG, "🛑 [相機核心流轉] 收到手錶端主動退出指令！準備中斷手機端相機服務...");
-                    
-                    PhoneLog.d(TAG, "📦 [相機核心流转] 正在建構封裝意圖 ➔ 目的類別: PhoneSyncCameraService.class");
-                    Intent stopIntent = new Intent(this, PhoneSyncCameraService.class);
-                    
-                    PhoneLog.d(TAG, "📦 [相機核心流转] 正在注入 Action 行動暗號: [de.rhaeus.wearsync.ACTION_STOP_CAMERA]");
-                    stopIntent.setAction("de.rhaeus.wearsync.ACTION_STOP_CAMERA");
-                    
-                    PhoneLog.d(TAG, "🚀 [相機核心流转] 正在調用 startService() 向相機服務發送安全關閉中斷命令...");
-                    startService(stopIntent);
-                    PhoneLog.d(TAG, "✅ [相機核心流转] 中斷指令已成功發射出去。");
-                } else {
-                    PhoneLog.w(TAG, "⚠️ [相機控制流] 收到未知的相機子動作 action: [" + action + "]，不做任何處理。");
-                }
+                }, 300);
+        
                 return;
             }
+        
+            if ("STREAM_START".equalsIgnoreCase(action)) {
+        
+                if (PhoneSyncCameraService.instance != null) {
+                    String nodeId = WearSyncState.getNodeId(this);
+        
+                    if (nodeId == null || nodeId.isEmpty()) {
+                        PhoneLog.e(TAG, "STREAM_START nodeId empty");
+                        return;
+                    }
+        
+                    PhoneSyncCameraService.instance.openChannelAndStream(nodeId);
+                }
+        
+                return;
+            }
+        
+            if ("START_CAMERA".equalsIgnoreCase(action)
+                    || "START_CAMERA_UI".equalsIgnoreCase(action)) {
+        
+                String nodeId = WearSyncState.getNodeId(this);
+        
+                if (nodeId == null || nodeId.isEmpty()) {
+        
+                    new Thread(() -> {
+                        try {
+                            List<Node> nodes =
+                                    Tasks.await(Wearable.getNodeClient(this).getConnectedNodes());
+        
+                            if (nodes != null && !nodes.isEmpty()) {
+                                String id = nodes.get(0).getId();
+                                WearSyncState.setNodeId(this, id);
+                                executeRemoteActivityLaunch(id);
+                            }
+                        } catch (Exception e) {
+                            PhoneLog.e(TAG, "node scan failed", e);
+                        }
+                    }).start();
+        
+                } else {
+                try {
 
-        } catch (Exception e) {
-            PhoneLog.e(TAG, "🔴 [信令解析失敗] 處理相機模組底層密文或業務流轉時發生異常: " + e.getMessage(), e);
+                JSONObject handshake = new JSONObject();
+                handshake.put("sender", "phone");
+                handshake.put("type", "camera_control");
+                handshake.put("action", "CAMERA_HANDSHAKE");
+            
+                Wearable.getMessageClient(this).sendMessage(
+                        nodeId,
+                        UNIVERSAL_SYNC_PATH,
+                        handshake.toString().getBytes(StandardCharsets.UTF_8)
+                );
+            
+                            } catch (Exception e) {
+                
+                        PhoneLog.e(TAG, "发送 CAMERA_HANDSHAKE 失败", e);
+                
+                    }
+                
+                    executeRemoteActivityLaunch(nodeId);
+                }
+        
+            if ("STOP_CAMERA".equalsIgnoreCase(action)
+                    || "FORCE_QUIT_CAMERA".equalsIgnoreCase(action)) {
+        
+                Intent stop = new Intent(this, PhoneSyncCameraService.class);
+                stop.setAction(PhoneSyncCameraService.ACTION_STOP_CAMERA);
+                startService(stop);
+        
+                return;
+            }
+        
+            PhoneLog.w(TAG, "⚠️ [CAMERA] unknown action: " + action);
         }
-    }
 
     /**
      * 🛰️ 通過谷歌穿透引擎 (RemoteActivityHelper) 強制喚醒手表的配對拍照 Activity
