@@ -42,6 +42,8 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
     private long totalFramesDecoded = 0;
     private long lastLogTime = 0;
     private boolean isFirstFrameDecoded = false;
+    private volatile boolean isSurfaceReady = false;
+    private volatile boolean isChannelReady = false;
 
     public static WeakReference<WearCameraActivity> sActivityRef = new WeakReference<>(null);
 
@@ -150,6 +152,12 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
         if (holder != null && holder.getSurface() != null) {
             WearLog.d(TAG, "🖥️ [Surface状态] 检查 Surface 活体正常。正在移交底层初始化 H.264 解码器...");
             initDecoder(holder);
+
+            isSurfaceReady = true;
+            
+            WearLog.d(TAG, "CAM-W001 Surface Ready");
+            
+            sendControlSignalToPhone("CAMERA_READY");
         } else {
             WearCameraActivity.this.releaseDecoder();
             WearLog.e(TAG, "❌ [Surface状态致命] 检测到 SurfaceHolder 或其内部 Surface 为 null！无法点火解调引擎。");
@@ -178,7 +186,7 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
      * 🚀 接收来自高速公路网关通道传输过来的 H.264 原生帧，注入解码器
      */
     public void feedH264Data(byte[] data, int length) {
-        if (!isDecoderRunning || mDecoder == null) {
+        if (!isDecoderRunning || mDecoder == null || !isChannelReady) {
                 WearLog.w(TAG,
             "收到视频帧，但解码器尚未准备完成");
             return;
@@ -200,6 +208,16 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
                 if (now - lastLogTime > 4000) {
                     WearLog.w(TAG, "⚠️ [图传卡顿警报] 解码器输入端卡座爆满 (dequeueInputBuffer == -1)，说明手表芯片解调速度跟不上手机喷射速度。");
                 }
+            }
+            public void onChannelReady() {
+            
+                if (isChannelReady) {
+                    return;
+                }
+            
+                isChannelReady = true;
+            
+                WearLog.d(TAG, "CAM-W002 Channel Ready");
             }
 
             // 2. 抽取输出端已解调完成的像素裸流画面并渲染
@@ -300,6 +318,8 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
             return;
         }
         isUserExiting = true;
+        isSurfaceReady = false;
+        isChannelReady = false;
         WearLog.w(TAG, "🧹 [清场熔断] ━━━━━━━━ 开启手表相机 UI 完整退出销毁机制 ━━━━━━━━");
         
         // 💡 核心回收：清空常亮旗帜，把屏幕控制权安全还给系统省电策略
