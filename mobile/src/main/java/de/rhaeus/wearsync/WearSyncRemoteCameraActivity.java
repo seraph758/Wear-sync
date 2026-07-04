@@ -69,6 +69,7 @@ public class WearSyncRemoteCameraActivity extends Activity {
             } else {
                 PhoneLog.d(TAG, "⑤ [版本分支命中] 检测到当前手机系统 SDK: " + Build.VERSION.SDK_INT + " (<26)，调用旧版 [startService] 破壳...");
                 startService(serviceIntent);
+                PhoneLog.d(TAG, "CAM-P000 PhoneSyncCameraService 已启动");
             }
             
             // 3. 显式绑定，协助规避 Android 14+ 的后台启动限制
