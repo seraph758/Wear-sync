@@ -119,29 +119,20 @@ public class PhoneSyncListenerService extends WearableListenerService {
             // =================================================================
             private void handleCamera(JSONObject json, String action) {
 
+            String nodeId = WearSyncState.getNodeId(this); // ✅ 提前统一
+        
             if ("CAMERA_READY".equalsIgnoreCase(action)) {
         
                 PhoneLog.d(TAG, "CAM-P002 CAMERA_READY");
-        
-                String nodeId = WearSyncState.getNodeId(this);
         
                 Intent intent = new Intent(this, PhoneSyncCameraService.class);
                 intent.setAction(PhoneSyncCameraService.ACTION_START_CAMERA);
                 startService(intent);
         
                 new Handler(getMainLooper()).postDelayed(() -> {
-
-                    if (PhoneSyncCameraService.instance != null) {
-                
-                        String nodeId = WearSyncState.getNodeId(this);
-                
-                        if (nodeId != null && !nodeId.isEmpty()) {
-                            PhoneSyncCameraService.instance.startStreaming(nodeId);
-                        } else {
-                            PhoneLog.e(TAG, "CAMERA_READY 后 nodeId 为空");
-                        }
+                    if (PhoneSyncCameraService.instance != null && nodeId != null) {
+                        PhoneSyncCameraService.instance.startStreaming(nodeId);
                     }
-                
                 }, 300);
         
                 return;
@@ -149,14 +140,7 @@ public class PhoneSyncListenerService extends WearableListenerService {
         
             if ("STREAM_START".equalsIgnoreCase(action)) {
         
-                if (PhoneSyncCameraService.instance != null) {
-                    String nodeId = WearSyncState.getNodeId(this);
-        
-                    if (nodeId == null || nodeId.isEmpty()) {
-                        PhoneLog.e(TAG, "STREAM_START nodeId empty");
-                        return;
-                    }
-        
+                if (PhoneSyncCameraService.instance != null && nodeId != null) {
                     PhoneSyncCameraService.instance.openChannelAndStream(nodeId);
                 }
         
@@ -165,8 +149,6 @@ public class PhoneSyncListenerService extends WearableListenerService {
         
             if ("START_CAMERA".equalsIgnoreCase(action)
                     || "START_CAMERA_UI".equalsIgnoreCase(action)) {
-        
-                String nodeId = WearSyncState.getNodeId(this);
         
                 if (nodeId == null || nodeId.isEmpty()) {
         
@@ -186,29 +168,28 @@ public class PhoneSyncListenerService extends WearableListenerService {
                     }).start();
         
                 } else {
-                try {
-
-                JSONObject handshake = new JSONObject();
-                handshake.put("sender", "phone");
-                handshake.put("type", "camera_control");
-                handshake.put("action", "CAMERA_HANDSHAKE");
-            
-                Wearable.getMessageClient(this).sendMessage(
-                        nodeId,
-                        UNIVERSAL_SYNC_PATH,
-                        handshake.toString().getBytes(StandardCharsets.UTF_8)
-                );
-            
-                            } catch (Exception e) {
-                
+        
+                    try {
+                        JSONObject handshake = new JSONObject();
+                        handshake.put("sender", "phone");
+                        handshake.put("type", "camera_control");
+                        handshake.put("action", "CAMERA_HANDSHAKE");
+        
+                        Wearable.getMessageClient(this).sendMessage(
+                                nodeId,
+                                UNIVERSAL_SYNC_PATH,
+                                handshake.toString().getBytes(StandardCharsets.UTF_8)
+                        );
+        
+                    } catch (Exception e) {
                         PhoneLog.e(TAG, "发送 CAMERA_HANDSHAKE 失败", e);
-                
                     }
-                
+        
                     executeRemoteActivityLaunch(nodeId);
                 }
-                            return;
-            } 
+        
+                return;
+            }
         
             if ("STOP_CAMERA".equalsIgnoreCase(action)
                     || "FORCE_QUIT_CAMERA".equalsIgnoreCase(action)) {
