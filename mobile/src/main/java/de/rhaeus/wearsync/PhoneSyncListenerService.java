@@ -207,6 +207,8 @@ public class PhoneSyncListenerService extends WearableListenerService {
                 
                     executeRemoteActivityLaunch(nodeId);
                 }
+                            return;
+            } 
         
             if ("STOP_CAMERA".equalsIgnoreCase(action)
                     || "FORCE_QUIT_CAMERA".equalsIgnoreCase(action)) {
