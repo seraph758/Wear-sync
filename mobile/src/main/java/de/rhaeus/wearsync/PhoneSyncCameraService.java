@@ -107,10 +107,14 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
             // 2. 启动重力方向传感器监听（手机自吃旋转）
             PhoneLog.d(TAG, "🛠️ [步进 2/3] 正在挂载重力方向传感器监听器（由手机端自适应扭转图像）...");
             setupOrientationListener();
+            
+            public void startStreaming(String nodeId) {
 
-            // 3. 拧开高速公路闸门
-            PhoneLog.d(TAG, "🛠️ [步进 3/3] 正在拧开底层高速公路物理流闸门，建立对等传输通道...");
-            openChannelAndStream(targetNodeId);
+                PhoneLog.d(TAG,"CAM-P010 开始建立 Channel");
+            
+                openChannelAndStream(nodeId);
+            }
+           
         } 
         else if (ACTION_STOP_CAMERA.equals(action)) {
             PhoneLog.w(TAG, "🛑 [熔断触发] 接收到主动安全退出中断指令！准备执行自我终结...");
@@ -256,11 +260,36 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
                 
                 PhoneLog.d(TAG, "💾 [網關閉合完成] 正在拉起全数据链就绪旗帜 isPipelineReady = true");
                 isPipelineReady = true;
-                PhoneLog.d(TAG, "🚀 [管道彻底就绪] ━━━━ 手机图传大坝已开闸 ━━━━ 画面帧流开始向手表高频喷射！");
-            } catch (Exception e) {
-                PhoneLog.e(TAG, "🔴 [網關建立失敗] 无法与远端手表成功建立流媒体传输网络鏈路: " + e.getMessage(), e);
-            }
-        }).start();
+                new Thread(() -> {
+
+                    try {
+                
+                        JSONObject json = new JSONObject();
+                
+                        json.put("sender","phone");
+                        json.put("type","camera_control");
+                        json.put("action","STREAM_START");
+                
+                        Wearable.getMessageClient(this).sendMessage(
+                                nodeId,
+                                UNIVERSAL_SYNC_PATH,
+                                json.toString().getBytes(StandardCharsets.UTF_8)
+                        );
+                
+                        PhoneLog.d(TAG,"CAM-P020 STREAM_START 已发送");
+                
+                    } catch (Exception e) {
+                
+                        PhoneLog.e(TAG,"STREAM_START 发送失败",e);
+                
+                    }
+                
+                }).start();
+                                PhoneLog.d(TAG, "🚀 [管道彻底就绪] ━━━━ 手机图传大坝已开闸 ━━━━ 画面帧流开始向手表高频喷射！");
+                            } catch (Exception e) {
+                                PhoneLog.e(TAG, "🔴 [網關建立失敗] 无法与远端手表成功建立流媒体传输网络鏈路: " + e.getMessage(), e);
+                            }
+                        }).start();
     }
 
     private void setupOrientationListener() {
