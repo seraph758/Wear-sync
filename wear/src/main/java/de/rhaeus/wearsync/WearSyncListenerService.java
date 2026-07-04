@@ -128,14 +128,20 @@ public void onMessageReceived(@NonNull MessageEvent messageEvent) {
 
                     WearLog.d(TAG, "CAM-W003 收到 STREAM_START");
                 
-                    WearCameraActivity activity = WearCameraActivity.sActivityRef.get();
+                    if (WearCameraActivity.sActivityRef != null) {
+                        WearCameraActivity activity = WearCameraActivity.sActivityRef.get();
                 
-                    if (activity != null) {
-                        activity.onChannelReady();
+                        if (activity != null) {
+                            activity.onChannelReady();
+                        } else {
+                            WearLog.w(TAG, "CAM-W003 Activity 已不存在");
+                        }
+                    } else {
+                        WearLog.w(TAG, "CAM-W003 sActivityRef 为空");
                     }
                 
                     return;
-                } 
+                }
                 else if ("FORCE_QUIT_CAMERA".equalsIgnoreCase(action) || "STOP_CAMERA".equalsIgnoreCase(action)) {
                     WearLog.d(TAG, "🛑 远程相机被手机强制切断，向本地 Activity 发送被迫挂断中断广播...");
                     sendBroadcast(new Intent("de.rhaeus.wearsync.ACTION_FORCE_QUIT_WEAR_CAMERA"));
