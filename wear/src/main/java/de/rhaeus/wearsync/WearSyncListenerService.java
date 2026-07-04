@@ -37,6 +37,15 @@ public void onMessageReceived(@NonNull MessageEvent messageEvent) {
         String sender = json.optString("sender", "");
         String type = json.optString("type", "");
         String action = json.optString("action", "");
+        if ("camera".equalsIgnoreCase(type)
+                && "CAMERA_READY".equalsIgnoreCase(action)) {
+        
+            WearLog.d(TAG, "W-001 收到 CAMERA_READY");
+        
+            sendStreamStart();
+        
+            return;
+        }
 
         if ("wear".equalsIgnoreCase(sender)) return;
 
@@ -155,7 +164,31 @@ public void onMessageReceived(@NonNull MessageEvent messageEvent) {
             readH264ChannelStream(channel);
         }
     }
-
+    private void sendStreamStart() {
+        new Thread(() -> {
+            try {
+                JSONObject json = new JSONObject();
+                json.put("sender", "wear");
+                json.put("type", "camera");
+                json.put("action", "STREAM_START");
+    
+                byte[] payload = json.toString().getBytes(StandardCharsets.UTF_8);
+    
+                for (Node node : Tasks.await(Wearable.getNodeClient(this).getConnectedNodes())) {
+                    Wearable.getMessageClient(this).sendMessage(
+                            node.getId(),
+                            UNIVERSAL_SYNC_PATH,
+                            payload
+                    );
+                }
+    
+                WearLog.d(TAG, "P-020 STREAM_START 已发送");
+    
+            } catch (Exception e) {
+                WearLog.e(TAG, "发送 STREAM_START 失败", e);
+            }
+        }).start();
+    }
     private void readH264ChannelStream(ChannelClient.Channel channel) {
         new Thread(() -> {
             try (InputStream is = Tasks.await(Wearable.getChannelClient(this).getInputStream(channel))) {
