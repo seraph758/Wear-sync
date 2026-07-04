@@ -104,12 +104,30 @@ public void onMessageReceived(@NonNull MessageEvent messageEvent) {
 
             // 4. 相机穿透控制模组
             if ("camera_control".equalsIgnoreCase(type)) {
+                if ("CAMERA_HANDSHAKE".equalsIgnoreCase(action)) {
+
+                        WearLog.d(TAG, "CAM-W001 收到 CAMERA_HANDSHAKE");
+                    
+                        return;
+                    }
                 if ("START_CAMERA".equalsIgnoreCase(action)) {
                     WearLog.d(TAG, "📸 远程相机开火指令送达！正在强制启动手表预览界面...");
                     Intent camIntent = new Intent(this, WearCameraActivity.class);
                     camIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
                     startActivity(camIntent);
-                } else if ("FORCE_QUIT_CAMERA".equalsIgnoreCase(action) || "STOP_CAMERA".equalsIgnoreCase(action)) {
+                }else if ("STREAM_START".equalsIgnoreCase(action)) {
+
+                    WearLog.d(TAG, "CAM-W003 收到 STREAM_START");
+                
+                    WearCameraActivity activity = WearCameraActivity.sActivityRef.get();
+                
+                    if (activity != null) {
+                        activity.onChannelReady();
+                    }
+                
+                    return;
+                } 
+                else if ("FORCE_QUIT_CAMERA".equalsIgnoreCase(action) || "STOP_CAMERA".equalsIgnoreCase(action)) {
                     WearLog.d(TAG, "🛑 远程相机被手机强制切断，向本地 Activity 发送被迫挂断中断广播...");
                     sendBroadcast(new Intent("de.rhaeus.wearsync.ACTION_FORCE_QUIT_WEAR_CAMERA"));
                 }
