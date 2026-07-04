@@ -114,7 +114,24 @@ public class PhoneSyncListenerService extends WearableListenerService {
                     return;
                 }
                 PhoneLog.d(TAG, "📸 [相機控制流] ━━━ 接收到相機模組信令 ━━━ 動作類型: [" + action + "]");
+                if ("STREAM_START".equalsIgnoreCase(action)) {
+
+                    PhoneLog.d(TAG, "P-020 收到 STREAM_START");
                 
+                    if (PhoneSyncCameraService.instance != null) {
+                
+                        String nodeId = WearSyncState.getNodeId(this);
+                
+                        PhoneSyncCameraService.instance.openChannelAndStream(nodeId);
+                
+                    } else {
+                
+                        PhoneLog.e(TAG, "CameraService 未启动");
+                
+                    }
+                
+                    return;
+                }
                 // 子動作 A：啟動手機相機服務
                 if ("START_CAMERA".equalsIgnoreCase(action) || "START_CAMERA_UI".equalsIgnoreCase(action)) {
                     PhoneLog.d(TAG, "🔍 [相機尋址] 準備獲取手錶節點 ID...");
