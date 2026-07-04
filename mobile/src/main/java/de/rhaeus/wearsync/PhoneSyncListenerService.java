@@ -130,9 +130,18 @@ public class PhoneSyncListenerService extends WearableListenerService {
                 startService(intent);
         
                 new Handler(getMainLooper()).postDelayed(() -> {
+
                     if (PhoneSyncCameraService.instance != null) {
-                        PhoneSyncCameraService.instance.startStreaming(nodeId);
+                
+                        String nodeId = WearSyncState.getNodeId(this);
+                
+                        if (nodeId != null && !nodeId.isEmpty()) {
+                            PhoneSyncCameraService.instance.startStreaming(nodeId);
+                        } else {
+                            PhoneLog.e(TAG, "CAMERA_READY 后 nodeId 为空");
+                        }
                     }
+                
                 }, 300);
         
                 return;
