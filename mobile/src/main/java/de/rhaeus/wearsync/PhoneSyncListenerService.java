@@ -122,6 +122,11 @@ public class PhoneSyncListenerService extends WearableListenerService {
                 
                         String nodeId = WearSyncState.getNodeId(this);
                 
+                        if (nodeId == null || nodeId.isEmpty()) {
+                            PhoneLog.e(TAG, "STREAM_START 时 nodeId 为空");
+                            return;
+                        }
+                        
                         PhoneSyncCameraService.instance.openChannelAndStream(nodeId);
                 
                     } else {
