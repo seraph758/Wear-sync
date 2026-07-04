@@ -209,16 +209,7 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
                     WearLog.w(TAG, "⚠️ [图传卡顿警报] 解码器输入端卡座爆满 (dequeueInputBuffer == -1)，说明手表芯片解调速度跟不上手机喷射速度。");
                 }
             }
-            public void onChannelReady() {
             
-                if (isChannelReady) {
-                    return;
-                }
-            
-                isChannelReady = true;
-            
-                WearLog.d(TAG, "CAM-W002 Channel Ready");
-            }
 
             // 2. 抽取输出端已解调完成的像素裸流画面并渲染
             MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
@@ -246,7 +237,17 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
             WearLog.e(TAG, "⚠️ [图传硬解异常] 帧流灌入硬解管线发生拥堵异常波动: " + e.getMessage());
         }
     }
+    public void onChannelReady() {
 
+            if (isChannelReady) {
+                return;
+            }
+        
+            isChannelReady = true;
+        
+            WearLog.d(TAG, "CAM-W002 Channel Ready");
+        }
+    
     @Override
     public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
         WearLog.d(TAG, "🖥️ [Surface状态] surfaceChanged 触发 ➔ 画布几何尺寸或格式发生变更: w=" + width + ", h=" + height);
