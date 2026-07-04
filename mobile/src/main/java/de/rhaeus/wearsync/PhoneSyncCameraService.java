@@ -129,7 +129,7 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
           public void startStreaming(String nodeId) {
 
                 PhoneLog.d(TAG,"CAM-P010 开始建立 Channel");
-            
+                openChannelAndStream(nodeId);
             }
     private void setupCameraAndPipeline() {
         try {
