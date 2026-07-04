@@ -256,8 +256,15 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
         }
     }
 
-    private void openChannelAndStream(String nodeId) {
-        new Thread(() -> {
+    public void openChannelAndStream(String nodeId){
+        if (isHandshakeCompleted) {
+                PhoneLog.d(TAG, "Channel 已建立，忽略重复 STREAM_START");
+                return;
+            }
+            
+            isHandshakeCompleted = true;
+            
+            new Thread(() -> {
             PhoneLog.d(TAG, "🧵 [背景流线程] 网关线程已点火。正在向目标手錶节点 [" + nodeId + "] 申请打通高性能双轨流媒体物理通道...");
             try {
                 // 🔥 核心對齊
@@ -369,7 +376,8 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
         PhoneLog.w(TAG, "🧹 [安全熔断] ━━━━━━━━ 触发底层系统资源大清洗 ━━━━━━━━");
         PhoneLog.w(TAG, "🧹 [安全熔断] 正在将全数据链旗帜降下 isPipelineReady = false");
         isPipelineReady = false;
-        
+        isHandshakeCompleted = false;
+        isCameraReady = false;
         if (mOrientationListener != null) {
             PhoneLog.d(TAG, "🧹 [安全熔断] 正在摘除并关闭重力方向传感器监听器...");
             mOrientationListener.disable();
