@@ -110,12 +110,11 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
             // 2. 启动重力方向传感器监听（手机自吃旋转）
             PhoneLog.d(TAG, "🛠️ [步进 2/3] 正在挂载重力方向传感器监听器（由手机端自适应扭转图像）...");
             setupOrientationListener();
-            
-            public void startStreaming(String nodeId) {
 
-                PhoneLog.d(TAG,"CAM-P010 开始建立 Channel");
+            // 等待 CAMERA_READY 后再建立 Channel
+            PhoneLog.d(TAG, "🤝 [握手模式] 等待手表 CAMERA_READY 回执...");
             
-            }
+      
            
         } 
         else if (ACTION_STOP_CAMERA.equals(action)) {
@@ -127,7 +126,11 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
         }
         return START_NOT_STICKY;
     }
+          public void startStreaming(String nodeId) {
 
+                PhoneLog.d(TAG,"CAM-P010 开始建立 Channel");
+            
+            }
     private void setupCameraAndPipeline() {
         try {
             PhoneLog.d(TAG, "⚙️ [编码器配置] 开始配置 H.264 底层硬核编码参数 (画幅: 640x480, 帧率: 15fps)...");
