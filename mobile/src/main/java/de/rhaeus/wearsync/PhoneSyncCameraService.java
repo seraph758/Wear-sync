@@ -46,7 +46,7 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
     private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
 
     private final LifecycleRegistry lifecycleRegistry = new LifecycleRegistry(this);
-
+    public static PhoneSyncCameraService instance;
     private MediaCodec mEncoder;
     private OutputStream mOutputStream;
     private boolean isPipelineReady = false;
@@ -58,6 +58,8 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
     private long totalFramesEncoded = 0;
     private long lastLogTime = 0;
     private boolean isFirstFrameInjected = false;
+    private volatile boolean isCameraReady = false;
+    private volatile boolean isHandshakeCompleted = false;
 
     @NonNull
     @Override
@@ -67,6 +69,7 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
 
     @Override
     public void onCreate() {
+        instance = this;
         super.onCreate();
         PhoneLog.d(TAG, "① [生命周期] onCreate ─── 远程相机图传核心服务启动初始化...");
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE);
@@ -112,7 +115,6 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
 
                 PhoneLog.d(TAG,"CAM-P010 开始建立 Channel");
             
-                openChannelAndStream(nodeId);
             }
            
         } 
@@ -234,8 +236,16 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
                     CameraSelector cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA;
                     PhoneLog.d(TAG, "⚙️ [CameraX绑定] 正在清空旧残余，准备执行 cameraProvider.bindToLifecycle()...");
                     cameraProvider.unbindAll();
-                    cameraProvider.bindToLifecycle(PhoneSyncCameraService.this, cameraSelector, mPreviewUseCase);
+                    cameraProvider.bindToLifecycle(
+                            PhoneSyncCameraService.this,
+                            cameraSelector,
+                            mPreviewUseCase);
+                    
                     PhoneLog.d(TAG, "✨ [CameraX大功告成] CameraX 后置相机核心预览用例已成功绑定至当前前台服务上下文！");
+                    
+                    isCameraReady = true;
+                    
+                    sendCameraReady();
                 } catch (Exception e) {
                     PhoneLog.e(TAG, "🔴 [CameraX绑定失败] 异步绑定 CameraX 空间投影进程发生严重溃败: " + e.getMessage(), e);
                 }
@@ -291,7 +301,33 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
                             }
                         }).start();
     }
-
+    private void sendCameraReady() {
+            new Thread(() -> {
+                try {
+                    String nodeId = WearSyncState.getNodeId(this);
+        
+                    if (nodeId == null || nodeId.isEmpty()) {
+                        return;
+                    }
+        
+                    JSONObject json = new JSONObject();
+                    json.put("sender", "phone");
+                    json.put("type", "camera");
+                    json.put("action", "CAMERA_READY");
+        
+                    Wearable.getMessageClient(this).sendMessage(
+                            nodeId,
+                            UNIVERSAL_SYNC_PATH,
+                            json.toString().getBytes(StandardCharsets.UTF_8)
+                    );
+        
+                    PhoneLog.d(TAG, "W-001 CAMERA_READY 已发送");
+        
+                } catch (Exception e) {
+                    PhoneLog.e(TAG, "发送 CAMERA_READY 失败", e);
+                }
+            }).start();
+        }
     private void setupOrientationListener() {
         PhoneLog.d(TAG, "📐 [陀螺仪配置] 正在例行初始化重力倾角 OrientationEventListener...");
         mOrientationListener = new OrientationEventListener(this) {
@@ -392,6 +428,7 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
 
     @Override
     public void onDestroy() {
+        instance = null;
         PhoneLog.w(TAG, "🏳️ [生命周期] onDestroy ─── 服务彻底毁灭前夕，全盘清空资源...");
         releaseCameraAndPipeline();
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY);
