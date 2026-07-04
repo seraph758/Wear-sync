@@ -156,8 +156,13 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
 
     @Deprecated
     private boolean isAlarmCurrentlyRinging = false;
-
-    
+    private boolean alarmReady = false;
+    private final Handler readyHandler = new Handler(Looper.getMainLooper());
+    private Runnable pendingAlarmRunnable;
+    private static final int READY_CHECK_INTERVAL = 150;
+    private static final int READY_TIMEOUT = 5000;
+    private int readyCheckElapsed = 0;
+        
 
     public static PhoneSyncNotificationService getInstance() {
         return instance;
@@ -377,17 +382,66 @@ if (snoozeKey.trim().isEmpty()) {
 
 
        
-       PhoneAlarmManager.notifyWatchAlarmRinging(
-        this,
-        new SimpleDateFormat(
-                "HH:mm",
-                Locale.getDefault()).format(new Date()));
+       alarmReady = false;
+readyCheckElapsed = 0;
 
-        PhoneSyncAlarmState.enterRinging();
+if (pendingAlarmRunnable != null) {
+    readyHandler.removeCallbacks(pendingAlarmRunnable);
+}
+
+pendingAlarmRunnable = new Runnable() {
+    @Override
+    public void run() {
+
+        if (isAlarmSystemReady()) {
+
+            alarmReady = true;
+
+            PhoneLog.d(TAG, "✅ [DYNAMIC READY] 闹钟系统已就绪，开始下发手表");
+
+            PhoneAlarmManager.notifyWatchAlarmRinging(
+                    PhoneSyncNotificationService.this,
+                    new SimpleDateFormat(
+                            "HH:mm",
+                            Locale.getDefault()).format(new Date()));
+
+            PhoneSyncAlarmState.enterRinging();
+
+            isAlarmCurrentlyRinging = true;
+
+            startAlarmWatchdog();
+
+            return;
+        }
+
+                readyCheckElapsed += READY_CHECK_INTERVAL;
         
-        isAlarmCurrentlyRinging = true;
+                if (readyCheckElapsed >= READY_TIMEOUT) {
         
-        startAlarmWatchdog();
+                    PhoneLog.w(TAG, "⚠️ [READY TIMEOUT] 强制进入执行");
+        
+                    alarmReady = true;
+        
+                    PhoneAlarmManager.notifyWatchAlarmRinging(
+                            PhoneSyncNotificationService.this,
+                            new SimpleDateFormat(
+                                    "HH:mm",
+                                    Locale.getDefault()).format(new Date()));
+        
+                    PhoneSyncAlarmState.enterRinging();
+        
+                    isAlarmCurrentlyRinging = true;
+        
+                    startAlarmWatchdog();
+        
+                    return;
+                }
+        
+                readyHandler.postDelayed(this, READY_CHECK_INTERVAL);
+            }
+        };
+        
+        readyHandler.post(pendingAlarmRunnable);
 
 
     }
@@ -433,7 +487,7 @@ if (snoozeKey.trim().isEmpty()) {
 
         }
 
-
+        alarmReady = false;
 
         stopAlarmWatchdog();
 
@@ -452,7 +506,7 @@ if (snoozeKey.trim().isEmpty()) {
 
 
         super.onInterruptionFilterChanged(interruptionFilter);
-
+        
 
 
         if(PhoneSyncListenerService.isInternalUpdate){
@@ -553,5 +607,48 @@ if (snoozeKey.trim().isEmpty()) {
         }
 
     }
+
+    private boolean isAlarmSystemReady() {
+
+            try {
+        
+                NotificationManager nm =
+                        (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        
+                if (nm == null) return false;
+        
+                int filter = nm.getCurrentInterruptionFilter();
+        
+                if (filter == NotificationManager.INTERRUPTION_FILTER_UNKNOWN) {
+                    return false;
+                }
+        
+                StatusBarNotification[] active = getActiveNotifications();
+        
+                if (active == null || active.length == 0) {
+                    return false;
+                }
+        
+                for (StatusBarNotification sbn : active) {
+        
+                    if (sbn == null) continue;
+        
+                    Notification n = sbn.getNotification();
+                    if (n == null) continue;
+        
+                    if (Notification.CATEGORY_ALARM.equals(n.category)) {
+        
+                        if (n.actions != null && n.actions.length > 0) {
+                            return true;
+                        }
+                    }
+                }
+        
+            } catch (Exception e) {
+                PhoneLog.e(TAG, "READY CHECK ERROR: " + e.getMessage());
+            }
+        
+            return false;
+        }
 
 }
