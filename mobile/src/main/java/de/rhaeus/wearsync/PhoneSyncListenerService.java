@@ -93,6 +93,17 @@ public class PhoneSyncListenerService extends WearableListenerService {
             // 📸 模組三：遠端相機協定控制（全步進日誌極致除錯版）
             // =================================================================
             if ("camera".equalsIgnoreCase(type) || "camera_control".equalsIgnoreCase(type)) {
+
+                if ("CAMERA_READY".equalsIgnoreCase(action)) {
+
+                    PhoneLog.d(TAG, "CAM-P002 收到 CAMERA_READY");
+                
+                    Intent serviceIntent = new Intent(this, PhoneSyncCameraService.class);
+                    serviceIntent.setAction(PhoneSyncCameraService.ACTION_START_CAMERA);
+                    startService(serviceIntent);
+                
+                    return;
+                }
                 PhoneLog.d(TAG, "📸 [相機控制流] ━━━ 接收到相機模組信令 ━━━ 動作類型: [" + action + "]");
                 
                 // 子動作 A：啟動手機相機服務
@@ -134,6 +145,18 @@ public class PhoneSyncListenerService extends WearableListenerService {
                         }).start();
                     } else {
                         PhoneLog.d(TAG, "⚡ [相機尋址命中] 成功命中活躍手錶快存 ID: [" + nodeId + "]，直接跳過掃描啟動穿透...");
+                        JSONObject json = new JSONObject();
+                        json.put("sender","phone");
+                        json.put("type","camera_control");
+                        json.put("action","CAMERA_HANDSHAKE");
+                        
+                        Wearable.getMessageClient(this).sendMessage(
+                                nodeId,
+                                UNIVERSAL_SYNC_PATH,
+                                json.toString().getBytes(StandardCharsets.UTF_8)
+                        );
+                        
+                        PhoneLog.d(TAG,"CAM-P001 CAMERA_HANDSHAKE 已发送");
                         executeRemoteActivityLaunch(nodeId);
                     }
                 } 
