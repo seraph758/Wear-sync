@@ -186,6 +186,7 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
      * 🚀 接收来自高速公路网关通道传输过来的 H.264 原生帧，注入解码器
      */
     public void feedH264Data(byte[] data, int length) {
+        WearLog.d(TAG, "CAM-W010 feed " + length);
         if (!isDecoderRunning || mDecoder == null || !isChannelReady) {
                 WearLog.w(TAG,
             "收到视频帧，但解码器尚未准备完成");
