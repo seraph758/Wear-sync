@@ -44,7 +44,7 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
     public static final String ACTION_START_CAMERA = "de.rhaeus.wearsync.ACTION_START_CAMERA";
     public static final String ACTION_STOP_CAMERA = "de.rhaeus.wearsync.ACTION_STOP_CAMERA";
     private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
-    private volatile boolean isInitialized = false;
+    private final AtomicBoolean serviceStarted = new AtomicBoolean(false);    
     private final LifecycleRegistry lifecycleRegistry = new LifecycleRegistry(this);
     public static PhoneSyncCameraService instance;
     private MediaCodec mEncoder;
@@ -59,8 +59,7 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
     private long lastLogTime = 0;
     private boolean isFirstFrameInjected = false;
     private volatile boolean isCameraReady = false;
-    private volatile boolean isHandshakeCompleted = false;
-
+    private final AtomicBoolean channelOpening = new AtomicBoolean(false);
     @NonNull
     @Override
     public Lifecycle getLifecycle() {
@@ -82,7 +81,6 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
             return START_STICKY;
         }
         
-        isInitialized = true;
         if (intent == null) {
             PhoneLog.w(TAG, "② [生命周期] onStartCommand 收到空 Intent，忽略动作。");
             return START_NOT_STICKY;
@@ -132,11 +130,19 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
         }
         return START_NOT_STICKY;
     }
-    public void startStreaming(String nodeId) {
-
-                PhoneLog.d(TAG,"CAM-P010 开始建立 Channel");
-                openChannelAndStream(nodeId);
-     }
+    public void startStreaming(String nodeId){
+    
+        if(!isCameraReady){
+    
+            PhoneLog.w(TAG,"Camera 尚未准备");
+    
+            return;
+    
+        }
+    
+        openChannelAndStream(nodeId);
+    
+    }
     private void setupCameraAndPipeline() {
         try {
             PhoneLog.d(TAG, "⚙️ [编码器配置] 开始配置 H.264 底层硬核编码参数 (画幅: 640x480, 帧率: 15fps)...");
@@ -165,6 +171,13 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
                     if (!isPipelineReady || mOutputStream == null) {
                         try { codec.releaseOutputBuffer(index, false); } catch (Exception ignored) {}
                         return;
+                    }
+                    if(info.size<=0){
+
+                        codec.releaseOutputBuffer(index,false);
+                    
+                        return;
+                    
                     }
                     try {
                         ByteBuffer outputBuffer = codec.getOutputBuffer(index);
