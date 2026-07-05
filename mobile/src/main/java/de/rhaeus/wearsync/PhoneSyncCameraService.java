@@ -76,7 +76,7 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        if (isInitialized) {
+        if (!serviceStarted.compareAndSet(false, true)) {
             PhoneLog.d(TAG, "CameraService 已初始化，忽略重复 START");
             return START_STICKY;
         }
@@ -131,18 +131,20 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
         return START_NOT_STICKY;
     }
     public void startStreaming(String nodeId){
-    
-        if(!isCameraReady){
-    
-            PhoneLog.w(TAG,"Camera 尚未准备");
-    
-            return;
-    
-        }
-    
-        openChannelAndStream(nodeId);
-    
-    }
+            
+                if(!isCameraReady){
+                    PhoneLog.w(TAG,"Camera 尚未准备");
+                    return;
+                }
+            
+                if(nodeId==null){
+                    PhoneLog.w(TAG,"nodeId 为空");
+                    return;
+                }
+            
+                openChannelAndStream(nodeId);
+            
+            }
     private void setupCameraAndPipeline() {
         try {
             PhoneLog.d(TAG, "⚙️ [编码器配置] 开始配置 H.264 底层硬核编码参数 (画幅: 640x480, 帧率: 15fps)...");
@@ -270,6 +272,8 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
                     PhoneLog.d(TAG, "✨ [CameraX大功告成] CameraX 后置相机核心预览用例已成功绑定至当前前台服务上下文！");
                     
                     isCameraReady = true;
+                    serviceStarted.set(false);
+                    channelOpening.set(false);
                     
                     sendCameraReady();
                 } catch (Exception e) {
@@ -283,13 +287,11 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
     }
 
     public void openChannelAndStream(String nodeId){
-        if (isHandshakeCompleted) {
-                PhoneLog.d(TAG, "Channel 已建立，忽略重复 STREAM_START");
+            if (!channelOpening.compareAndSet(false, true)) {
+                PhoneLog.d(TAG, "Channel 正在建立，忽略重复请求");
                 return;
             }
-            
-            isHandshakeCompleted = true;
-            
+                    
             new Thread(() -> {
             PhoneLog.d(TAG, "🧵 [背景流线程] 网关线程已点火。正在向目标手錶节点 [" + nodeId + "] 申请打通高性能双轨流媒体物理通道...");
             try {
@@ -322,7 +324,7 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
                         PhoneLog.d(TAG,"CAM-P020 STREAM_START 已发送");
                 
                     } catch (Exception e) {
-                
+                        channelOpening.set(false);
                         PhoneLog.e(TAG,"STREAM_START 发送失败",e);
                 
                     }
@@ -402,7 +404,6 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
         PhoneLog.w(TAG, "🧹 [安全熔断] ━━━━━━━━ 触发底层系统资源大清洗 ━━━━━━━━");
         PhoneLog.w(TAG, "🧹 [安全熔断] 正在将全数据链旗帜降下 isPipelineReady = false");
         isPipelineReady = false;
-        isHandshakeCompleted = false;
         isCameraReady = false;
         if (mOrientationListener != null) {
             PhoneLog.d(TAG, "🧹 [安全熔断] 正在摘除并关闭重力方向传感器监听器...");
