@@ -17,6 +17,7 @@ import com.google.android.gms.wearable.WearableListenerService;
 import org.json.JSONObject;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import com.google.android.gms.wearable.Node;
 
 public class WearSyncListenerService extends WearableListenerService {
     private static final String TAG = "WearSync_WearListener";
