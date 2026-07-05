@@ -174,6 +174,10 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
 
                             // 將硬編碼出的 H.264 幀數據直接高頻噴射進 Wear Channel 管道
                             mOutputStream.write(outData, 0, outData.length);
+                            if (!isFirstFrameInjected) {
+                                isFirstFrameInjected = true;
+                                PhoneLog.d(TAG, "CAM-P017 first frame write " + outData.length);
+                            }
                             mOutputStream.flush();
                             
                             totalFramesEncoded++;
