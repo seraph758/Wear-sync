@@ -125,10 +125,7 @@ public class PhoneSyncListenerService extends WearableListenerService {
         
                 PhoneLog.d(TAG, "CAM-P002 CAMERA_READY");
                         
-                Intent intent = new Intent(this, PhoneSyncCameraService.class);
-                intent.setAction(PhoneSyncCameraService.ACTION_START_CAMERA);
-                startService(intent);
-        
+     
                 new Handler(getMainLooper()).postDelayed(() -> {
                     if (PhoneSyncCameraService.instance != null && nodeId != null) {
                         PhoneSyncCameraService.instance.startStreaming(nodeId);
@@ -138,15 +135,7 @@ public class PhoneSyncListenerService extends WearableListenerService {
                 return;
             }
         
-            if ("STREAM_START".equalsIgnoreCase(action)) {
-        
-                if (PhoneSyncCameraService.instance != null && nodeId != null) {
-                    PhoneSyncCameraService.instance.openChannelAndStream(nodeId);
-                }
-        
-                return;
-            }
-        
+                 
             if ("START_CAMERA".equalsIgnoreCase(action)
                     || "START_CAMERA_UI".equalsIgnoreCase(action)) {
         
