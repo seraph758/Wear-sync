@@ -44,7 +44,7 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
     public static final String ACTION_START_CAMERA = "de.rhaeus.wearsync.ACTION_START_CAMERA";
     public static final String ACTION_STOP_CAMERA = "de.rhaeus.wearsync.ACTION_STOP_CAMERA";
     private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
-
+    private volatile boolean isInitialized = false;
     private final LifecycleRegistry lifecycleRegistry = new LifecycleRegistry(this);
     public static PhoneSyncCameraService instance;
     private MediaCodec mEncoder;
@@ -77,6 +77,12 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        if (isInitialized) {
+            PhoneLog.d(TAG, "CameraService 已初始化，忽略重复 START");
+            return START_STICKY;
+        }
+        
+        isInitialized = true;
         if (intent == null) {
             PhoneLog.w(TAG, "② [生命周期] onStartCommand 收到空 Intent，忽略动作。");
             return START_NOT_STICKY;
