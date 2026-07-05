@@ -132,11 +132,11 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
         }
         return START_NOT_STICKY;
     }
-          public void startStreaming(String nodeId) {
+    public void startStreaming(String nodeId) {
 
                 PhoneLog.d(TAG,"CAM-P010 开始建立 Channel");
                 openChannelAndStream(nodeId);
-            }
+     }
     private void setupCameraAndPipeline() {
         try {
             PhoneLog.d(TAG, "⚙️ [编码器配置] 开始配置 H.264 底层硬核编码参数 (画幅: 640x480, 帧率: 15fps)...");
