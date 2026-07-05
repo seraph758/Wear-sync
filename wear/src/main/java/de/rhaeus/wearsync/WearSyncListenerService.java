@@ -166,8 +166,11 @@ public void onMessageReceived(@NonNull MessageEvent messageEvent) {
 
     @Override
     public void onChannelOpened(@NonNull ChannelClient.Channel channel) {
+        WearLog.d(TAG, "CAM-W004 onChannelOpened");
+
         if (channel != null && CAMERA_PREVIEW_STREAM_PATH.equals(channel.getPath())) {
             WearLog.d(TAG, "🌊 发现专属流媒体图传高速公路 [Channel Opened]！开始抽取高频帧字节流...");
+            WearLog.d(TAG, "CAM-W005 path=" + channel.getPath());
             readH264ChannelStream(channel);
         }
     }
@@ -199,6 +202,7 @@ public void onMessageReceived(@NonNull MessageEvent messageEvent) {
     private void readH264ChannelStream(ChannelClient.Channel channel) {
         new Thread(() -> {
             try (InputStream is = Tasks.await(Wearable.getChannelClient(this).getInputStream(channel))) {
+                WearLog.d(TAG, "CAM-W006 InputStream ready");
                 byte[] buffer = new byte[40960];
                 int length;
                 while ((length = is.read(buffer)) != -1) {
