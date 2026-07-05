@@ -124,12 +124,7 @@ public class PhoneSyncListenerService extends WearableListenerService {
             if ("CAMERA_READY".equalsIgnoreCase(action)) {
         
                 PhoneLog.d(TAG, "CAM-P002 CAMERA_READY");
-                String nodeId = PhoneSyncAlarmState.getConnectedNodeId(this);
-
-                if (nodeId != null) {
-                    openChannelAndStream(nodeId);
-                }
-        
+                        
                 Intent intent = new Intent(this, PhoneSyncCameraService.class);
                 intent.setAction(PhoneSyncCameraService.ACTION_START_CAMERA);
                 startService(intent);
