@@ -200,30 +200,42 @@ public void onMessageReceived(@NonNull MessageEvent messageEvent) {
         }).start();
     }
     private void readH264ChannelStream(ChannelClient.Channel channel) {
+    
         new Thread(() -> {
+    
             WearLog.d(TAG, "CAM-W007 start read thread");
-            try (InputStream is = Tasks.await(Wearable.getChannelClient(this).getInputStream(channel))) {
+    
+            try (InputStream is = Tasks.await(
+                    Wearable.getChannelClient(this).getInputStream(channel))) {
+    
                 WearLog.d(TAG, "CAM-W006 InputStream ready");
                 WearLog.d(TAG, "CAM-W008 reading...");
+    
                 byte[] buffer = new byte[40960];
                 int length;
+    
                 boolean firstFrame = true;
-
+    
                 while ((length = is.read(buffer)) != -1) {
+    
                     if (firstFrame) {
-                            firstFrame = false;
-                            WearLog.d(TAG, "CAM-W009 len=" + length);
-                        }                    
+                        firstFrame = false;
+                        WearLog.d(TAG, "CAM-W009 len=" + length);
+                    }
+    
                     WearCameraActivity activity = WearCameraActivity.sActivityRef.get();
+    
                     if (activity != null) {
                         byte[] frame = new byte[length];
                         System.arraycopy(buffer, 0, frame, 0, length);
                         activity.feedH264Data(frame, length);
                     }
                 }
+    
             } catch (Exception e) {
-                WearLog.e(TAG, "⚠️ 视频流高频泵送遭遇通道闭合熔断: " + e.getMessage());
+                WearLog.e(TAG, "⚠️ 视频流高频泵送遭遇通道闭合熔断: " + e.getMessage(), e);
             }
+    
         }).start();
     }
 }
