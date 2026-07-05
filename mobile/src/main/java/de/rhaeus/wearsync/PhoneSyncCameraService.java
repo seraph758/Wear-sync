@@ -274,10 +274,10 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
                 PhoneLog.d(TAG, "📡 [網關建立中] 正在呼叫 ChannelClient.openChannel ➔ 路径定位: [/camera-preview-stream]...");
                 ChannelClient.Channel channel = Tasks.await(Wearable.getChannelClient(this)
                         .openChannel(nodeId, "/camera-preview-stream"));
-
+                PhoneLog.d(TAG, "CAM-P015 Channel opened");
                 PhoneLog.d(TAG, "✨ [網關建立成功] 成功闭合物理网关！正在拧开高速流媒体字节输出流阀门 (getOutputStream)...");
                 mOutputStream = Tasks.await(Wearable.getChannelClient(this).getOutputStream(channel));
-                
+                PhoneLog.d(TAG, "CAM-P016 OutputStream ready");
                 PhoneLog.d(TAG, "💾 [網關閉合完成] 正在拉起全数据链就绪旗帜 isPipelineReady = true");
                 isPipelineReady = true;
                 new Thread(() -> {
