@@ -144,7 +144,7 @@ public class WearSyncRemoteCameraHandler {
 
                     WearLog.w(TAG,
                             "✨ [成功] 手机端远程 Activity 唤醒请求已被 Google 通道确认");
-                    Intent intent = new Intent(context, WearCameraActivity.class);
+                    Intent cameraIntent = new Intent(context, WearCameraActivity.class);
                     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                     context.startActivity(intent);
                     
