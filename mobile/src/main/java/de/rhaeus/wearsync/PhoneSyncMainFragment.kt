@@ -263,6 +263,8 @@ class PhoneSyncMainFragment : Fragment() {
                                 }
                             }
 
+
+
                               // 🎯 4. 闹钟全域代点中心（终极完整版：自定义关键字 + 模拟手表真实消息流）
                             
                             var selectedAlarmName by remember {
@@ -732,107 +734,135 @@ class PhoneSyncMainFragment : Fragment() {
                                 }
                             
                             }
+// 5. 远程相机控场中心
+Card(
+    modifier = Modifier.fillMaxWidth(),
+    shape = RoundedCornerShape(16.dp),
+    colors = CardDefaults.cardColors(containerColor = cardBgColor)
+) {
+    Column(
+        modifier = Modifier.padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
 
-                            // 5. 远程相机控场中心
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(16.dp),
-                                colors = CardDefaults.cardColors(containerColor = cardBgColor)
-                            ) {
-                                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    Text("远程相机控场中心", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = textColor)
+        Text(
+            "远程相机控场中心",
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+            color = textColor
+        )
 
-                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            // 🟢 按纽 1：呼叫手表相机（补齐了穿透发信，让手表主动拉起 WearCameraActivity）
-                                            Button(
-                                                modifier = Modifier.weight(1f),
-                                                colors = ButtonDefaults.buttonColors(
-                                                    containerColor = if (isCameraAllowedState.value) Color(0xFF2E7D32) else Color(0xFF333333)
-                                                ),
-                                                onClick = {
-                                                    if (!isCameraAllowedState.value) {
-                                                        requestCameraPermissionLauncher.launch(android.Manifest.permission.CAMERA)
-                                                    } else {
-                                                        PhoneLog.d("WearSync_Main", "🚀 [手动控场] 用户点击【呼叫手表相机】➔ 启动本地采集并向手表射流点火")
-                                                        
-                                                        // 1. 启动手机本地的相机画面采集前台服务
-                                                        requireContext().startService(
-                                                            Intent(requireContext(), PhoneSyncCameraService::class.java).setAction(PhoneSyncCameraService.ACTION_START_CAMERA)
-                                                        )
-                                        
-                                                        // 2. ⚡ 核心补齐：开辟异步线程，跨蓝牙总线命令手表拉起观景窗 Activity
-                                                        Thread {
-                                                            try {
-                                                                val json = JSONObject()
-                                                                json.put("sender", "phone")
-                                                                json.put("type", "camera_control") 
-                                                                json.put("action", "START_CAMERA") // 👈 完美对准手表的 "START_CAMERA" 拦截分支
-                                                                json.put("timestamp", System.currentTimeMillis())
-                                        
-                                                                val data = json.toString().toByteArray(StandardCharsets.UTF_8)
-                                                                val nodeId = WearSyncState.getNodeId(requireContext())
-                                                                
-                                                                if (!nodeId.isNullOrEmpty()) {
-                                                                    PhoneLog.w("WearSync_Main", "📡 [手动控场正向发信] 正在向手表节点 [$nodeId] 投递 [START_CAMERA] 指令包...")
-                                                                    Wearable.getMessageClient(requireContext())
-                                                                        .sendMessage(nodeId, "/wear-universal-sync", data)
-                                                                    PhoneLog.w("WearSync_Main", "✨ [手动控场正向发信成功] 手表观景窗拉起指令已强行注入系统管道。")
-                                                                } else {
-                                                                    PhoneLog.e("WearSync_Main", "❌ [手动控场正向发信失败] 缓存中未探测到处于连线状态的手表 NodeID！")
-                                                                }
-                                                            } catch (e: Exception) {
-                                                                PhoneLog.e("WearSync_Main", "🔴 [手动控场正向发信崩溃] 封包或发射过程遭遇硬拦截: ${e.message}")
-                                                            }
-                                                        }.start()
-                                                    }
-                                                }
-                                            ) {
-                                                Text("呼叫手表相机", color = Color.White, fontSize = 12.sp)
-                                            }
-                                        
-                                            // 🔴 按纽 2：强制关闭相机（完美对齐手表的关闭和广播熔断机制）
-                                            Button(
-                                                modifier = Modifier.weight(1f),
-                                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7F1D1D)),
-                                                onClick = {
-                                                    PhoneLog.w("WearSync_Main", "🧹 [手动控场] 用户点击【强制关闭相机】➔ 本地全面熔断并通知手表下线")
-                                                    
-                                                    // 1. 强行击杀手机本地的 Service
-                                                    val stopIntent = Intent(requireContext(), PhoneSyncCameraService::class.java).apply {
-                                                            action = PhoneSyncCameraService.ACTION_STOP_CAMERA
-                                                        }
-                                                        requireContext().startService(stopIntent)                                  
-                                                    // 2. ⚡ 异步透传：跨蓝牙总线命令手表立刻销毁 WearCameraActivity
-                                                    Thread {
-                                                        try {
-                                                            val json = JSONObject()
-                                                            json.put("sender", "phone")
-                                                            json.put("type", "camera_control") 
-                                                            json.put("action", "FORCE_QUIT_CAMERA") // 👈 完美对准手表的 "FORCE_QUIT_CAMERA" 分支
-                                                            json.put("timestamp", System.currentTimeMillis())
-                                        
-                                                            val data = json.toString().toByteArray(StandardCharsets.UTF_8)
-                                                            val nodeId = WearSyncState.getNodeId(requireContext())
-                                                            
-                                                            if (!nodeId.isNullOrEmpty()) {
-                                                                PhoneLog.w("WearSync_Main", "📡 [手动控场逆向熔断] 正在向手表节点 [$nodeId] 投递 [FORCE_QUIT_CAMERA] 中断信号...")
-                                                                Wearable.getMessageClient(requireContext())
-                                                                    .sendMessage(nodeId, "/wear-universal-sync", data)
-                                                                PhoneLog.w("WearSync_Main", "✨ [手动控场逆向熔断成功] 手表被迫下线信令已成功离岸。")
-                                                            } else {
-                                                                PhoneLog.e("WearSync_Main", "❌ [手动控场逆向熔断失败] 找不到活跃的手表节点，手表可能已自行断联。")
-                                                            }
-                                                        } catch (e: Exception) {
-                                                            PhoneLog.e("WearSync_Main", "🔴 [手动控场逆向熔断崩溃] 错误: ${e.message}")
-                                                        }
-                                                    }.start()
-                                                }
-                                            ) {
-                                                Text("强制关闭相机", color = Color.White, fontSize = 12.sp)
-                                            }
-                                        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+
+            // 🟢 START CAMERA
+            Button(
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor =
+                        if (isCameraAllowedState.value) Color(0xFF2E7D32)
+                        else Color(0xFF333333)
+                ),
+                onClick = {
+
+                    if (!isCameraAllowedState.value) {
+                        requestCameraPermissionLauncher.launch(android.Manifest.permission.CAMERA)
+                        return@Button
+                    }
+
+                    PhoneLog.d("WearSync_Main", "🚀 START_CAMERA -> Service + Watch dual trigger")
+
+                    val nodeId = WearSyncState.getNodeId(requireContext())
+
+                    // 1. 本地启动 Service（只发意图，不假设状态）
+                    requireContext().startService(
+                        Intent(requireContext(), PhoneSyncCameraService::class.java)
+                            .setAction(PhoneSyncCameraService.ACTION_START_CAMERA)
+                    )
+
+                    // 2. 远端通知手表（仅控制信号）
+                    if (!nodeId.isNullOrEmpty()) {
+
+                        Thread {
+                            try {
+                                val json = JSONObject().apply {
+                                    put("sender", "phone")
+                                    put("type", "camera_control")
+                                    put("action", "START_CAMERA")
+                                    put("timestamp", System.currentTimeMillis())
                                 }
+
+                                Wearable.getMessageClient(requireContext())
+                                    .sendMessage(
+                                        nodeId,
+                                        "/wear-universal-sync",
+                                        json.toString().toByteArray(StandardCharsets.UTF_8)
+                                    )
+
+                                PhoneLog.w("WearSync_Main", "START_CAMERA sent -> $nodeId")
+
+                            } catch (e: Exception) {
+                                PhoneLog.e("WearSync_Main", "START_CAMERA failed: ${e.message}")
                             }
+                        }.start()
+                    }
+                }
+            ) {
+                Text("呼叫手表相机", color = Color.White, fontSize = 12.sp)
+            }
+
+            // 🔴 STOP CAMERA
+            Button(
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7F1D1D)),
+                onClick = {
+
+                    PhoneLog.w("WearSync_Main", "🛑 STOP_CAMERA -> full shutdown sync")
+
+                    val nodeId = WearSyncState.getNodeId(requireContext())
+
+                    // 1. 优先关闭本地 Service（唯一真实执行者）
+                    requireContext().startService(
+                        Intent(requireContext(), PhoneSyncCameraService::class.java)
+                            .setAction(PhoneSyncCameraService.ACTION_STOP_CAMERA)
+                    )
+
+                    // 2. 同步通知手表
+                    if (!nodeId.isNullOrEmpty()) {
+
+                        Thread {
+                            try {
+                                val json = JSONObject().apply {
+                                    put("sender", "phone")
+                                    put("type", "camera_control")
+                                    put("action", "FORCE_QUIT_CAMERA")
+                                    put("timestamp", System.currentTimeMillis())
+                                }
+
+                                Wearable.getMessageClient(requireContext())
+                                    .sendMessage(
+                                        nodeId,
+                                        "/wear-universal-sync",
+                                        json.toString().toByteArray(StandardCharsets.UTF_8)
+                                    )
+
+                                PhoneLog.w("WearSync_Main", "FORCE_QUIT_CAMERA sent -> $nodeId")
+
+                            } catch (e: Exception) {
+                                PhoneLog.e("WearSync_Main", "STOP_CAMERA failed: ${e.message}")
+                            }
+                        }.start()
+                    }
+                }
+            ) {
+                Text("强制关闭相机", color = Color.White, fontSize = 12.sp)
+            }
+        }
+    }
+}
+
 
                             // 6. 调试日志(手机)
                             Card(
