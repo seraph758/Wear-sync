@@ -117,112 +117,137 @@ public class PhoneSyncListenerService extends WearableListenerService {
            // =================================================================
             // 📸 模組三：遠端相機協定控制（全步進日誌極致除錯版）
             // =================================================================
-            private void handleCamera(JSONObject json, String action) {
+  // ============================================================
+// 📸 模組三：遠端相機協定控制（双向状态同步升级版）
+// ============================================================
 
-            String nodeId = WearSyncState.getNodeId(this); // ✅ 提前统一
-        
-            if ("CAMERA_READY".equalsIgnoreCase(action)) {
-                
-                    PhoneLog.d(TAG, "CAM-P002 CAMERA_READY");
-                
-                    return;
-                }
-                        
-                 
-            if ("START_CAMERA".equalsIgnoreCase(action)
-                    || "START_CAMERA_UI".equalsIgnoreCase(action)) {
-        
-                if (nodeId == null || nodeId.isEmpty()) {
-        
-                    new Thread(() -> {
-                        try {
-                            List<Node> nodes =
-                                    Tasks.await(Wearable.getNodeClient(this).getConnectedNodes());
-        
-                            if (nodes != null && !nodes.isEmpty()) {
-                                String id = nodes.get(0).getId();
-                                WearSyncState.setNodeId(this, id);
-                                executeRemoteActivityLaunch(id);
-                            }
-                        } catch (Exception e) {
-                            PhoneLog.e(TAG, "node scan failed", e);
-                        }
-                    }).start();
-        
-                } else {
-        
-                    try {
-                        JSONObject handshake = new JSONObject();
-                        handshake.put("sender", "phone");
-                        handshake.put("type", "camera_control");
-                        handshake.put("action", "CAMERA_HANDSHAKE");
-        
-                        Wearable.getMessageClient(this).sendMessage(
-                                nodeId,
-                                UNIVERSAL_SYNC_PATH,
-                                handshake.toString().getBytes(StandardCharsets.UTF_8)
-                        );
-        
-                    } catch (Exception e) {
-                        PhoneLog.e(TAG, "发送 CAMERA_HANDSHAKE 失败", e);
-                    }
-        
-                    executeRemoteActivityLaunch(nodeId);
-                }
-        
-                return;
-            }
-        
-            if ("STOP_CAMERA".equalsIgnoreCase(action)
-                    || "FORCE_QUIT_CAMERA".equalsIgnoreCase(action)) {
-        
-                Intent stop = new Intent(this, PhoneSyncCameraService.class);
-                stop.setAction(PhoneSyncCameraService.ACTION_STOP_CAMERA);
-                startService(stop);
-        
-                return;
-            }
-        
-            PhoneLog.w(TAG, "⚠️ [CAMERA] unknown action: " + action);
-        }
+private enum CameraState {
+    IDLE,
+    STARTING,
+    CAMERA_READY,
+    HANDSHAKING,
+    CHANNEL_OPENING,
+    STREAMING,
+    STOPPING
+}
 
-    /**
-     * 🛰️ 通過谷歌穿透引擎 (RemoteActivityHelper) 強制喚醒手表的配對拍照 Activity
-     */
-    private void executeRemoteActivityLaunch(String nodeId) {
-        PhoneLog.d(TAG, "🚀 [穿透發射中] ━━━ 進入穿透啟動核心流 ━━━ 準備擊穿手錶端 Activity ➔ 目標節點: [" + nodeId + "]");
-        try {
-            PhoneLog.d(TAG, "⚙️ [穿透發射中] 正在初始化 RemoteActivityHelper 並綁定執行緒池...");
-            androidx.wear.remote.interactions.RemoteActivityHelper helper =
-                    new androidx.wear.remote.interactions.RemoteActivityHelper(this, REMOTE_EXECUTOR);
+private volatile CameraState cameraState = CameraState.IDLE;
+private final Object stateLock = new Object();
 
-            PhoneLog.d(TAG, "⚙️ [穿透發射中] 正在建構遠端跳板協議 URI Schema: [wearsync://camera]");
-            Intent intent = new Intent(Intent.ACTION_VIEW);
-            intent.setData(android.net.Uri.parse("wearsync://camera"));
-            
-            PhoneLog.d(TAG, "⚙️ [穿透發射中] 正在注入多重 Activity 啟動 Flags (NEW_TASK | CLEAR_TOP | SINGLE_TOP)...");
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK 
-                    | Intent.FLAG_ACTIVITY_CLEAR_TOP 
-                    | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+// ======================= 状态工具 =======================
 
-            PhoneLog.d(TAG, "📡 [穿透發射中] 正在調用 startRemoteActivity() 跨裝置投遞穿透包...");
-            com.google.common.util.concurrent.ListenableFuture<Void> future = helper.startRemoteActivity(intent, nodeId);
-            
-            PhoneLog.d(TAG, "⏳ [穿透發射中] 穿透異步任務已掛起，正在註冊底層接線員偵聽器 (Callback Listener)...");
-            future.addListener(() -> {
-                try {
-                    // 調用 future.get() 可以確認任務是成功還是拋出異常
-                    future.get();
-                    PhoneLog.d(TAG, "✨ [穿透成功] ━━━ 遠端解鎖大捷 ━━━ 谷歌微端底層回報：手錶端的 wearsync://camera/ 跳板 Activity 已被強制拉起並聚焦！");
-                } catch (Exception e) {
-                    PhoneLog.e(TAG, "🔴 [穿透監聽報錯] 穿透任務送達後，手錶端拉起 Activity 失敗: " + e.getMessage(), e);
-                }
-            }, REMOTE_EXECUTOR);
-            
-            PhoneLog.d(TAG, "✅ [穿透發射中] 偵聽器掛載完畢，等待手錶端底層激勵回音。");
-
-        } catch (Exception e) {
-            PhoneLog.e(TAG, "🔴 [穿透失敗] 調用 RemoteActivityHelper 投遞階段發生致命阻斷: " + e.getMessage(), e);
-        }
+private CameraState getState() {
+    synchronized (stateLock) {
+        return cameraState;
     }
+}
+
+private void setState(CameraState state) {
+    synchronized (stateLock) {
+        cameraState = state;
+        PhoneLog.d(TAG, "📡 [STATE] -> " + state);
+    }
+}
+
+private boolean isState(CameraState s) {
+    return getState() == s;
+}
+
+// ============================================================
+// 📥 主入口：Camera 协议处理
+// ============================================================
+
+private void handleCamera(JSONObject json, String action) {
+
+    String nodeId = WearSyncState.getNodeId(this);
+
+    if ("CAMERA_READY".equalsIgnoreCase(action)) {
+
+        setState(CameraState.CAMERA_READY);
+
+        PhoneLog.d(TAG, "CAM-P002 CAMERA_READY confirmed");
+
+        return;
+    }
+
+    // ========================================================
+    // 🚀 START CAMERA（双向握手 + 状态驱动）
+    // ========================================================
+    if ("START_CAMERA".equalsIgnoreCase(action)
+            || "START_CAMERA_UI".equalsIgnoreCase(action)) {
+
+        if (nodeId == null || nodeId.isEmpty()) {
+
+            setState(CameraState.HANDSHAKING);
+
+            new Thread(() -> {
+                try {
+                    List<Node> nodes =
+                            Tasks.await(Wearable.getNodeClient(this).getConnectedNodes());
+
+                    if (nodes != null && !nodes.isEmpty()) {
+
+                        String id = nodes.get(0).getId();
+                        WearSyncState.setNodeId(this, id);
+
+                        PhoneLog.d(TAG, "📡 [HANDSHAKE] auto bind node -> " + id);
+
+                        executeRemoteActivityLaunch(id);
+
+                        setState(CameraState.STARTING);
+                    }
+
+                } catch (Exception e) {
+                    setState(CameraState.IDLE);
+                    PhoneLog.e(TAG, "node scan failed", e);
+                }
+            }).start();
+
+        } else {
+
+            setState(CameraState.HANDSHAKING);
+
+            try {
+                JSONObject handshake = new JSONObject();
+                handshake.put("sender", "phone");
+                handshake.put("type", "camera_control");
+                handshake.put("action", "CAMERA_HANDSHAKE");
+
+                Wearable.getMessageClient(this).sendMessage(
+                        nodeId,
+                        UNIVERSAL_SYNC_PATH,
+                        handshake.toString().getBytes(StandardCharsets.UTF_8)
+                );
+
+                PhoneLog.d(TAG, "🤝 CAMERA_HANDSHAKE sent");
+
+            } catch (Exception e) {
+                PhoneLog.e(TAG, "发送 CAMERA_HANDSHAKE 失败", e);
+            }
+
+            executeRemoteActivityLaunch(nodeId);
+
+            setState(CameraState.STARTING);
+        }
+
+        return;
+    }
+
+    // ========================================================
+    // 🛑 STOP CAMERA（统一熔断入口）
+    // ========================================================
+    if ("STOP_CAMERA".equalsIgnoreCase(action)
+            || "FORCE_QUIT_CAMERA".equalsIgnoreCase(action)) {
+
+        setState(CameraState.STOPPING);
+
+        Intent stop = new Intent(this, PhoneSyncCameraService.class);
+        stop.setAction(PhoneSyncCameraService.ACTION_STOP_CAMERA);
+        startService(stop);
+
+        return;
+    }
+
+    PhoneLog.w(TAG, "⚠️ [CAMERA] unknown action: " + action);
+}
 }
