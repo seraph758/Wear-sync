@@ -303,36 +303,57 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
 
     private void openChannel(String nodeId) {
 
+        if (channelOpening.getAndSet(true)) {
+            return;
+        }
+    
         new Thread(() -> {
-
+    
             try {
-
+    
+                PhoneLog.d(TAG, "CAM-P001 open channel");
+    
                 ChannelClient.Channel channel =
-                        Tasks.await(Wearable.getChannelClient(this)
-                                .openChannel(nodeId, "/camera-preview-stream"));
-
+                        Tasks.await(
+                                Wearable.getChannelClient(this)
+                                        .openChannel(
+                                                nodeId,
+                                                "/camera-preview-stream"));
+    
+                PhoneLog.d(TAG, "CAM-P002 channel opened");
+    
                 mOutputStream =
-                        Tasks.await(Wearable.getChannelClient(this)
-                                .getOutputStream(channel));
-
+                        Tasks.await(
+                                Wearable.getChannelClient(this)
+                                        .getOutputStream(channel));
+    
+                PhoneLog.d(TAG, "CAM-P003 output stream ready");
+    
                 JSONObject json = new JSONObject();
                 json.put("sender", "phone");
-                json.put("type", "camera");
+                json.put("type", "camera_control");
                 json.put("action", "STREAM_START");
-
+    
                 Wearable.getMessageClient(this).sendMessage(
                         nodeId,
                         UNIVERSAL_SYNC_PATH,
-                        json.toString().getBytes(StandardCharsets.UTF_8)
-                );
-
+                        json.toString().getBytes(StandardCharsets.UTF_8));
+    
                 setState(CameraState.STREAMING);
-
+    
+                PhoneLog.d(TAG, "CAM-P004 streaming");
+    
             } catch (Exception e) {
-                PhoneLog.e(TAG, "CHANNEL ERROR", e);
+    
+                channelOpening.set(false);
+    
+                PhoneLog.e(TAG,
+                        "CHANNEL ERROR",
+                        e);
+    
                 setState(CameraState.CAMERA_READY);
             }
-
+    
         }).start();
     }
 
@@ -393,7 +414,7 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
                     ProcessCameraProvider.getInstance(this).get();
             provider.unbindAll();
         } catch (Exception ignored) {}
-
+        channelOpening.set(false);
         setState(CameraState.IDLE);
     }
 
