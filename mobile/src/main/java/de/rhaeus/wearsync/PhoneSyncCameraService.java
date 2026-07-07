@@ -8,7 +8,6 @@ import android.media.MediaFormat;
 import android.os.IBinder;
 import android.view.OrientationEventListener;
 import android.view.Surface;
-import android.view.WindowManager;
 
 import androidx.annotation.NonNull;
 import androidx.camera.core.CameraSelector;
@@ -58,7 +57,6 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
     private long totalFrames = 0;
     private volatile boolean firstFrame = false;
 
-    private final AtomicBoolean serviceStarted = new AtomicBoolean(false);
     private final AtomicBoolean channelOpening  = new AtomicBoolean(false);
 
     private enum CameraState {
@@ -104,7 +102,6 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-
         if (intent == null) return START_NOT_STICKY;
 
         String action = intent.getAction();
@@ -123,7 +120,6 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
        ========================= */
 
     private void startFlow() {
-
         if (!transition(CameraState.IDLE, CameraState.STARTING)) return;
 
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START);
@@ -136,7 +132,6 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
     }
 
     public void startStreaming(String nodeId) {
-
         if (nodeId == null || nodeId.isEmpty()) return;
         if (getState() != CameraState.CAMERA_READY) return;
 
@@ -146,11 +141,8 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
     }
 
     private void stopFlow() {
-
         setState(CameraState.STOPPING);
-
         releaseAll();
-
         stopForeground(true);
         stopSelf();
     }
@@ -160,15 +152,9 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
        ========================= */
 
     private void setupEncoderAndCamera() {
-
         try {
-
-            MediaFormat format = MediaFormat.createVideoFormat(
-                    MediaFormat.MIMETYPE_VIDEO_AVC, 640, 480);
-
-            format.setInteger(MediaFormat.KEY_COLOR_FORMAT,
-                    MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
-
+            MediaFormat format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, 640, 480);
+            format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
             format.setInteger(MediaFormat.KEY_BIT_RATE, 500000);
             format.setInteger(MediaFormat.KEY_FRAME_RATE, 15);
             format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
@@ -178,11 +164,8 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
             mInputSurface = mEncoder.createInputSurface();
 
             mEncoder.setCallback(new MediaCodec.Callback() {
-
                 @Override
-                public void onOutputBufferAvailable(@NonNull MediaCodec codec, int index,
-                                                    @NonNull MediaCodec.BufferInfo info) {
-
+                public void onOutputBufferAvailable(@NonNull MediaCodec codec, int index, @NonNull MediaCodec.BufferInfo info) {
                     if (getState() != CameraState.STREAMING || mOutputStream == null) {
                         codec.releaseOutputBuffer(index, false);
                         return;
@@ -194,7 +177,6 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
                     }
 
                     try {
-
                         ByteBuffer buffer = codec.getOutputBuffer(index);
                         if (buffer == null) return;
 
@@ -210,7 +192,6 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
                             firstFrame = true;
                             PhoneLog.d(TAG, "FIRST FRAME SENT");
                         }
-
                     } catch (Exception e) {
                         PhoneLog.e(TAG, "ENCODE STREAM ERROR", e);
                     } finally {
@@ -225,15 +206,10 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
 
             mEncoder.start();
 
-            ListenableFuture<ProcessCameraProvider> future =
-                    ProcessCameraProvider.getInstance(this);
-
+            ListenableFuture<ProcessCameraProvider> future = ProcessCameraProvider.getInstance(this);
             future.addListener(() -> {
-
                 try {
-
                     ProcessCameraProvider provider = future.get();
-
                     mPreviewUseCase = new Preview.Builder().build();
 
                     mPreviewUseCase.setSurfaceProvider(
@@ -251,50 +227,47 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
                             CameraSelector.DEFAULT_BACK_CAMERA,
                             mPreviewUseCase
                     );
-            private void sendCameraReady() {
-            
-                new Thread(() -> {
-            
-                    try {
-            
-                        String nodeId = WearSyncState.getNodeId(this);
-            
-                        if (nodeId == null) return;
-            
-                        JSONObject json = new JSONObject();
-            
-                        json.put("sender","phone");
-                        json.put("type","camera");
-                        json.put("action","CAMERA_READY");
-            
-                        Wearable.getMessageClient(this)
-                                .sendMessage(
-                                        nodeId,
-                                        UNIVERSAL_SYNC_PATH,
-                                        json.toString().getBytes(StandardCharsets.UTF_8));
-            
-                        PhoneLog.d(TAG,"P-010 CAMERA_READY");
-            
-                    } catch (Exception e) {
-            
-                        PhoneLog.e(TAG,"send CAMERA_READY",e);
-            
-                    }
-            
-                }).start();
-            
-            }                    
+
+                    // 1. 设置状态为准备就绪
                     setState(CameraState.CAMERA_READY);
+                    // 2. 调用独立出来的通知方法
+                    sendCameraReady();
 
                 } catch (Exception e) {
+                    PhoneLog.e(TAG, "Camera target binding failed", e);
                     setState(CameraState.ERROR);
                 }
-
             }, ContextCompat.getMainExecutor(this));
 
         } catch (Exception e) {
+            PhoneLog.e(TAG, "Setup encoder and camera failed", e);
             setState(CameraState.ERROR);
         }
+    }
+
+    // 将本方法移出到正常的方法层级
+    private void sendCameraReady() {
+        new Thread(() -> {
+            try {
+                String nodeId = WearSyncState.getNodeId(this);
+                if (nodeId == null) return;
+
+                JSONObject json = new JSONObject();
+                json.put("sender", "phone");
+                json.put("type", "camera");
+                json.put("action", "CAMERA_READY");
+
+                Wearable.getMessageClient(this)
+                        .sendMessage(
+                                nodeId,
+                                UNIVERSAL_SYNC_PATH,
+                                json.toString().getBytes(StandardCharsets.UTF_8));
+
+                PhoneLog.d(TAG, "P-010 CAMERA_READY");
+            } catch (Exception e) {
+                PhoneLog.e(TAG, "send CAMERA_READY", e);
+            }
+        }).start();
     }
 
     /* =========================
@@ -302,58 +275,44 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
        ========================= */
 
     private void openChannel(String nodeId) {
-
         if (channelOpening.getAndSet(true)) {
             return;
         }
-    
+
         new Thread(() -> {
-    
             try {
-    
                 PhoneLog.d(TAG, "CAM-P001 open channel");
-    
-                ChannelClient.Channel channel =
-                        Tasks.await(
-                                Wearable.getChannelClient(this)
-                                        .openChannel(
-                                                nodeId,
-                                                "/camera-preview-stream"));
-    
+
+                ChannelClient.Channel channel = Tasks.await(
+                        Wearable.getChannelClient(this)
+                                .openChannel(nodeId, "/camera-preview-stream"));
+
                 PhoneLog.d(TAG, "CAM-P002 channel opened");
-    
-                mOutputStream =
-                        Tasks.await(
-                                Wearable.getChannelClient(this)
-                                        .getOutputStream(channel));
-    
+
+                mOutputStream = Tasks.await(
+                        Wearable.getChannelClient(this)
+                                .getOutputStream(channel));
+
                 PhoneLog.d(TAG, "CAM-P003 output stream ready");
-    
+
                 JSONObject json = new JSONObject();
                 json.put("sender", "phone");
                 json.put("type", "camera_control");
                 json.put("action", "STREAM_START");
-    
+
                 Wearable.getMessageClient(this).sendMessage(
                         nodeId,
                         UNIVERSAL_SYNC_PATH,
                         json.toString().getBytes(StandardCharsets.UTF_8));
-    
+
                 setState(CameraState.STREAMING);
-    
                 PhoneLog.d(TAG, "CAM-P004 streaming");
-    
+
             } catch (Exception e) {
-    
                 channelOpening.set(false);
-    
-                PhoneLog.e(TAG,
-                        "CHANNEL ERROR",
-                        e);
-    
+                PhoneLog.e(TAG, "CHANNEL ERROR", e);
                 setState(CameraState.CAMERA_READY);
             }
-    
         }).start();
     }
 
@@ -362,18 +321,14 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
        ========================= */
 
     private void setupOrientation() {
-
         mOrientationListener = new OrientationEventListener(this) {
-
             int last = -1;
 
             @Override
             public void onOrientationChanged(int o) {
-
                 if (o == ORIENTATION_UNKNOWN || mPreviewUseCase == null) return;
 
                 int r;
-
                 if (o < 45 || o >= 315) r = Surface.ROTATION_0;
                 else if (o < 135) r = Surface.ROTATION_270;
                 else if (o < 225) r = Surface.ROTATION_180;
@@ -385,7 +340,6 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
                 }
             }
         };
-
         mOrientationListener.enable();
     }
 
@@ -394,7 +348,6 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
        ========================= */
 
     private void releaseAll() {
-
         try { if (mEncoder != null) { mEncoder.stop(); mEncoder.release(); } } catch (Exception ignored) {}
         mEncoder = null;
 
@@ -410,8 +363,7 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
         }
 
         try {
-            ProcessCameraProvider provider =
-                    ProcessCameraProvider.getInstance(this).get();
+            ProcessCameraProvider provider = ProcessCameraProvider.getInstance(this).get();
             provider.unbindAll();
         } catch (Exception ignored) {}
         channelOpening.set(false);
