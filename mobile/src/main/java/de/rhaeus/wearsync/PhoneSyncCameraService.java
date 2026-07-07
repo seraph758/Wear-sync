@@ -45,6 +45,9 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
 
     private final LifecycleRegistry lifecycleRegistry = new LifecycleRegistry(this);
     private static PhoneSyncCameraService instance;
+    public static PhoneSyncCameraService getInstance() {
+        return instance;
+    }
 
     private MediaCodec mEncoder;
     private OutputStream mOutputStream;
@@ -248,7 +251,39 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
                             CameraSelector.DEFAULT_BACK_CAMERA,
                             mPreviewUseCase
                     );
-
+            private void sendCameraReady() {
+            
+                new Thread(() -> {
+            
+                    try {
+            
+                        String nodeId = WearSyncState.getNodeId(this);
+            
+                        if (nodeId == null) return;
+            
+                        JSONObject json = new JSONObject();
+            
+                        json.put("sender","phone");
+                        json.put("type","camera");
+                        json.put("action","CAMERA_READY");
+            
+                        Wearable.getMessageClient(this)
+                                .sendMessage(
+                                        nodeId,
+                                        UNIVERSAL_SYNC_PATH,
+                                        json.toString().getBytes(StandardCharsets.UTF_8));
+            
+                        PhoneLog.d(TAG,"P-010 CAMERA_READY");
+            
+                    } catch (Exception e) {
+            
+                        PhoneLog.e(TAG,"send CAMERA_READY",e);
+            
+                    }
+            
+                }).start();
+            
+            }                    
                     setState(CameraState.CAMERA_READY);
 
                 } catch (Exception e) {
