@@ -147,8 +147,15 @@ public class PhoneSyncListenerService extends WearableListenerService {
     String nodeId = WearSyncState.getNodeId(this);
 
     if ("CAMERA_READY".equalsIgnoreCase(action)) {
+
         setState(CameraState.CAMERA_READY);
+    
         PhoneLog.d(TAG, "CAMERA_READY synced");
+    
+        if (PhoneSyncCameraService.getInstance() != null) {
+            PhoneSyncCameraService.getInstance().startStreaming(nodeId);
+        }
+    
         return;
     }
 
