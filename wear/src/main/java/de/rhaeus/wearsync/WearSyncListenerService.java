@@ -179,31 +179,7 @@ public void onMessageReceived(@NonNull MessageEvent messageEvent) {
             readH264ChannelStream(channel);
         }
     }
-    private void sendStreamStart() {
-        new Thread(() -> {
-            try {
-                JSONObject json = new JSONObject();
-                json.put("sender", "wear");
-                json.put("type", "camera");
-                json.put("action", "STREAM_START");
-    
-                byte[] payload = json.toString().getBytes(StandardCharsets.UTF_8);
-    
-                for (Node node : Tasks.await(Wearable.getNodeClient(this).getConnectedNodes())) {
-                    Wearable.getMessageClient(this).sendMessage(
-                            node.getId(),
-                            UNIVERSAL_SYNC_PATH,
-                            payload
-                    );
-                }
-    
-                WearLog.d(TAG, "P-020 STREAM_START 已发送");
-    
-            } catch (Exception e) {
-                WearLog.e(TAG, "发送 STREAM_START 失败", e);
-            }
-        }).start();
-    }
+   
     private void readH264ChannelStream(ChannelClient.Channel channel) {
     
         new Thread(() -> {
@@ -228,7 +204,12 @@ public void onMessageReceived(@NonNull MessageEvent messageEvent) {
                         WearLog.d(TAG, "CAM-W009 len=" + length);
                     }
     
-                    WearCameraActivity activity = WearCameraActivity.sActivityRef.get();
+                    if (WearCameraActivity.sActivityRef == null) {
+                        continue;
+                    }
+                    
+                    WearCameraActivity activity =
+                            WearCameraActivity.sActivityRef.get();
     
                     if (activity != null) {
                         byte[] frame = new byte[length];
