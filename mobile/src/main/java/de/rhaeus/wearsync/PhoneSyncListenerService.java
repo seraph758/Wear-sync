@@ -232,7 +232,7 @@ public class PhoneSyncListenerService extends WearableListenerService {
                             + action);
         }
 
-    // ============================================================
+     // ============================================================
     // 🚀 Remote Activity
     // ============================================================
     private void executeRemoteActivityLaunch(String nodeId) {
@@ -262,17 +262,18 @@ public class PhoneSyncListenerService extends WearableListenerService {
             future.addListener(() -> {
                 try {
                     future.get();
-                    setState(CameraState.STARTING);
+                    // ⚡ 这里原本的 setState(CameraState.STARTING); 已经删掉
                     PhoneLog.d(TAG, "REMOTE OK");
                 } catch (Exception e) {
-                    setState(CameraState.IDLE);
+                    // ⚡ 这里原本的 setState(CameraState.IDLE); 已经删掉
                     PhoneLog.e(TAG, "remote failed", e);
                 }
             }, REMOTE_EXECUTOR);
 
         } catch (Exception e) {
-            setState(CameraState.IDLE);
+            // ⚡ 这里原本的 setState(CameraState.IDLE); 已经删掉
             PhoneLog.e(TAG, "remote helper failed", e);
         }
     }
+
 }
