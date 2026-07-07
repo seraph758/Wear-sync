@@ -144,83 +144,89 @@ public class PhoneSyncListenerService extends WearableListenerService {
     // ============================================================
     private void handleCamera(JSONObject json, String action) {
 
-        String nodeId = WearSyncState.getNodeId(this);
+    String nodeId = WearSyncState.getNodeId(this);
 
-        if ("CAMERA_READY".equalsIgnoreCase(action)) {
-            setState(CameraState.CAMERA_READY);
-            PhoneLog.d(TAG, "CAMERA_READY OK");
-            return;
-        }
+    if ("CAMERA_READY".equalsIgnoreCase(action)) {
+        setState(CameraState.CAMERA_READY);
+        PhoneLog.d(TAG, "CAMERA_READY synced");
+        return;
+    }
 
-        // ---------------- START ----------------
-        if ("START_CAMERA".equalsIgnoreCase(action)
-                || "START_CAMERA_UI".equalsIgnoreCase(action)) {
+    // ======================================================
+    // START
+    // ======================================================
+    if ("START_CAMERA".equalsIgnoreCase(action)
+            || "START_CAMERA_UI".equalsIgnoreCase(action)) {
 
-            setState(CameraState.HANDSHAKING);
+        setState(CameraState.HANDSHAKING);
 
-            if (nodeId == null || nodeId.isEmpty()) {
+        if (nodeId == null || nodeId.isEmpty()) {
 
-                REMOTE_EXECUTOR.execute(() -> {
-                    try {
-                        List<Node> nodes =
-                                Tasks.await(Wearable.getNodeClient(this).getConnectedNodes());
-
-                        if (nodes != null && !nodes.isEmpty()) {
-
-                            String id = nodes.get(0).getId();
-                            WearSyncState.setNodeId(this, id);
-
-                            executeRemoteActivityLaunch(id);
-                            setState(CameraState.STARTING);
-                        } else {
-                            setState(CameraState.IDLE);
-                        }
-
-                    } catch (Exception e) {
-                        setState(CameraState.IDLE);
-                        PhoneLog.e(TAG, "node scan failed", e);
-                    }
-                });
-
-            } else {
-
+            REMOTE_EXECUTOR.execute(() -> {
                 try {
-                    JSONObject handshake = new JSONObject();
-                    handshake.put("sender", "phone");
-                    handshake.put("type", "camera_control");
-                    handshake.put("action", "CAMERA_HANDSHAKE");
+                    List<Node> nodes =
+                            Tasks.await(Wearable.getNodeClient(this).getConnectedNodes());
 
-                    Wearable.getMessageClient(this).sendMessage(
-                            nodeId,
-                            UNIVERSAL_SYNC_PATH,
-                            handshake.toString().getBytes(StandardCharsets.UTF_8)
-                    );
+                    if (nodes != null && !nodes.isEmpty()) {
+
+                        String id = nodes.get(0).getId();
+                        WearSyncState.setNodeId(this, id);
+
+                        executeRemoteActivityLaunch(id);
+                        setState(CameraState.STARTING);
+                    } else {
+                        setState(CameraState.IDLE);
+                    }
 
                 } catch (Exception e) {
-                    PhoneLog.e(TAG, "handshake failed", e);
+                    setState(CameraState.IDLE);
+                    PhoneLog.e(TAG, "node scan failed", e);
                 }
+            });
 
-                executeRemoteActivityLaunch(nodeId);
-                setState(CameraState.STARTING);
+        } else {
+
+            try {
+                JSONObject handshake = new JSONObject();
+                handshake.put("sender", "phone");
+                handshake.put("type", "camera_control");
+                handshake.put("action", "CAMERA_HANDSHAKE");
+
+                Wearable.getMessageClient(this).sendMessage(
+                        nodeId,
+                        UNIVERSAL_SYNC_PATH,
+                        handshake.toString().getBytes(StandardCharsets.UTF_8)
+                );
+
+            } catch (Exception e) {
+                PhoneLog.e(TAG, "handshake failed", e);
             }
 
-            return;
+            executeRemoteActivityLaunch(nodeId);
+            setState(CameraState.STARTING);
         }
 
-        // ---------------- STOP ----------------
-        if ("STOP_CAMERA".equalsIgnoreCase(action)
-                || "FORCE_QUIT_CAMERA".equalsIgnoreCase(action)) {
+        return;
+    }
 
-            setState(CameraState.STOPPING);
+    // ======================================================
+    // STOP（统一）
+    // ======================================================
+    if ("STOP_CAMERA".equalsIgnoreCase(action)
+            || "FORCE_QUIT_CAMERA".equalsIgnoreCase(action)) {
 
-            Intent stop = new Intent(this, PhoneSyncCameraService.class);
-            stop.setAction(PhoneSyncCameraService.ACTION_STOP_CAMERA_STREAM);
-            startService(stop);
+        setState(CameraState.STOPPING);
 
-            return;
+        Intent stop = new Intent(this, PhoneSyncCameraService.class);
+
+        // 🔥 关键修复：统一 action（不要用不存在的 STREAM 常量）
+        stop.setAction(PhoneSyncCameraService.ACTION_STOP_CAMERA);
+
+        startService(stop);
+        return;
         }
-
-        PhoneLog.w(TAG, "unknown action: " + action);
+    
+        PhoneLog.w(TAG, "unknown camera action: " + action);
     }
 
     // ============================================================
