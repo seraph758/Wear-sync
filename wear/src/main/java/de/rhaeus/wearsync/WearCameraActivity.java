@@ -44,6 +44,7 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
     private boolean isFirstFrameDecoded = false;
     private volatile boolean isSurfaceReady = false;
     private volatile boolean isChannelReady = false;
+    private volatile boolean decoderReady = false;
 
     public static WeakReference<WearCameraActivity> sActivityRef = new WeakReference<>(null);
 
@@ -148,19 +149,30 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
 
     @Override
     public void surfaceCreated(SurfaceHolder holder) {
+    
         WearLog.d(TAG, "🖥️ [Surface状态] ─── 物理 Surface 硬件画布载体已成功构建完成 ───");
+    
         if (holder != null && holder.getSurface() != null) {
+    
             WearLog.d(TAG, "🖥️ [Surface状态] 检查 Surface 活体正常。正在移交底层初始化 H.264 解码器...");
+    
             initDecoder(holder);
-
+    
             isSurfaceReady = true;
-            
+    
             WearLog.d(TAG, "CAM-W001 Surface Ready");
-            
-            sendControlSignalToPhone("CAMERA_READY");
+    
+            if (decoderReady) {
+                sendControlSignalToPhone("CAMERA_READY");
+            }
+    
         } else {
-            WearCameraActivity.this.releaseDecoder();
-            WearLog.e(TAG, "❌ [Surface状态致命] 检测到 SurfaceHolder 或其内部 Surface 为 null！无法点火解调引擎。");
+    
+            releaseDecoder();
+    
+            WearLog.e(TAG,
+                    "❌ [Surface状态致命] 检测到 SurfaceHolder 或其内部 Surface 为 null！无法点火解调引擎。");
+    
         }
     }
 
@@ -176,6 +188,7 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
             WearLog.d(TAG, "🚀 [解码器点火] 正在呼叫 mDecoder.start()...");
             mDecoder.start();
             isDecoderRunning = true;
+            decoderReady = true;
             WearLog.d(TAG, "✨ [解码器点火成功] H.264 底层硬解引擎成功起飞！等待接收来自手机的帧数据流...");
         } catch (Exception e) {
             WearLog.e(TAG, "❌ [解码器致命异常] 初始化硬解管线严重受阻，可能底层硬件能力不足或 Surface 被提前抢占: " + e.getMessage(), e);
@@ -187,9 +200,11 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
      */
     public void feedH264Data(byte[] data, int length) {
         WearLog.d(TAG, "CAM-W010 feed " + length);
-        if (!isDecoderRunning || mDecoder == null || !isChannelReady) {
-                WearLog.w(TAG,
-            "收到视频帧，但解码器尚未准备完成");
+        if (!decoderReady
+                || !isSurfaceReady
+                || !isChannelReady
+                || mDecoder == null) {
+        
             return;
         }
         try {
@@ -239,15 +254,19 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
         }
     }
     public void onChannelReady() {
-
-            if (isChannelReady) {
-                return;
-            }
-        
-            isChannelReady = true;
-        
-            WearLog.d(TAG, "CAM-W002 Channel Ready");
+    
+        if (isChannelReady) {
+            return;
         }
+    
+        isChannelReady = true;
+    
+        WearLog.d(TAG, "CAM-W002 Channel Ready");
+    
+        if (decoderReady && isSurfaceReady) {
+            WearLog.d(TAG, "CAM-W002 Decoder Ready");
+        }
+    }
     
     @Override
     public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
@@ -264,6 +283,7 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
     private void releaseDecoder() {
         WearLog.w(TAG, "🧹 [安全熔断] 正在关闭并释放 mDecoder 硬件解码资源...");
         isDecoderRunning = false;
+        decoderReady = false;
         if (mDecoder != null) {
             try {
                 mDecoder.stop();
