@@ -13,6 +13,13 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 
 public class WearSyncListenerService extends WearableListenerService {
+
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        WearLog.d(TAG, "CAM-W010 Listener Created");
+    }
+
     private static final String TAG = "WearSync_WearListener";
     private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
     private static final String CAMERA_PREVIEW_STREAM_PATH = "/camera-preview-stream";
@@ -107,21 +114,24 @@ public void onMessageReceived(@NonNull MessageEvent messageEvent) {
                     return;
                 }
             
-                if ("START_CAMERA".equalsIgnoreCase(action)) {
-            
-                    WearLog.d(TAG, "启动 WearCameraActivity");
-            
-                    Intent intent = new Intent(this, WearCameraActivity.class);
-            
-                    intent.addFlags(
-                            Intent.FLAG_ACTIVITY_NEW_TASK
-                                    | Intent.FLAG_ACTIVITY_CLEAR_TOP
-                                    | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            
-                    startActivity(intent);
-            
-                    return;
-                }
+    if ("STREAM_START".equalsIgnoreCase(action)) {
+
+    WearLog.d(TAG, "CAM-W003 STREAM_START");
+
+    WearCameraActivity activity =
+            WearCameraActivity.sActivityRef.get();
+
+    WearLog.d(
+            TAG,
+            "CAM-W003 activity="
+                    + activity);
+
+    if (activity != null) {
+        activity.onChannelReady();
+    }
+
+    return;
+}
             
                 if ("STREAM_START".equalsIgnoreCase(action)) {
             
@@ -173,6 +183,20 @@ public void onMessageReceived(@NonNull MessageEvent messageEvent) {
         }
     }
    
+    @Override
+public void onChannelClosed(
+        @NonNull ChannelClient.Channel channel,
+        int closeReason,
+        int appSpecificErrorCode) {
+
+    WearLog.d(
+            TAG,
+            "CAM-W004C closed path="
+                    + channel.getPath()
+                    + " reason="
+                    + closeReason);
+}
+
     private void readH264ChannelStream(ChannelClient.Channel channel) {
     
         new Thread(() -> {
