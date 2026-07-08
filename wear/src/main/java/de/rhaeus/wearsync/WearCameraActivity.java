@@ -45,6 +45,9 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
     private volatile boolean isSurfaceReady = false;
     private volatile boolean isChannelReady = false;
     private volatile boolean decoderReady = false;
+    private byte[] pendingSps;
+    private byte[] pendingPps;
+    private boolean codecConfigured = false;
 
     public static WeakReference<WearCameraActivity> sActivityRef = new WeakReference<>(null);
 
@@ -160,8 +163,7 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
     
             isSurfaceReady = true;
     
-            WearLog.d(TAG, "CAM-W001 Surface Ready");
-    
+                WearLog.d(TAG,"CAM-W001 DecoderReady="+decoderReady);    
             if (decoderReady) {
                 sendControlSignalToPhone("CAMERA_READY");
             }
@@ -187,8 +189,12 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
             
             WearLog.d(TAG, "🚀 [解码器点火] 正在呼叫 mDecoder.start()...");
             mDecoder.start();
+
             isDecoderRunning = true;
+            
             decoderReady = true;
+            
+            codecConfigured = true;
             WearLog.d(TAG, "✨ [解码器点火成功] H.264 底层硬解引擎成功起飞！等待接收来自手机的帧数据流...");
         } catch (Exception e) {
             WearLog.e(TAG, "❌ [解码器致命异常] 初始化硬解管线严重受阻，可能底层硬件能力不足或 Surface 被提前抢占: " + e.getMessage(), e);
@@ -217,7 +223,13 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
                     inputBuffer.put(data, 0, length);
                     
                     // 填塞原始密文帧推进 H.264 异步解调队列
-                    mDecoder.queueInputBuffer(inputBufferIndex, 0, length, System.currentTimeMillis(), 0);
+                    mDecoder.queueInputBuffer(
+                            inputBufferIndex,
+                            0,
+                            length,
+                            System.nanoTime()/1000,
+                            0
+                    );                
                 }
             } else {
                 long now = System.currentTimeMillis();
