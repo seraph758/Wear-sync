@@ -114,7 +114,7 @@ public void onMessageReceived(@NonNull MessageEvent messageEvent) {
                     return;
                 }
             
-    if ("STREAM_START".equalsIgnoreCase(action)) {
+if ("STREAM_START".equalsIgnoreCase(action)) {
 
     WearLog.d(TAG, "CAM-W003 STREAM_START");
 
@@ -132,20 +132,6 @@ public void onMessageReceived(@NonNull MessageEvent messageEvent) {
 
     return;
 }
-            
-                if ("STREAM_START".equalsIgnoreCase(action)) {
-            
-                    WearLog.d(TAG, "CAM-W003 STREAM_START");
-            
-                    WearCameraActivity activity =
-                            WearCameraActivity.sActivityRef.get();
-            
-                    if (activity != null) {
-                        activity.onChannelReady();
-                    }
-            
-                    return;
-                }
             
                 if ("STOP_CAMERA".equalsIgnoreCase(action)
                         || "FORCE_QUIT_CAMERA".equalsIgnoreCase(action)) {
