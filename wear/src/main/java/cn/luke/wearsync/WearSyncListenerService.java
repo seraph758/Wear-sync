@@ -137,7 +137,7 @@ if ("STREAM_START".equalsIgnoreCase(action)) {
                         || "FORCE_QUIT_CAMERA".equalsIgnoreCase(action)) {
             
                     sendBroadcast(
-                            new Intent("de.luke.wearsync.ACTION_FORCE_QUIT_WEAR_CAMERA"));
+                            new Intent("cn.luke.wearsync.ACTION_FORCE_QUIT_WEAR_CAMERA"));
             
                     return;
                 }

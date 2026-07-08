@@ -38,8 +38,8 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
 
     private static final String TAG = "WearSync_CameraService";
 
-    public static final String ACTION_START_CAMERA = "de.luke.wearsync.ACTION_START_CAMERA";
-    public static final String ACTION_STOP_CAMERA  = "de.luke.wearsync.ACTION_STOP_CAMERA";
+    public static final String ACTION_START_CAMERA = "cn.luke.wearsync.ACTION_START_CAMERA";
+    public static final String ACTION_STOP_CAMERA  = "cn.luke.wearsync.ACTION_STOP_CAMERA";
     private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
 
     private final LifecycleRegistry lifecycleRegistry = new LifecycleRegistry(this);

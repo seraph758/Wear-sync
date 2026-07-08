@@ -656,7 +656,7 @@ class PhoneSyncMainFragment : Fragment() {
                                                 onClick = {
                                                     try {
                                                         val intent = Intent().apply {
-                                                            component = ComponentName("de.luke.wearsync", "de.luke.wearsync.PhoneLogActivity")
+                                                            component = ComponentName("cn.luke.wearsync", "cn.luke.wearsync.PhoneLogActivity")
                                                         }
                                                         startActivity(intent)
                                                         PhoneLog.d("WearSync_Main", "📂 成功打開日誌可視化看板")

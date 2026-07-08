@@ -59,7 +59,7 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
             String action = intent.getAction();
             WearLog.w(TAG, "📥 [逆向熔断广播] 接收到全局通知 Action: [" + action + "]");
             
-            if ("de.luke.wearsync.ACTION_FORCE_QUIT_WEAR_CAMERA".equals(action)) {
+            if ("cn.luke.wearsync.ACTION_FORCE_QUIT_WEAR_CAMERA".equals(action)) {
                 WearLog.w(TAG, "📥 [逆向熔断广播] 🎯 确认命中手机端挂断指令！正在启动无条件退出机制...");
                 cleanExit(false);
             }
@@ -120,7 +120,7 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
 
         // 🛠️ 注册手机断开物理拦截广播
         WearLog.d(TAG, "⚙️ [信令挂载] 正在构建逆向断开拦截器 IntentFilter...");
-        IntentFilter filter = new IntentFilter("de.luke.wearsync.ACTION_FORCE_QUIT_WEAR_CAMERA");
+        IntentFilter filter = new IntentFilter("cn.luke.wearsync.ACTION_FORCE_QUIT_WEAR_CAMERA");
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             WearLog.d(TAG, "⚙️ [信令挂载] 当前系统 SDK: " + Build.VERSION.SDK_INT + " (>=26)，注入 RECEIVER_EXPORTED 旗帜注册动态广播...");
             registerReceiver(phoneKillReceiver, filter, Context.RECEIVER_EXPORTED);

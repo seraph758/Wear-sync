@@ -12,7 +12,7 @@ buildscript {
     }
     dependencies {
         // 保持 8.0.2 版本以适配 Gradle 8.0
-        classpath 'com.android.tools.build:gradle:8.0.2'
+        classpath 'com.android.tools.build:gradle:8.13.2'
     }
 }
 
