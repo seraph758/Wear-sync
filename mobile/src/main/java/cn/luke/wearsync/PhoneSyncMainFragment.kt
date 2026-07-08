@@ -345,14 +345,17 @@ class PhoneSyncMainFragment : Fragment() {
                                 }
                             }
 
-                            // ==========================================
-                            // 4. 闹钟全域代点中心 (支持折叠)
+                           // ==========================================
+                            // 4. 闹钟全域代点中心 (支持折叠与总开关)
                             // ==========================================
                             var selectedAlarmName by remember { mutableStateOf(sp.getString("selected_alarm_name", "Google 时钟") ?: "Google 时钟") }
                             var selectedAlarmPkg by remember { mutableStateOf(sp.getString("selected_alarm_package", "com.google.android.deskclock") ?: "com.google.android.deskclock") }
                             var dismissKeyText by remember { mutableStateOf(sp.getString("alarm_dismiss_key", "停止") ?: "停止") }
                             var snoozeKeyText by remember { mutableStateOf(sp.getString("alarm_snooze_key", "延后") ?: "延后") }
-
+                            
+                            // 🎯 新增：总开关状态状态持久化读取（默认开启 true）
+                            var isAlarmMasterEnabled by remember { mutableStateOf(sp.getBoolean("alarm_proxy_master_switch", true)) }
+                            
                             Card(
                                 onClick = { isAlarmExpanded = !isAlarmExpanded },
                                 modifier = Modifier.fillMaxWidth(),
@@ -366,13 +369,27 @@ class PhoneSyncMainFragment : Fragment() {
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Column {
-                                            Text("闹钟全域代点中心", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = textColor)
-                                            Text("当前代点源: $selectedAlarmName", fontSize = 12.sp, color = subTextColor)
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text("闹钟全域代点中心", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = if (isAlarmMasterEnabled) textColor else textColor.copy(alpha = 0.5f))
+                                            Text("当前代点源: $selectedAlarmName", fontSize = 12.sp, color = if (isAlarmMasterEnabled) subTextColor else subTextColor.copy(alpha = 0.5f))
                                         }
+                                        
+                                        // 🎯 新增：优雅的 Switch 总开关（阻止点击卡片触发折叠）
+                                        Switch(
+                                            checked = isAlarmMasterEnabled,
+                                            onCheckedChange = { isEnabled ->
+                                                isAlarmMasterEnabled = isEnabled
+                                                sp.edit().putBoolean("alarm_proxy_master_switch", isEnabled).apply()
+                                                PhoneLog.d("WearSync_Main", "🎛️ 闹钟代点总开关变更为: $isEnabled")
+                                            },
+                                            modifier = Modifier.padding(end = 8.dp),
+                                            // 屏蔽 Switch 自身的点击冒泡，防止点击 Switch 的同时把卡片折叠/展开了
+                                            interactionSource = remember { MutableInteractionSource() }
+                                        )
+                            
                                         Text(text = if (isAlarmExpanded) "🔼" else "⚙️ 配置", fontSize = 14.sp, color = subTextColor)
                                     }
-
+                            
                                     // 点击展开后的详细配置和测试按钮
                                     AnimatedVisibility(visible = isAlarmExpanded) {
                                         Column(
@@ -380,8 +397,10 @@ class PhoneSyncMainFragment : Fragment() {
                                             verticalArrangement = Arrangement.spacedBy(12.dp)
                                         ) {
                                             HorizontalDivider(color = dividerColor)
-
+                            
+                                            // 🎯 核心逻辑：如果总开关关闭，下方整个面板全部通过其 enabled 属性进行熔断致灰
                                             Button(
+                                                enabled = isAlarmMasterEnabled,
                                                 modifier = Modifier.fillMaxWidth(),
                                                 onClick = {
                                                     PhoneSyncAppPicker.show(requireContext()) { pkg, name ->
@@ -394,16 +413,17 @@ class PhoneSyncMainFragment : Fragment() {
                                             ) {
                                                 Text("切换时钟源 (当前: $selectedAlarmName)", fontSize = 13.sp)
                                             }
-
-                                            Text("目标包名: $selectedAlarmPkg", fontSize = 11.sp, color = subTextColor)
-
+                            
+                                            Text("目标包名: $selectedAlarmPkg", fontSize = 11.sp, color = if (isAlarmMasterEnabled) subTextColor else subTextColor.copy(alpha = 0.4f))
+                            
                                             HorizontalDivider(color = textColor.copy(alpha = 0.1f), thickness = 1.dp)
-
+                            
                                             Row(
                                                 modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                                             ) {
                                                 OutlinedTextField(
+                                                    enabled = isAlarmMasterEnabled,
                                                     value = dismissKeyText,
                                                     onValueChange = { newValue ->
                                                         dismissKeyText = newValue
@@ -414,10 +434,11 @@ class PhoneSyncMainFragment : Fragment() {
                                                     label = { Text("停止关键字") },
                                                     singleLine = true,
                                                     modifier = Modifier.weight(1f),
-                                                    textStyle = TextStyle(fontSize = 14.sp, color = textColor)
+                                                    textStyle = TextStyle(fontSize = 14.sp, color = if (isAlarmMasterEnabled) textColor else textColor.copy(alpha = 0.4f))
                                                 )
-
+                            
                                                 OutlinedTextField(
+                                                    enabled = isAlarmMasterEnabled,
                                                     value = snoozeKeyText,
                                                     onValueChange = { newValue ->
                                                         snoozeKeyText = newValue
@@ -428,21 +449,25 @@ class PhoneSyncMainFragment : Fragment() {
                                                     label = { Text("延后关键字") },
                                                     singleLine = true,
                                                     modifier = Modifier.weight(1f),
-                                                    textStyle = TextStyle(fontSize = 14.sp, color = textColor)
+                                                    textStyle = TextStyle(fontSize = 14.sp, color = if (isAlarmMasterEnabled) textColor else textColor.copy(alpha = 0.4f))
                                                 )
                                             }
-
+                            
                                             HorizontalDivider(color = textColor.copy(alpha = 0.1f), thickness = 1.dp)
-
-                                            Text("🧪 业务流联调测试面板 (模拟手表端按键)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = textColor)
-
+                            
+                                            Text("🧪 业务流联调测试面板 (模拟手表端按键)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = if (isAlarmMasterEnabled) textColor else textColor.copy(alpha = 0.4f))
+                            
                                             Row(
                                                 modifier = Modifier.fillMaxWidth(),
                                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                                             ) {
                                                 Button(
+                                                    enabled = isAlarmMasterEnabled,
                                                     modifier = Modifier.weight(1f),
-                                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
+                                                    colors = ButtonDefaults.buttonColors(
+                                                        containerColor = Color(0xFFC62828),
+                                                        disabledContainerColor = Color(0xFFC62828).copy(alpha = 0.3f)
+                                                    ),
                                                     onClick = {
                                                         try {
                                                             PhoneAlarmManager.handleWatchCommand(requireContext(), "DISMISS")
@@ -452,12 +477,16 @@ class PhoneSyncMainFragment : Fragment() {
                                                         }
                                                     }
                                                 ) {
-                                                    Text("模拟停止测试", color = Color.White, fontSize = 12.sp)
+                                                    Text("模拟停止测试", color = if (isAlarmMasterEnabled) Color.White else Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
                                                 }
-
+                            
                                                 Button(
+                                                    enabled = isAlarmMasterEnabled,
                                                     modifier = Modifier.weight(1f),
-                                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE65100)),
+                                                    colors = ButtonDefaults.buttonColors(
+                                                        containerColor = Color(0xFFE65100),
+                                                        disabledContainerColor = Color(0xFFE65100).copy(alpha = 0.3f)
+                                                    ),
                                                     onClick = {
                                                         try {
                                                             PhoneAlarmManager.handleWatchCommand(requireContext(), "SNOOZE")
@@ -467,19 +496,18 @@ class PhoneSyncMainFragment : Fragment() {
                                                         }
                                                     }
                                                 ) {
-                                                    Text("模拟延后测试", color = Color.White, fontSize = 12.sp)
+                                                    Text("模拟延后测试", color = if (isAlarmMasterEnabled) Color.White else Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
                                                 }
                                             }
-
+                            
                                             Text(
                                                 "💡 测试：设置一个即将响起的闹钟，响起后点击测试按钮，观察是否和手表真实点击流程一致。",
-                                                fontSize = 10.sp, color = subTextColor, lineHeight = 14.sp
+                                                fontSize = 10.sp, color = if (isAlarmMasterEnabled) subTextColor else subTextColor.copy(alpha = 0.4f), lineHeight = 14.sp
                                             )
                                         }
                                     }
                                 }
                             }
-
                             // ==========================================
                             // 5. 远程相机控场中心 (支持折叠)
                             // ==========================================
