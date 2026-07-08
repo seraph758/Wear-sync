@@ -19,12 +19,6 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
 
     private static PhoneSyncNotificationService instance;
 
-        
-
-    /**
-     * 🎯 新增：供 PhoneAlarmManager 调用的实时逆向控制核心方法
-     * 抛弃静态缓存，直接实时穿透通知栏获取最新的 Intent
-     */
     /**
      * 🎯 [全步進日誌版] 供 PhoneAlarmManager 調用的即時逆向控制核心方法
      * 拋棄靜態變數，直接實時全量掃描通知欄
@@ -41,9 +35,18 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
         PhoneLog.d(TAG, "✅ [即時控制] 核心服務實例健康存在，開始讀取用戶配置...");
 
         SharedPreferences prefs = context.getSharedPreferences("wearsync_prefs", Context.MODE_PRIVATE);
+        
+        // 🎯【新增拦截逻辑 1】如果总开关关闭，逆向控制也不予执行
+        boolean isAlarmMasterEnabled = prefs.getBoolean("alarm_proxy_master_switch", true);
+        if (!isAlarmMasterEnabled) {
+            PhoneLog.w(TAG, "🎛️ [即時控制熔斷] 闹钟代点总开关已关闭，直接退出，不执行任何逆向点击意图！");
+            return false;
+        }
+
         String targetPkg = prefs.getString("selected_alarm_package", "com.google.android.deskclock");
         String dismissKey = prefs.getString("alarm_dismiss_key", "停止").toLowerCase();
         String snoozeKey = prefs.getString("alarm_snooze_key", "延后").toLowerCase();
+        
         // 🔒 防止关键字被保存为空
         if (dismissKey.trim().isEmpty()) {
             dismissKey = "停止";
@@ -89,7 +92,7 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
                 }
 
                 if (notification.actions == null || notification.actions.length == 0) {
-                    PhoneLog.w(TAG, "     ❌ [攔截失敗] 該鬧鐘通知目前沒有攜帶任何操作按鈕 (actions == null)！");
+                    PhoneLog.w(TAG, "     ❌ [攔截失敗] 該鬧鐘通知目前沒有攜帶 any 操作按鈕 (actions == null)！");
                     continue;
                 }
 
@@ -148,10 +151,7 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
         return false;
     }
 
-
-
     private final Handler alarmWatchdogHandler = new Handler(Looper.getMainLooper());
-
     private Runnable alarmWatchdogRunnable = null;
 
     @Deprecated
@@ -162,493 +162,254 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
     private static final int READY_CHECK_INTERVAL = 100;
     private static final int READY_TIMEOUT = 1500;
     private int readyCheckElapsed = 0;
-        
 
     public static PhoneSyncNotificationService getInstance() {
         return instance;
     }
 
-
     @Override
     public void onCreate() {
         super.onCreate();
-
         instance = this;
-
-        PhoneLog.d(TAG,
-                "🚀 PhoneSyncNotificationService 启动");
-
+        PhoneLog.d(TAG, "🚀 PhoneSyncNotificationService 启动");
 
         try {
-
-            NotificationManager nm =
-                    (NotificationManager)getSystemService(Context.NOTIFICATION_SERVICE);
-
-            if(nm != null){
-
-                PhoneLog.d(TAG,
-                        "当前勿扰状态: "
-                                + nm.getCurrentInterruptionFilter());
-
+            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm != null) {
+                PhoneLog.d(TAG, "当前勿扰状态: " + nm.getCurrentInterruptionFilter());
             }
-
-        }catch(Exception e){
-
-            PhoneLog.e(TAG,
-                    "获取勿扰状态失败: "
-                            + e.getMessage());
+        } catch (Exception e) {
+            PhoneLog.e(TAG, "获取勿扰状态失败: " + e.getMessage());
         }
-
     }
 
-
     @Override
-    public void onDestroy(){
-
+    public void onDestroy() {
         super.onDestroy();
-
         stopAlarmWatchdog();
-
         instance = null;
-
     }
 
-
-
     @Override
-    public void onNotificationPosted(StatusBarNotification sbn){
-
-
-        if(sbn == null){
+    public void onNotificationPosted(StatusBarNotification sbn) {
+        if (sbn == null) {
             return;
         }
 
+        // 🎯【新增拦截逻辑 2】在这里截断！一进门就读取总开关状态
+        SharedPreferences prefs = getSharedPreferences("wearsync_prefs", Context.MODE_PRIVATE);
+        boolean isAlarmMasterEnabled = prefs.getBoolean("alarm_proxy_master_switch", true);
+        
+        if (!isAlarmMasterEnabled) {
+            // 开关已关，假装什么都没看见，不输出过多冗余日志
+            return;
+        }
 
         String packageName = sbn.getPackageName();
+        String selectedPkg = prefs.getString("selected_alarm_package", "com.google.android.deskclock");
 
-
-        SharedPreferences prefs =
-                getSharedPreferences(
-                        "wearsync_prefs",
-                        Context.MODE_PRIVATE);
-
-
-        String selectedPkg =
-                prefs.getString(
-                        "selected_alarm_package",
-                        "com.google.android.deskclock");
-
-
-
-        if(!selectedPkg.equals(packageName)){
-
-            return;
-
-        }
-
-
-
-        PhoneLog.d(TAG,
-                "⏰检测到目标闹钟包: "
-                        + packageName);
-
-
-
-        Notification notification =
-                sbn.getNotification();
-
-
-        if(notification == null){
-
-            return;
-
-        }
-
-
-
-        boolean isInsistent =
-                (notification.flags &
-                        Notification.FLAG_INSISTENT) != 0;
-
-
-        boolean isOngoing =
-                (notification.flags &
-                        Notification.FLAG_ONGOING_EVENT) != 0;
-
-
-        boolean isAlarmCategory =
-                Notification.CATEGORY_ALARM
-                        .equals(notification.category);
-
-
-
-        if(!isInsistent &&
-                !isOngoing &&
-                !isAlarmCategory){
-
-            PhoneLog.d(TAG,
-                    "不是闹钟通知");
-
-            return;
-
-        }
-        if(isAlarmCurrentlyRinging){
-            PhoneLog.d(TAG,"闹钟已经运行，忽略重复通知");
+        if (!selectedPkg.equals(packageName)) {
             return;
         }
 
+        PhoneLog.d(TAG, "⏰检测到目标闹钟包: " + packageName);
 
-        String dismissKey =
-                prefs.getString(
-                        "alarm_dismiss_key",
-                        "停止")
-                        .toLowerCase();
+        Notification notification = sbn.getNotification();
+        if (notification == null) {
+            return;
+        }
 
+        boolean isInsistent = (notification.flags & Notification.FLAG_INSISTENT) != 0;
+        boolean isOngoing = (notification.flags & Notification.FLAG_ONGOING_EVENT) != 0;
+        boolean isAlarmCategory = Notification.CATEGORY_ALARM.equals(notification.category);
 
+        if (!isInsistent && !isOngoing && !isAlarmCategory) {
+            PhoneLog.d(TAG, "不是闹钟通知");
+            return;
+        }
+        
+        if (isAlarmCurrentlyRinging) {
+            PhoneLog.d(TAG, "闹钟已经运行，忽略重复通知");
+            return;
+        }
 
-        String snoozeKey =
-                prefs.getString(
-                        "alarm_snooze_key",
-                        "延后")
-                        .toLowerCase();
+        String dismissKey = prefs.getString("alarm_dismiss_key", "停止").toLowerCase();
+        String snoozeKey = prefs.getString("alarm_snooze_key", "延后").toLowerCase();
 
         if (dismissKey.trim().isEmpty()) {
-    dismissKey = "停止";
-}
-
-if (snoozeKey.trim().isEmpty()) {
-    snoozeKey = "延后";
-}
-
-
-
-        if(notification.actions != null){
-
-
-            for(Notification.Action action:
-                    notification.actions){
-
-
-                if(action.title == null)
-                    continue;
-
-
-
-                String title =
-                        action.title.toString()
-                                .toLowerCase();
-
-
-
-                if(title.contains(dismissKey)
-        || title.contains("stop")
-        || title.contains("关闭")
-        || title.contains("停止")
-        || title.contains("dismiss")){
-
-            
-                PhoneLog.d(
-                    TAG,
-                    "🎯 发现停止按钮: "
-                    + action.title
-                );
-            
-            
-            }
-            
-            
-            else if(title.contains(snoozeKey)
-                    || title.contains("snooze")
-                    || title.contains("稍后")){
-            
-            
-                PhoneLog.d(
-                    TAG,
-                    "🎯 发现延后按钮: "
-                    + action.title
-                );
-            
-            }
-            
-            
-                        }
-            
-            
-                    }
-
-
-
-
-
-
-       
-       alarmReady = false;
-readyCheckElapsed = 0;
-
-if (pendingAlarmRunnable != null) {
-    readyHandler.removeCallbacks(pendingAlarmRunnable);
-}
-
-pendingAlarmRunnable = new Runnable() {
-    @Override
-    public void run() {
-
-        if (isAlarmSystemReady()) {
-
-            alarmReady = true;
-
-            PhoneLog.d(TAG, "✅ [DYNAMIC READY] 闹钟系统已就绪，开始下发手表");
-
-            PhoneAlarmManager.notifyWatchAlarmRinging(
-                    PhoneSyncNotificationService.this,
-                    new SimpleDateFormat(
-                            "HH:mm",
-                            Locale.getDefault()).format(new Date()));
-
-            PhoneSyncAlarmState.enterRinging();
-
-            isAlarmCurrentlyRinging = true;
-
-            startAlarmWatchdog();
-
-            return;
+            dismissKey = "停止";
+        }
+        if (snoozeKey.trim().isEmpty()) {
+            snoozeKey = "延后";
         }
 
-                readyCheckElapsed += READY_CHECK_INTERVAL;
-        
-                if (readyCheckElapsed >= READY_TIMEOUT) {
-        
-                    PhoneLog.w(TAG, "⚠️ [READY TIMEOUT] 强制进入执行");
-        
-                    alarmReady = true;
-        
-                    PhoneAlarmManager.notifyWatchAlarmRinging(
-                            PhoneSyncNotificationService.this,
-                            new SimpleDateFormat(
-                                    "HH:mm",
-                                    Locale.getDefault()).format(new Date()));
-        
-                    PhoneSyncAlarmState.enterRinging();
-        
-                    isAlarmCurrentlyRinging = true;
-        
-                    startAlarmWatchdog();
-        
-                    return;
+        if (notification.actions != null) {
+            for (Notification.Action action : notification.actions) {
+                if (action.title == null) continue;
+
+                String title = action.title.toString().toLowerCase();
+
+                if (title.contains(dismissKey)
+                        || title.contains("stop")
+                        || title.contains("关闭")
+                        || title.contains("停止")
+                        || title.contains("dismiss")) {
+                    PhoneLog.d(TAG, "🎯 发现停止按钮: " + action.title);
+                } else if (title.contains(snoozeKey)
+                        || title.contains("snooze")
+                        || title.contains("稍后")) {
+                    PhoneLog.d(TAG, "🎯 发现延后按钮: " + action.title);
                 }
-        
-                readyHandler.postDelayed(this, READY_CHECK_INTERVAL);
             }
-        };
-        
-        readyHandler.post(pendingAlarmRunnable);
-
-
-    }
-
-
-
-
-    @Override
-    public void onNotificationRemoved(StatusBarNotification sbn){
-
-
-        super.onNotificationRemoved(sbn);
-
-
-
-        if(sbn==null)
-            return;
-
-
-
-        SharedPreferences prefs =
-                getSharedPreferences(
-                        "wearsync_prefs",
-                        Context.MODE_PRIVATE);
-
-
-
-        String targetPkg =
-                prefs.getString(
-                        "selected_alarm_package",
-                        "com.google.android.deskclock");
-
-
-
-        String currentPkg =
-                sbn.getPackageName();
-
-
-
-        if(!targetPkg.equalsIgnoreCase(currentPkg)){
-
-            return;
-
         }
 
         alarmReady = false;
+        readyCheckElapsed = 0;
 
-        stopAlarmWatchdog();
+        if (pendingAlarmRunnable != null) {
+            readyHandler.removeCallbacks(pendingAlarmRunnable);
+        }
 
-        PhoneSyncAlarmState.enterStopping();
+        pendingAlarmRunnable = new Runnable() {
+            @Override
+            public void run() {
+                if (isAlarmSystemReady()) {
+                    alarmReady = true;
+                    PhoneLog.d(TAG, "✅ [DYNAMIC READY] 闹钟系统已就绪，开始下发手表");
 
-        PhoneAlarmManager.notifyWatchAlarmDismissed(this);
+                    PhoneAlarmManager.notifyWatchAlarmRinging(
+                            PhoneSyncNotificationService.this,
+                            new SimpleDateFormat("HH:mm", Locale.getDefault()).format(new Date()));
 
+                    PhoneSyncAlarmState.enterRinging();
+                    isAlarmCurrentlyRinging = true;
+                    startAlarmWatchdog();
+                    return;
+                }
 
+                readyCheckElapsed += READY_CHECK_INTERVAL;
+
+                if (readyCheckElapsed >= READY_TIMEOUT) {
+                    PhoneLog.w(TAG, "⚠️ [READY TIMEOUT] 强制进入执行");
+                    alarmReady = true;
+
+                    PhoneAlarmManager.notifyWatchAlarmRinging(
+                            PhoneSyncNotificationService.this,
+                            new SimpleDateFormat("HH:mm", Locale.getDefault()).format(new Date()));
+
+                    PhoneSyncAlarmState.enterRinging();
+                    isAlarmCurrentlyRinging = true;
+                    startAlarmWatchdog();
+                    return;
+                }
+
+                readyHandler.postDelayed(this, READY_CHECK_INTERVAL);
+            }
+        };
+
+        readyHandler.post(pendingAlarmRunnable);
     }
-
-
-
 
     @Override
-    public void onInterruptionFilterChanged(int interruptionFilter){
+    public void onNotificationRemoved(StatusBarNotification sbn) {
+        super.onNotificationRemoved(sbn);
+        if (sbn == null) return;
 
-
-        super.onInterruptionFilterChanged(interruptionFilter);
+        SharedPreferences prefs = getSharedPreferences("wearsync_prefs", Context.MODE_PRIVATE);
         
-
-
-        if(PhoneSyncListenerService.isInternalUpdate){
-
+        // 🎯 同样加入开关校验，如果开关此时是关着的，说明手表之前根本没收到过叮咚声，removed 也不必发下发给手表了
+        boolean isAlarmMasterEnabled = prefs.getBoolean("alarm_proxy_master_switch", true);
+        if (!isAlarmMasterEnabled) {
             return;
-
         }
 
+        String targetPkg = prefs.getString("selected_alarm_package", "com.google.android.deskclock");
+        String currentPkg = sbn.getPackageName();
 
-
-        try{
-
-
-            PhoneDndManager.syncDndToWear(
-                    this,
-                    interruptionFilter);
-
-
-
-        }catch(Exception e){
-
-
-            PhoneLog.e(TAG,
-                    e.getMessage());
-
+        if (!targetPkg.equalsIgnoreCase(currentPkg)) {
+            return;
         }
 
-
+        alarmReady = false;
+        stopAlarmWatchdog();
+        PhoneSyncAlarmState.enterStopping();
+        PhoneAlarmManager.notifyWatchAlarmDismissed(this);
     }
 
+    @Override
+    public void onInterruptionFilterChanged(int interruptionFilter) {
+        super.onInterruptionFilterChanged(interruptionFilter);
 
-
-
-
-    private void startAlarmWatchdog(){
-
-
-        if(alarmWatchdogRunnable!=null)
+        if (PhoneSyncListenerService.isInternalUpdate) {
             return;
+        }
 
-
-
-        alarmWatchdogRunnable =
-                new Runnable(){
-
-
-                    @Override
-                    public void run(){
-
-
-                       if (PhoneSyncAlarmState.isRinging()) {
-
-
-                            PhoneAlarmManager.notifyWatchAlarmRinging(
-                                    PhoneSyncNotificationService.this,
-                                    new SimpleDateFormat("HH:mm", Locale.getDefault()).format(new Date()));
-
-
-                            alarmWatchdogHandler.postDelayed(
-                                    this,
-                                    6000);
-
-                        }
-
-                    }
-
-                };
-
-
-
-        alarmWatchdogHandler.postDelayed(
-                alarmWatchdogRunnable,
-                6000);
-
+        try {
+            PhoneDndManager.syncDndToWear(this, interruptionFilter);
+        } catch (Exception e) {
+            PhoneLog.e(TAG, e.getMessage());
+        }
     }
 
+    private void startAlarmWatchdog() {
+        if (alarmWatchdogRunnable != null) return;
 
+        alarmWatchdogRunnable = new Runnable() {
+            @Override
+            public void run() {
+                if (PhoneSyncAlarmState.isRinging()) {
+                    PhoneAlarmManager.notifyWatchAlarmRinging(
+                            PhoneSyncNotificationService.this,
+                            new SimpleDateFormat("HH:mm", Locale.getDefault()).format(new Date()));
 
+                    alarmWatchdogHandler.postDelayed(this, 6000);
+                }
+            }
+        };
 
-    private void stopAlarmWatchdog(){
+        alarmWatchdogHandler.postDelayed(alarmWatchdogRunnable, 6000);
+    }
 
+    private void stopAlarmWatchdog() {
         PhoneSyncAlarmState.reset();
+        isAlarmCurrentlyRinging = false;
 
-        isAlarmCurrentlyRinging=false;
-
-
-
-        if(alarmWatchdogRunnable!=null){
-
-
-            alarmWatchdogHandler.removeCallbacks(
-                    alarmWatchdogRunnable);
-
-
-
-            alarmWatchdogRunnable=null;
-
+        if (alarmWatchdogRunnable != null) {
+            alarmWatchdogHandler.removeCallbacks(alarmWatchdogRunnable);
+            alarmWatchdogRunnable = null;
         }
-
     }
 
     private boolean isAlarmSystemReady() {
+        try {
+            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm == null) return false;
 
-            try {
-        
-                NotificationManager nm =
-                        (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-        
-                if (nm == null) return false;
-        
-                int filter = nm.getCurrentInterruptionFilter();
-        
-                if (filter == NotificationManager.INTERRUPTION_FILTER_UNKNOWN) {
-                    return false;
-                }
-        
-                StatusBarNotification[] active = getActiveNotifications();
-        
-                if (active == null || active.length == 0) {
-                    return false;
-                }
-        
-                for (StatusBarNotification sbn : active) {
-        
-                    if (sbn == null) continue;
-        
-                    Notification n = sbn.getNotification();
-                    if (n == null) continue;
-        
-                    if (Notification.CATEGORY_ALARM.equals(n.category)) {
-        
-                        if (n.actions != null && n.actions.length > 0) {
-                            return true;
-                        }
+            int filter = nm.getCurrentInterruptionFilter();
+            if (filter == NotificationManager.INTERRUPTION_FILTER_UNKNOWN) {
+                return false;
+            }
+
+            StatusBarNotification[] active = getActiveNotifications();
+            if (active == null || active.length == 0) {
+                return false;
+            }
+
+            for (StatusBarNotification sbn : active) {
+                if (sbn == null) continue;
+
+                Notification n = sbn.getNotification();
+                if (n == null) continue;
+
+                if (Notification.CATEGORY_ALARM.equals(n.category)) {
+                    if (n.actions != null && n.actions.length > 0) {
+                        return true;
                     }
                 }
-        
-            } catch (Exception e) {
-                PhoneLog.e(TAG, "READY CHECK ERROR: " + e.getMessage());
             }
-        
-            return false;
+        } catch (Exception e) {
+            PhoneLog.e(TAG, "READY CHECK ERROR: " + e.getMessage());
         }
-
+        return false;
+    }
 }
