@@ -55,7 +55,7 @@ Note: This is only tested on my Galaxy Watch 4 and it might not work on other de
   * connect to the watch with `adb connect 192.168.0.100:5555` (_**insert your value!**_)
 * install the app `adb install dndsync_wear.apk`
 * grant permission for DND access  
-`adb shell cmd notification allow_listener de.rhaeus.wearsync/de.rhaeus.wearsync.WearSyncNotificationService`  
+`adb shell cmd notification allow_listener cn.luke.wearsync/cn.luke.wearsync.WearSyncNotificationService`  
 This allows the app to listen to DND changes and changing the DND setting
 * scroll to the permission section and check if DND permission says _access granted_ (you might need to tap on the menu entry for it to update)
 * _**IMPORTANT: Disable ADB debugging after you are done because it drains the battery!**_

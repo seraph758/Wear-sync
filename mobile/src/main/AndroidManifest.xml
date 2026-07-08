@@ -31,7 +31,7 @@
             android:value="@integer/google_play_services_version" />
 
         <activity
-            android:name=".PhoneSyncMainActivity"
+            android:name="cn.luke.wearsync.PhoneSyncMainActivity"
             android:exported="true"
             android:launchMode="singleTop">
             <intent-filter>
@@ -40,7 +40,7 @@
             </intent-filter>
         </activity>
         <activity
-           android:name=".WearSyncRemoteCameraActivity"
+           android:name="cn.luke.wearsync.WearSyncRemoteCameraActivity"
            android:exported="true"
            android:excludeFromRecents="true"
    
@@ -63,7 +63,7 @@
         </activity>      
         
         <service
-            android:name=".PhoneSyncNotificationService"
+            android:name="cn.luke.wearsync.PhoneSyncNotificationService"
             android:exported="true"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
             <intent-filter>
@@ -72,13 +72,13 @@
         </service>
 
         <service 
-            android:name=".PhoneSyncCameraService"
+            android:name="cn.luke.wearsync.PhoneSyncCameraService"
             android:enabled="true"   
             android:foregroundServiceType="camera"
             android:exported="false" />
 
         <service
-            android:name=".PhoneSyncListenerService"
+            android:name="cn.luke.wearsync.PhoneSyncListenerService"
             android:enabled="true"
             android:exported="true">
             <intent-filter>
