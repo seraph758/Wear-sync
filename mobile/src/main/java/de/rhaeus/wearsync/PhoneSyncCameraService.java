@@ -53,6 +53,8 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
     private Surface mInputSurface;
     private Preview mPreviewUseCase;
     private OrientationEventListener mOrientationListener;
+    private byte[] spsData;
+    private byte[] ppsData;
 
     private long totalFrames = 0;
     private volatile boolean firstFrame = false;
@@ -183,8 +185,26 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
                         byte[] data = new byte[info.size];
                         buffer.get(data);
 
-                        mOutputStream.write(data);
-                        mOutputStream.flush();
+                        if (totalFrames == 0) {
+
+                        if (spsData != null) {
+                    
+                            mOutputStream.write(spsData);
+                    
+                        }
+                    
+                    
+                        if (ppsData != null) {
+                    
+                            mOutputStream.write(ppsData);
+                    
+                        }
+                    
+                    }
+                    
+                    
+                    mOutputStream.write(data);
+                    mOutputStream.flush();
 
                         totalFrames++;
 
@@ -201,7 +221,52 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
 
                 @Override public void onInputBufferAvailable(@NonNull MediaCodec codec, int index) {}
                 @Override public void onError(@NonNull MediaCodec codec, @NonNull MediaCodec.CodecException e) {}
-                @Override public void onOutputFormatChanged(@NonNull MediaCodec codec, @NonNull MediaFormat format) {}
+@Override
+public void onOutputFormatChanged(
+        @NonNull MediaCodec codec,
+        @NonNull MediaFormat format) {
+                
+                    try {
+                
+                        ByteBuffer csd0 =
+                                format.getByteBuffer("csd-0");
+                
+                        ByteBuffer csd1 =
+                                format.getByteBuffer("csd-1");
+                
+                
+                        if (csd0 != null) {
+                
+                            spsData = new byte[csd0.remaining()];
+                            csd0.get(spsData);
+                
+                        }
+                
+                
+                        if (csd1 != null) {
+                
+                            ppsData = new byte[csd1.remaining()];
+                            csd1.get(ppsData);
+                
+                        }
+                
+                
+                        PhoneLog.d(TAG,
+                                "H264 config received SPS="
+                                        + (spsData != null)
+                                        + " PPS="
+                                        + (ppsData != null));
+                
+                
+                    } catch(Exception e){
+                
+                        PhoneLog.e(TAG,
+                                "H264 config parse failed",
+                                e);
+                
+                    }
+                }            
+            
             });
 
             mEncoder.start();
