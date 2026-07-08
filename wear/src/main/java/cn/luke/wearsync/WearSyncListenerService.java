@@ -134,14 +134,22 @@ public class WearSyncListenerService extends WearableListenerService {
     }
 
     @Override
-    public void onChannelOpened(@NonNull ChannelClient.Channel channel) {
-        WearLog.d(TAG, "CAM-W004 onChannelOpened");
-
-        // 【优化4】去掉了 channel != null 恒真检测，直接聚焦于判断 Path 是否对齐
+    public void onChannelOpened(
+            @NonNull ChannelClient.Channel channel) {
+    
+        WearLog.d(
+                TAG,
+                "CAM-W004 path="
+                        + channel.getPath());
+    
+        super.onChannelOpened(channel);
+    
         if (CAMERA_PREVIEW_STREAM_PATH.equals(channel.getPath())) {
-            WearLog.d(TAG, "🌊 发现专属流媒体图传高速公路 [Channel Opened]！开始抽取高频帧字节流...");
-            WearLog.d(TAG, "CAM-W005 path=" + channel.getPath());
+    
+            WearLog.d(TAG, "CAM-W005");
+    
             readH264ChannelStream(channel);
+    
         }
     }
    
