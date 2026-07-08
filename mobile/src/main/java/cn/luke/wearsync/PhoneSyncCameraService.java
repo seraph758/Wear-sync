@@ -353,6 +353,9 @@ public void onOutputFormatChanged(
                                 .openChannel(nodeId, "/camera-preview-stream"));
 
                 PhoneLog.d(TAG, "CAM-P002 channel opened");
+                PhoneLog.d(
+        TAG,
+        "CAM-P002 path=" + channel.getPath());
 
                 mOutputStream = Tasks.await(
                         Wearable.getChannelClient(this)
