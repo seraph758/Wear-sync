@@ -159,8 +159,8 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
     private boolean alarmReady = false;
     private final Handler readyHandler = new Handler(Looper.getMainLooper());
     private Runnable pendingAlarmRunnable;
-    private static final int READY_CHECK_INTERVAL = 150;
-    private static final int READY_TIMEOUT = 5000;
+    private static final int READY_CHECK_INTERVAL = 100;
+    private static final int READY_TIMEOUT = 1500;
     private int readyCheckElapsed = 0;
         
 
