@@ -465,10 +465,16 @@ public void onOutputFormatChanged(
     }
 
     @Override
-    public void onDestroy() {
-        releaseAll();
-        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY);
-        instance = null;
-        super.onDestroy();
-    }
+public void onDestroy() {
+
+    PhoneLog.d(TAG, "CAM-P999 onDestroy");
+    
+    releaseAll();
+
+    lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY);
+
+    instance = null;
+
+    super.onDestroy();
+}
 }
