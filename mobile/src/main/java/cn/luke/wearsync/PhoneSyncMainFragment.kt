@@ -346,169 +346,194 @@ class PhoneSyncMainFragment : Fragment() {
                                 }
                             }
 
-                           // ==========================================
-                            // 4. 闹钟全域代点中心 (支持折叠与总开关)
-                            // ==========================================
-                            var selectedAlarmName by remember { mutableStateOf(sp.getString("selected_alarm_name", "Google 时钟") ?: "Google 时钟") }
-                            var selectedAlarmPkg by remember { mutableStateOf(sp.getString("selected_alarm_package", "com.google.android.deskclock") ?: "com.google.android.deskclock") }
-                            var dismissKeyText by remember { mutableStateOf(sp.getString("alarm_dismiss_key", "停止") ?: "停止") }
-                            var snoozeKeyText by remember { mutableStateOf(sp.getString("alarm_snooze_key", "延后") ?: "延后") }
-                            
-                            // 🎯 新增：总开关状态状态持久化读取（默认开启 true）
-                            var isAlarmMasterEnabled by remember { mutableStateOf(sp.getBoolean("alarm_proxy_master_switch", true)) }
-                            
-                            Card(
-                                onClick = { isAlarmExpanded = !isAlarmExpanded },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(16.dp),
-                                colors = CardDefaults.cardColors(containerColor = cardBgColor)
-                            ) {
-                                Column(modifier = Modifier.padding(16.dp)) {
-                                    // 始终暴露的标题栏
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text("闹钟全域代点中心", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = if (isAlarmMasterEnabled) textColor else textColor.copy(alpha = 0.5f))
-                                            Text("当前代点源: $selectedAlarmName", fontSize = 12.sp, color = if (isAlarmMasterEnabled) subTextColor else subTextColor.copy(alpha = 0.5f))
-                                        }
-                                        
-                                        // 🎯 新增：优雅的 Switch 总开关（阻止点击卡片触发折叠）
-                                        Switch(
-                                            checked = isAlarmMasterEnabled,
-                                            onCheckedChange = { isEnabled ->
-                                                isAlarmMasterEnabled = isEnabled
-                                                sp.edit().putBoolean("alarm_proxy_master_switch", isEnabled).apply()
-                                                PhoneLog.d("WearSync_Main", "🎛️ 闹钟代点总开关变更为: $isEnabled")
-                                            },
-                                            modifier = Modifier.padding(end = 8.dp),
-                                            // 屏蔽 Switch 自身的点击冒泡，防止点击 Switch 的同时把卡片折叠/展开了
-                                            interactionSource = remember { MutableInteractionSource() }
-                                        )
-                            
-                                        Text(text = if (isAlarmExpanded) "🔼" else "⚙️ 配置", fontSize = 14.sp, color = subTextColor)
-                                    }
-                            
-                                    // 点击展开后的详细配置和测试按钮
-                                    AnimatedVisibility(visible = isAlarmExpanded) {
-                                        Column(
-                                            modifier = Modifier.padding(top = 12.dp),
-                                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                                        ) {
-                                            HorizontalDivider(color = dividerColor)
-                            
-                                            // 🎯 核心逻辑：如果总开关关闭，下方整个面板全部通过其 enabled 属性进行熔断致灰
-                                            Button(
-                                                enabled = isAlarmMasterEnabled,
-                                                modifier = Modifier.fillMaxWidth(),
-                                                onClick = {
-                                                    PhoneSyncAppPicker.show(requireContext()) { pkg, name ->
-                                                        selectedAlarmName = name
-                                                        selectedAlarmPkg = pkg
-                                                        sp.edit().putString("selected_alarm_package", pkg).putString("selected_alarm_name", name).apply()
-                                                        PhoneLog.d("WearSync_Main", "🎯 切换时钟源: $name [$pkg]")
-                                                    }
-                                                }
-                                            ) {
-                                                Text("切换时钟源 (当前: $selectedAlarmName)", fontSize = 13.sp)
-                                            }
-                            
-                                            Text("目标包名: $selectedAlarmPkg", fontSize = 11.sp, color = if (isAlarmMasterEnabled) subTextColor else subTextColor.copy(alpha = 0.4f))
-                            
-                                            HorizontalDivider(color = textColor.copy(alpha = 0.1f), thickness = 1.dp)
-                            
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                            ) {
-                                                OutlinedTextField(
-                                                    enabled = isAlarmMasterEnabled,
-                                                    value = dismissKeyText,
-                                                    onValueChange = { newValue ->
-                                                        dismissKeyText = newValue
-                                                        val saveValue = if (newValue.trim().isEmpty()) "停止" else newValue.trim()
-                                                        sp.edit().putString("alarm_dismiss_key", saveValue).apply()
-                                                        PhoneLog.d("WearSync_Main", "💾 保存停止关键字: $saveValue")
-                                                    },
-                                                    label = { Text("停止关键字") },
-                                                    singleLine = true,
-                                                    modifier = Modifier.weight(1f),
-                                                    textStyle = TextStyle(fontSize = 14.sp, color = if (isAlarmMasterEnabled) textColor else textColor.copy(alpha = 0.4f))
-                                                )
-                            
-                                                OutlinedTextField(
-                                                    enabled = isAlarmMasterEnabled,
-                                                    value = snoozeKeyText,
-                                                    onValueChange = { newValue ->
-                                                        snoozeKeyText = newValue
-                                                        val saveValue = if (newValue.trim().isEmpty()) "延后" else newValue.trim()
-                                                        sp.edit().putString("alarm_snooze_key", saveValue).apply()
-                                                        PhoneLog.d("WearSync_Main", "💾 保存延后关键字: $saveValue")
-                                                    },
-                                                    label = { Text("延后关键字") },
-                                                    singleLine = true,
-                                                    modifier = Modifier.weight(1f),
-                                                    textStyle = TextStyle(fontSize = 14.sp, color = if (isAlarmMasterEnabled) textColor else textColor.copy(alpha = 0.4f))
-                                                )
-                                            }
-                            
-                                            HorizontalDivider(color = textColor.copy(alpha = 0.1f), thickness = 1.dp)
-                            
-                                            Text("🧪 业务流联调测试面板 (模拟手表端按键)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = if (isAlarmMasterEnabled) textColor else textColor.copy(alpha = 0.4f))
-                            
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                            ) {
-                                                Button(
-                                                    enabled = isAlarmMasterEnabled,
-                                                    modifier = Modifier.weight(1f),
-                                                    colors = ButtonDefaults.buttonColors(
-                                                        containerColor = Color(0xFFC62828),
-                                                        disabledContainerColor = Color(0xFFC62828).copy(alpha = 0.3f)
-                                                    ),
-                                                    onClick = {
-                                                        try {
-                                                            PhoneAlarmManager.handleWatchCommand(requireContext(), "DISMISS")
-                                                            PhoneLog.d("WearSync_Main", "🧪 模拟手表发送 DISMISS")
-                                                        } catch (e: Exception) {
-                                                            PhoneLog.e("WearSync_Main", "模拟停止失败: ${e.message}")
-                                                        }
-                                                    }
-                                                ) {
-                                                    Text("模拟停止测试", color = if (isAlarmMasterEnabled) Color.White else Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
-                                                }
-                            
-                                                Button(
-                                                    enabled = isAlarmMasterEnabled,
-                                                    modifier = Modifier.weight(1f),
-                                                    colors = ButtonDefaults.buttonColors(
-                                                        containerColor = Color(0xFFE65100),
-                                                        disabledContainerColor = Color(0xFFE65100).copy(alpha = 0.3f)
-                                                    ),
-                                                    onClick = {
-                                                        try {
-                                                            PhoneAlarmManager.handleWatchCommand(requireContext(), "SNOOZE")
-                                                            PhoneLog.d("WearSync_Main", "🧪 模拟手表发送 SNOOZE")
-                                                        } catch (e: Exception) {
-                                                            PhoneLog.e("WearSync_Main", "模拟延后失败: ${e.message}")
-                                                        }
-                                                    }
-                                                ) {
-                                                    Text("模拟延后测试", color = if (isAlarmMasterEnabled) Color.White else Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
-                                                }
-                                            }
-                            
-                                            Text(
-                                                "💡 测试：设置一个即将响起的闹钟，响起后点击测试按钮，观察是否和手表真实点击流程一致。",
-                                                fontSize = 10.sp, color = if (isAlarmMasterEnabled) subTextColor else subTextColor.copy(alpha = 0.4f), lineHeight = 14.sp
-                                            )
-                                        }
-                                    }
-                                }
+   // ==========================================
+// 4. 闹钟全域代点中心 (支持折叠与总开关)
+// ==========================================
+var selectedAlarmName by remember { mutableStateOf(sp.getString("selected_alarm_name", "Google 时钟") ?: "Google 时钟") }
+var selectedAlarmPkg by remember { mutableStateOf(sp.getString("selected_alarm_package", "com.google.android.deskclock") ?: "com.google.android.deskclock") }
+var dismissKeyText by remember { mutableStateOf(sp.getString("alarm_dismiss_key", "停止") ?: "停止") }
+var snoozeKeyText by remember { mutableStateOf(sp.getString("alarm_snooze_key", "延后") ?: "延后") }
+
+// 总开关状态状态持久化读取（默认开启 true）
+var isAlarmMasterEnabled by remember { mutableStateOf(sp.getBoolean("alarm_proxy_master_switch", true)) }
+
+Card(
+    onClick = { isAlarmExpanded = !isAlarmExpanded },
+    modifier = Modifier.fillMaxWidth(),
+    shape = RoundedCornerShape(16.dp),
+    colors = CardDefaults.cardColors(containerColor = cardBgColor)
+) {
+    Column(modifier = Modifier.padding(16.dp)) {
+        // 始终暴露的标题栏（去掉了 Switch，更清爽）
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "闹钟全域代点中心", 
+                    fontSize = 16.sp, 
+                    fontWeight = FontWeight.Bold, 
+                    color = if (isAlarmMasterEnabled) textColor else textColor.copy(alpha = 0.5f)
+                )
+                Text(
+                    text = "当前代点源: $selectedAlarmName" + if (isAlarmMasterEnabled) "" else " (已关闭)", 
+                    fontSize = 12.sp, 
+                    color = if (isAlarmMasterEnabled) subTextColor else subTextColor.copy(alpha = 0.5f)
+                )
+            }
+
+            Text(text = if (isAlarmExpanded) "🔼" else "⚙️ 配置", fontSize = 14.sp, color = subTextColor)
+        }
+
+        // 点击展开后的详细配置和测试按钮
+        AnimatedVisibility(visible = isAlarmExpanded) {
+            Column(
+                modifier = Modifier.padding(top = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                HorizontalDivider(color = dividerColor)
+
+                // 🎯 变更位置：切换按钮与总开关并排
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // 切换时钟源按钮（受总开关控制）
+                    Button(
+                        enabled = isAlarmMasterEnabled,
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            PhoneSyncAppPicker.show(requireContext()) { pkg, name ->
+                                selectedAlarmName = name
+                                selectedAlarmPkg = pkg
+                                sp.edit().putString("selected_alarm_package", pkg).putString("selected_alarm_name", name).apply()
+                                PhoneLog.d("WearSync_Main", "🎯 切换时钟源: $name [$pkg]")
                             }
+                        }
+                    ) {
+                        Text("切换时钟源 (当前: $selectedAlarmName)", fontSize = 13.sp)
+                    }
+
+                    // 移到此处的总开关（此时不需要处理点击冒泡了，因为处于展开面板内部）
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = if (isAlarmMasterEnabled) "已启用" else "已禁用", 
+                            fontSize = 12.sp, 
+                            color = if (isAlarmMasterEnabled) textColor else textColor.copy(alpha = 0.5f)
+                        )
+                        Switch(
+                            checked = isAlarmMasterEnabled,
+                            onCheckedChange = { isEnabled ->
+                                isAlarmMasterEnabled = isEnabled
+                                sp.edit().putBoolean("alarm_proxy_master_switch", isEnabled).apply()
+                                PhoneLog.d("WearSync_Main", "🎛️ 闹钟代点总开关变更为: $isEnabled")
+                            }
+                        )
+                    }
+                }
+
+                Text("目标包名: $selectedAlarmPkg", fontSize = 11.sp, color = if (isAlarmMasterEnabled) subTextColor else subTextColor.copy(alpha = 0.4f))
+
+                HorizontalDivider(color = textColor.copy(alpha = 0.1f), thickness = 1.dp)
+
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        enabled = isAlarmMasterEnabled,
+                        value = dismissKeyText,
+                        onValueChange = { newValue ->
+                            dismissKeyText = newValue
+                            val saveValue = if (newValue.trim().isEmpty()) "停止" else newValue.trim()
+                            sp.edit().putString("alarm_dismiss_key", saveValue).apply()
+                            PhoneLog.d("WearSync_Main", "💾 保存停止关键字: $saveValue")
+                        },
+                        label = { Text("停止关键字") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                        textStyle = TextStyle(fontSize = 14.sp, color = if (isAlarmMasterEnabled) textColor else textColor.copy(alpha = 0.4f))
+                    )
+
+                    OutlinedTextField(
+                        enabled = isAlarmMasterEnabled,
+                        value = snoozeKeyText,
+                        onValueChange = { newValue ->
+                            snoozeKeyText = newValue
+                            val saveValue = if (newValue.trim().isEmpty()) "延后" else newValue.trim()
+                            sp.edit().putString("alarm_snooze_key", saveValue).apply()
+                            PhoneLog.d("WearSync_Main", "💾 保存延后关键字: $saveValue")
+                        },
+                        label = { Text("延后关键字") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                        textStyle = TextStyle(fontSize = 14.sp, color = if (isAlarmMasterEnabled) textColor else textColor.copy(alpha = 0.4f))
+                    )
+                }
+
+                HorizontalDivider(color = textColor.copy(alpha = 0.1f), thickness = 1.dp)
+
+                Text("🧪 业务流联调测试面板 (模拟手表端按键)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = if (isAlarmMasterEnabled) textColor else textColor.copy(alpha = 0.4f))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        enabled = isAlarmMasterEnabled,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFC62828),
+                            disabledContainerColor = Color(0xFFC62828).copy(alpha = 0.3f)
+                        ),
+                        onClick = {
+                            try {
+                                PhoneAlarmManager.handleWatchCommand(requireContext(), "DISMISS")
+                                PhoneLog.d("WearSync_Main", "🧪 模拟手表发送 DISMISS")
+                            } catch (e: Exception) {
+                                PhoneLog.e("WearSync_Main", "模拟停止失败: ${e.message}")
+                            }
+                        }
+                    ) {
+                        Text("模拟停止测试", color = if (isAlarmMasterEnabled) Color.White else Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
+                    }
+
+                    Button(
+                        enabled = isAlarmMasterEnabled,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFE65100),
+                            disabledContainerColor = Color(0xFFE65100).copy(alpha = 0.3f)
+                        ),
+                        onClick = {
+                            try {
+                                PhoneAlarmManager.handleWatchCommand(requireContext(), "SNOOZE")
+                                PhoneLog.d("WearSync_Main", "🧪 模拟手表发送 SNOOZE")
+                            } catch (e: Exception) {
+                                PhoneLog.e("WearSync_Main", "模拟延后失败: ${e.message}")
+                            }
+                        }
+                    ) {
+                        Text("模拟延后测试", color = if (isAlarmMasterEnabled) Color.White else Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
+                    }
+                }
+
+                Text(
+                    "💡 测试：设置一个即将响起的闹钟，响起后点击测试按钮，观察是否和手表真实点击流程一致。",
+                    fontSize = 10.sp, color = if (isAlarmMasterEnabled) subTextColor else subTextColor.copy(alpha = 0.4f), lineHeight = 14.sp
+                )
+            }
+        }
+    }
+}
+// ==========================================
+
                             // ==========================================
                             // 5. 远程相机控场中心 (支持折叠)
                             // ==========================================
