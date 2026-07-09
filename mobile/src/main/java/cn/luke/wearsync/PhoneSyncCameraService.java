@@ -135,7 +135,16 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
     }
 
     public void startStreaming(String nodeId) {
-        if (nodeId == null || nodeId.isEmpty()) return;
+        PhoneLog.d(
+            TAG,
+            "startStreaming node="
+                    + nodeId
+                    + " state="
+                    + getState());
+        if (nodeId == null || nodeId.isEmpty()) {
+            PhoneLog.d(TAG,"nodeId invalid");
+            return;
+        }
         
         CameraState currentState = getState();
         
