@@ -42,7 +42,8 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
     private long totalFramesDecoded = 0;
     private long lastLogTime = 0;
     private boolean isFirstFrameDecoded = false;
-    private volatile boolean ischanReady = false;
+    private volatile boolean isSurfaceReady = false;
+    private volatile boolean isChannelReady = false;
     private volatile boolean decoderReady = false;
     private byte[] pendingSps;
     private byte[] pendingPps;
