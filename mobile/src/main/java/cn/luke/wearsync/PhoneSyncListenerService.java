@@ -129,7 +129,12 @@ public class PhoneSyncListenerService extends WearableListenerService {
                 PhoneLog.d(TAG, "CAMERA_READY synced");
         
                 PhoneSyncCameraService service = PhoneSyncCameraService.getInstance();
-        
+
+                PhoneLog.d(
+                    TAG,
+                    "service=" + service
+                            + " nodeId=" + nodeId);
+
                 if (service != null) {
                     service.startStreaming(nodeId);
                 }
