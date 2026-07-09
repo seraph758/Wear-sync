@@ -37,6 +37,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class PhoneSyncCameraService extends Service implements LifecycleOwner {
 
     private static final String TAG = "WearSync_CameraService";
+    private String mPendingStreamingNodeId = null; 
 
     public static final String ACTION_START_CAMERA = "cn.luke.wearsync.ACTION_START_CAMERA";
     public static final String ACTION_STOP_CAMERA  = "cn.luke.wearsync.ACTION_STOP_CAMERA";
