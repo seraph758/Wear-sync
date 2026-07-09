@@ -42,8 +42,7 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
     private long totalFramesDecoded = 0;
     private long lastLogTime = 0;
     private boolean isFirstFrameDecoded = false;
-    private volatile boolean isSurfaceReady = false;
-    private volatile boolean isChannelReady = false;
+    private volatile boolean ischanReady = false;
     private volatile boolean decoderReady = false;
     private byte[] pendingSps;
     private byte[] pendingPps;
@@ -208,7 +207,6 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
         WearLog.d(TAG, "CAM-W010 feed " + length);
         if (!decoderReady
                 || !isSurfaceReady
-                || !isChannelReady
                 || mDecoder == null) {
         
             return;
@@ -265,7 +263,7 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
             WearLog.e(TAG, "⚠️ [图传硬解异常] 帧流灌入硬解管线发生拥堵异常波动: " + e.getMessage());
         }
     }
-    public void onChannelReady() {
+        public void onChannelReady() {
     
         if (isChannelReady) {
             return;
@@ -279,7 +277,6 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
             WearLog.d(TAG, "CAM-W002 Decoder Ready");
         }
     }
-    
     @Override
     public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
         WearLog.d(TAG, "🖥️ [Surface状态] surfaceChanged 触发 ➔ 画布几何尺寸或格式发生变更: w=" + width + ", h=" + height);
@@ -353,7 +350,6 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
         }
         isUserExiting = true;
         isSurfaceReady = false;
-        isChannelReady = false;
         WearLog.w(TAG, "🧹 [清场熔断] ━━━━━━━━ 开启手表相机 UI 完整退出销毁机制 ━━━━━━━━");
         
         // 💡 核心回收：清空常亮旗帜，把屏幕控制权安全还给系统省电策略
@@ -416,7 +412,7 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
         if(instance==this){
                 instance=null;
             }
-       cleanExit(false);
+       cleanExit(true);
         super.onDestroy();
         WearLog.w(TAG, "🏳️ [生命周期] onDestroy ─── 手表端图传观景窗 Activity 全生命周期安全终结 ───");
     }
