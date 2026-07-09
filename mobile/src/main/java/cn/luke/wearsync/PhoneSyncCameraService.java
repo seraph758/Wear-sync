@@ -297,6 +297,11 @@ public void onOutputFormatChanged(
                     setState(CameraState.CAMERA_READY);
                     // 2. 调用独立出来的通知方法
                     sendCameraReady();
+                    if (mPendingStreamingNodeId != null) {
+                PhoneLog.d(TAG, "🚀 檢測到積壓請求，開始推流...");
+                startStreaming(mPendingStreamingNodeId);
+                mPendingStreamingNodeId = null;
+            }
 
                 } catch (Exception e) {
                     PhoneLog.e(TAG, "Camera target binding failed", e);
