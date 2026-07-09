@@ -159,6 +159,7 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
     }
 
     private void stopFlow() {
+        PhoneLog.d(TAG, "CAM-P997 stopFlow");
         setState(CameraState.STOPPING);
         releaseAll();
         stopForeground(true);
@@ -437,6 +438,7 @@ public void onOutputFormatChanged(
        ========================= */
 
     private void releaseAll() {
+        PhoneLog.d(TAG, "CAM-P998 releaseAll");
         try { if (mEncoder != null) { mEncoder.stop(); mEncoder.release(); } } catch (Exception ignored) {}
         mEncoder = null;
 
