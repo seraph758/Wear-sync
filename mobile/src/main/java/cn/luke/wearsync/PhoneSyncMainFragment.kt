@@ -9,6 +9,7 @@ import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import android.content.ComponentName
@@ -28,37 +29,40 @@ import androidx.compose.ui.unit.sp
 import androidx.fragment.app.Fragment
 import com.google.android.gms.wearable.CapabilityClient
 import com.google.android.gms.wearable.Wearable
+import com.google.android.gms.wearable.MessageClient
+import com.google.android.gms.wearable.MessageEvent
 import androidx.compose.ui.graphics.Color
 import org.json.JSONObject
 import java.nio.charset.StandardCharsets
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.foundation.interaction.MutableInteractionSource
 
-class PhoneSyncMainFragment : Fragment() {
+class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListener {
 
     private val isNotificationAllowedState = mutableStateOf(false)
     private val isCameraAllowedState = mutableStateOf(false)
-    private val isisConnectedState = mutableStateOf(false) // 保持您原始变量名或更正为 isConnectedState
     private val isConnectedState = mutableStateOf(false)
     private var capabilityChangedListener: CapabilityClient.OnCapabilityChangedListener? = null
 
+    // 🧪 响应式状态：用于在手机主界面实时挂载展示手表的佩戴状态
+    private val watchWearState = mutableStateOf("未知 (等待手表上报...)")
+
     private val uiLogDebugSwitch = mutableStateOf(PhoneLog.DEBUG)
     private val uiWearLogDebugSwitch = mutableStateOf(true)
-    
     private val alarmPickerLauncher =
-        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-            val pkg = it.data?.getStringExtra("selected_alarm_package")
-            val name = it.data?.getStringExtra("selected_alarm_name")
+    registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        val pkg = it.data?.getStringExtra("selected_alarm_package")
+        val name = it.data?.getStringExtra("selected_alarm_name")
 
-            if (pkg != null) {
-                requireContext()
-                    .getSharedPreferences("dndsync_prefs", Context.MODE_PRIVATE)
-                    .edit()
-                    .putString("selected_alarm_package", pkg)
-                    .putString("selected_alarm_name", name ?: pkg)
-                    .apply()
-            }
+        if(pkg != null){
+            requireContext()
+                .getSharedPreferences("dndsync_prefs", Context.MODE_PRIVATE)
+                .edit()
+                .putString("selected_alarm_package", pkg)
+                .putString("selected_alarm_name", name ?: pkg)
+                .apply()
         }
+    }
 
     private val requestCameraPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -68,6 +72,22 @@ class PhoneSyncMainFragment : Fragment() {
             PhoneLog.d("WearSync_Main", "📸 相机硬件权限申请成功")
         } else {
             PhoneLog.w("WearSync_Main", "⚠️ 相机硬件权限被拒绝")
+        }
+    }
+
+    // 🚀 底层联调：实时拦截并处理来自三星手表端的离腕报文
+    override fun onMessageReceived(messageEvent: MessageEvent) {
+        if (messageEvent.path == "/wearsync-body-status") {
+            val rawStatus = String(messageEvent.data, StandardCharsets.UTF_8)
+            activity?.runOnUiThread {
+                if (rawStatus == "off_body") {
+                    watchWearState.value = "🚫 已摘下 (Off-Body)"
+                    PhoneLog.d("WearSync_Main", "📥 收到解绑信号：手表已被用户摘下。")
+                } else if (rawStatus == "on_body") {
+                    watchWearState.value = "🟢 已佩戴 (On-Body)"
+                    PhoneLog.d("WearSync_Main", "📥 收到绑定信号：手表已重新佩戴。")
+                }
+            }
         }
     }
 
@@ -98,13 +118,12 @@ class PhoneSyncMainFragment : Fragment() {
                     var isPermissionExpanded by remember { mutableStateOf(false) }
                     var isFileTransferExpanded by remember { mutableStateOf(false) }
 
-                    // 勿扰联动变量读取与保存闭包
+                    // 勿扰联动变量
                     var mask by remember { mutableStateOf(sp.getInt("dnd_sync_mask", 15)) }
                     var masterOn by remember(mask) { mutableStateOf((mask and 1) != 0) }
                     var vibrateOn by remember(mask) { mutableStateOf((mask and 2) != 0) }
                     var sleepOn by remember(mask) { mutableStateOf((mask and 4) != 0) }
                     var powerOn by remember(mask) { mutableStateOf((mask and 8) != 0) }
-
                     val updateMask = { newMaster: Boolean, newVibrate: Boolean, newSleep: Boolean, newPower: Boolean ->
                         var newMask = 0
                         if (newMaster) newMask = newMask or 1
@@ -114,15 +133,9 @@ class PhoneSyncMainFragment : Fragment() {
                         mask = newMask
                         sp.edit().putInt("dnd_sync_mask", newMask).apply()
                         PhoneLog.d("WearSync_Main", "⚙️ DND联动配置已保存 mask=$newMask")
-                        
-                        val intent = Intent("cn.luke.wearsync.DND_MASK_CHANGED").apply {
-                            putExtra("dnd_sync_mask", newMask)
-                            setPackage(requireContext().packageName)
-                        }
-                        requireContext().sendBroadcast(intent)
                     }
 
-                    // 闹钟全域代点中心变量
+                    // 闹钟全域代点变量
                     var selectedAlarmName by remember { mutableStateOf(sp.getString("selected_alarm_name", "Google 时钟") ?: "Google 时钟") }
                     var selectedAlarmPkg by remember { mutableStateOf(sp.getString("selected_alarm_package", "com.google.android.deskclock") ?: "com.google.android.deskclock") }
                     var dismissKeyText by remember { mutableStateOf(sp.getString("alarm_dismiss_key", "停止") ?: "停止") }
@@ -148,19 +161,46 @@ class PhoneSyncMainFragment : Fragment() {
                                 modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)
                             )
 
+                            // ==========================================================
+                            // 🧪 临时增加测试卡片：三星手表离腕状态响应式检测区
+                            // ==========================================================
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = if (isDark) Color(0xFF251818) else Color(0xFFFFF0F0))
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Text("🧪 离腕检测沙盒中心 (业务调通后可整块删除)", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFFE53935))
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text("当前手表佩戴状态:", fontSize = 13.sp, color = textColor)
+                                        Text(
+                                            text = watchWearState.value, 
+                                            fontSize = 14.sp, 
+                                            fontWeight = FontWeight.Bold, 
+                                            color = if (watchWearState.value.contains("🟢")) Color(0xFF4CAF50) else Color(0xFFE53935)
+                                        )
+                                    }
+                                }
+                            }
+
                             // ==========================================
-                            // 第一排：勿扰联动 & 闹钟代点
+                            // 第一排：勿扰联动 & 闹钟代点 (分立按钮，共用下方展开槽)
                             // ==========================================
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
-                                    // 勿扰联动
+                                    // 勿扰联动按钮卡片
                                     Card(
                                         onClick = {
                                             isDndExpanded = !isDndExpanded
-                                            if (isDndExpanded) isAlarmExpanded = false
+                                            if (isDndExpanded) isAlarmExpanded = false // 互斥展开
                                         },
                                         modifier = Modifier.weight(1f).height(72.dp),
                                         shape = RoundedCornerShape(16.dp),
@@ -175,15 +215,18 @@ class PhoneSyncMainFragment : Fragment() {
                                                 Text("勿扰联动", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = textColor)
                                                 Text("同步状态控制", fontSize = 11.sp, color = subTextColor)
                                             }
-                                            Text(text = if (masterOn) "🟢 🌙" else "⚪ 🌙", fontSize = 15.sp)
+                                            Text(
+                                                text = if (masterOn) "🟢 🌙" else "⚪ 🌙",
+                                                fontSize = 15.sp
+                                            )
                                         }
                                     }
 
-                                    // 闹钟代点
+                                    // 闹钟代点按钮卡片
                                     Card(
                                         onClick = {
                                             isAlarmExpanded = !isAlarmExpanded
-                                            if (isAlarmExpanded) isDndExpanded = false
+                                            if (isAlarmExpanded) isDndExpanded = false // 互斥展开
                                         },
                                         modifier = Modifier.weight(1f).height(72.dp),
                                         shape = RoundedCornerShape(16.dp),
@@ -256,54 +299,43 @@ class PhoneSyncMainFragment : Fragment() {
                                                             PhoneLog.d("WearSync_Main", "🎯 切换时钟源: $name [$pkg]")
                                                         }
                                                     }
-                                                ) { Text("切换时钟源 (当前: $selectedAlarmName)", fontSize = 13.sp) }
+                                                ) { Text("切换时钟源", fontSize = 12.sp) }
 
-                                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = DashboardTokens.padding(4.dp)) {
                                                     Text(text = if (isAlarmMasterEnabled) "已启用" else "已禁用", fontSize = 12.sp, color = textColor)
                                                     Switch(checked = isAlarmMasterEnabled, onCheckedChange = { isEnabled ->
                                                         isAlarmMasterEnabled = isEnabled
                                                         sp.edit().putBoolean("alarm_proxy_master_switch", isEnabled).apply()
-                                                        PhoneLog.d("WearSync_Main", "🎛️ 闹钟代点总开关变更为: $isEnabled")
                                                     })
                                                 }
                                             }
-                                            Text("目标包名: $selectedAlarmPkg", fontSize = 11.sp, color = if (isAlarmMasterEnabled) subTextColor else subTextColor.copy(alpha = 0.4f))
+                                            Text("目标包名: $selectedAlarmPkg", fontSize = 11.sp, color = subTextColor)
                                             HorizontalDivider(color = dividerColor)
                                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                                 OutlinedTextField(
                                                     enabled = isAlarmMasterEnabled, value = dismissKeyText,
-                                                    onValueChange = { newValue ->
-                                                        dismissKeyText = newValue
-                                                        val saveValue = if (newValue.trim().isEmpty()) "停止" else newValue.trim()
-                                                        sp.edit().putString("alarm_dismiss_key", saveValue).apply()
-                                                        PhoneLog.d("WearSync_Main", "💾 保存停止关键字: $saveValue")
-                                                    },
-                                                    label = { Text("停止关键字") }, singleLine = true, modifier = Modifier.weight(1f), textStyle = TextStyle(fontSize = 14.sp)
+                                                    onValueChange = { dismissKeyText = it; sp.edit().putString("alarm_dismiss_key", it).apply() },
+                                                    label = { Text("停止关键字") }, singleLine = true, modifier = Modifier.weight(1f), textStyle = TextStyle(fontSize = 13.sp)
                                                 )
                                                 OutlinedTextField(
                                                     enabled = isAlarmMasterEnabled, value = snoozeKeyText,
-                                                    onValueChange = { newValue ->
-                                                        snoozeKeyText = newValue
-                                                        val saveValue = if (newValue.trim().isEmpty()) "延后" else newValue.trim()
-                                                        sp.edit().putString("alarm_snooze_key", saveValue).apply()
-                                                        PhoneLog.d("WearSync_Main", "💾 保存延后关键字: $saveValue")
-                                                    },
-                                                    label = { Text("延后关键字") }, singleLine = true, modifier = Modifier.weight(1f), textStyle = TextStyle(fontSize = 14.sp)
+                                                    onValueChange = { snoozeKeyText = it; sp.edit().putString("alarm_snooze_key", it).apply() },
+                                                    label = { Text("延后关键字") }, singleLine = true, modifier = Modifier.weight(1f), textStyle = TextStyle(fontSize = 13.sp)
                                                 )
                                             }
                                             HorizontalDivider(color = dividerColor)
-                                            Text("🧪 业务流联调测试面板 (模拟手表端按键)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = textColor)
+                                            Text("🧪 业务流联调测试面板", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = textColor)
                                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                                 Button(
                                                     enabled = isAlarmMasterEnabled, modifier = Modifier.weight(1f),
                                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
-                                                    onClick = { try { PhoneAlarmManager.handleWatchCommand(requireContext(), "DISMISS"); PhoneLog.d("WearSync_Main", "🧪 模拟手表发送 DISMISS") } catch (e: Exception) { PhoneLog.e("WearSync_Main", "模拟停止失败: ${e.message}") } }
-                                                ) { Text("模拟停止测试", color = Color.White, fontSize = 12.sp) }
+                                                    onClick = { try { PhoneAlarmManager.handleWatchCommand(requireContext(), "DISMISS") } catch (_: Exception) {} }
+                                                ) { Text("模拟停止测试", color = Color.White, fontSize = 11.sp) }
                                                 Button(
                                                     enabled = isAlarmMasterEnabled, modifier = Modifier.weight(1f),
                                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE65100)),
-                                                    onClick = { try { PhoneAlarmManager.handleWatchCommand(requireContext(), "SNOOZE"); PhoneLog.d("WearSync_Main", "🧪 模拟手表发送 SNOOZE") } catch (e: Exception) { PhoneLog.e("WearSync_Main", "模拟延后失败: ${e.message}") } }
-                                                ) { Text("模拟延后测试", color = Color.White, fontSize = 12.sp) }
+                                                    onClick = { try { PhoneAlarmManager.handleWatchCommand(requireContext(), "SNOOZE") } catch (_: Exception) {} }
+                                                ) { Text("模拟延后测试", color = Color.White, fontSize = 11.sp) }
                                             }
                                         }
                                     }
@@ -311,14 +343,14 @@ class PhoneSyncMainFragment : Fragment() {
                             }
 
                             // ==========================================
-                            // 第二排：相机控场 & 终端调试
+                            // 第二排：相机控场 & 终端调试 (分立按钮，共用下方展开槽)
                             // ==========================================
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
-                                    // 相机控场
+                                    // 相机控场卡片
                                     Card(
                                         onClick = {
                                             isCameraExpanded = !isCameraExpanded
@@ -341,7 +373,7 @@ class PhoneSyncMainFragment : Fragment() {
                                         }
                                     }
 
-                                    // 终端调试
+                                    // 终端调试卡片
                                     Card(
                                         onClick = {
                                             isLogExpanded = !isLogExpanded
@@ -391,7 +423,7 @@ class PhoneSyncMainFragment : Fragment() {
                                                             try {
                                                                 val json = JSONObject().apply { put("sender", "phone"); put("type", "camera_control"); put("action", "START_CAMERA"); put("timestamp", System.currentTimeMillis()) }
                                                                 Wearable.getMessageClient(requireContext()).sendMessage(nodeId, "/wear-universal-sync", json.toString().toByteArray(StandardCharsets.UTF_8))
-                                                            } catch (e: Exception) { PhoneLog.e("WearSync_Main", "向手表发送启动相机失败: ${e.message}") }
+                                                            } catch (_: Exception) {}
                                                         }.start()
                                                     }
                                                 }
@@ -408,7 +440,7 @@ class PhoneSyncMainFragment : Fragment() {
                                                             try {
                                                                 val json = JSONObject().apply { put("sender", "phone"); put("type", "camera_control"); put("action", "FORCE_QUIT_CAMERA"); put("timestamp", System.currentTimeMillis()) }
                                                                 Wearable.getMessageClient(requireContext()).sendMessage(nodeId, "/wear-universal-sync", json.toString().toByteArray(StandardCharsets.UTF_8))
-                                                            } catch (e: Exception) { PhoneLog.e("WearSync_Main", "向手表发送关闭相机失败: ${e.message}") }
+                                                            } catch (_: Exception) {}
                                                         }.start()
                                                     }
                                                 }
@@ -434,8 +466,33 @@ class PhoneSyncMainFragment : Fragment() {
                                                 Switch(checked = uiWearLogDebugSwitch.value, onCheckedChange = { isChecked -> uiWearLogDebugSwitch.value = isChecked; sp.edit().putBoolean("wear_log_debug_visible", isChecked).apply() })
                                             }
                                             HorizontalDivider(color = dividerColor)
-                                            Button(modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary), onClick = { try { startActivity(Intent().apply { component = ComponentName("cn.luke.wearsync", "cn.luke.wearsync.PhoneLogActivity") }) } catch (e: Exception) { PhoneLog.e("WearSync_Main", "打开独立日志界面失败: ${e.message}") } }) {
-                                                Text("进入独立日记观察屏", fontSize = 13.sp)
+                                            
+                                            // 🚀 替换升级：加入带安全过滤与温柔引导的“全局悬浮窗挂载”按钮
+                                            Button(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                                                onClick = {
+                                                    if (Settings.canDrawOverlays(requireContext())) {
+                                                        try {
+                                                            val intent = Intent(requireContext(), PhoneLogFloatingService::class.java)
+                                                            requireContext().startService(intent)
+                                                            PhoneLog.d("WearSync_Main", "📂 成功挂载全局悬浮日志小窗")
+                                                        } catch (e: Exception) {
+                                                            PhoneLog.e("WearSync_Main", "启动悬浮窗服务失败: ${e.message}")
+                                                        }
+                                                    } else {
+                                                        Toast.makeText(requireContext(), "请先授予 WearSync 后台悬浮窗权限", Toast.LENGTH_LONG).show()
+                                                        try {
+                                                            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, android.net.Uri.parse("package:${requireContext().packageName}"))
+                                                            startActivity(intent)
+                                                        } catch (e: Exception) {
+                                                            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)
+                                                            startActivity(intent)
+                                                        }
+                                                    }
+                                                }
+                                            ) {
+                                                Text("挂载全局悬浮日志屏", fontSize = 13.sp)
                                             }
                                         }
                                     }
@@ -443,14 +500,14 @@ class PhoneSyncMainFragment : Fragment() {
                             }
 
                             // ==========================================
-                            // 第三排：连接状态 & 核心接管权限 (已移至最下方)
+                            // 第三排：连接状态 & 核心接管权限 (已移到下方，分立按钮，共用展开槽)
                             // ==========================================
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
-                                    // 连接状态检测
+                                    // 连接状态卡片
                                     Card(
                                         onClick = {
                                             isConnectionExpanded = !isConnectionExpanded
@@ -469,11 +526,14 @@ class PhoneSyncMainFragment : Fragment() {
                                                 Text("连接状态", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = textColor)
                                                 Text("骨干网络检测", fontSize = 11.sp, color = subTextColor)
                                             }
-                                            Text(text = if (isConnectedState.value) "🟢" else "🔴", fontSize = 14.sp)
+                                            Text(
+                                                text = if (isConnectedState.value) "🟢" else "🔴",
+                                                fontSize = 14.sp
+                                            )
                                         }
                                     }
 
-                                    // 核心接管权限
+                                    // 核心接管权限卡片
                                     Card(
                                         onClick = {
                                             isPermissionExpanded = !isPermissionExpanded
@@ -492,12 +552,15 @@ class PhoneSyncMainFragment : Fragment() {
                                                 Text("核心权限", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = textColor)
                                                 Text("底层硬件授信", fontSize = 11.sp, color = subTextColor)
                                             }
-                                            Text(text = if (isNotificationAllowedState.value && isCameraAllowedState.value) "🟢" else "⚠️", fontSize = 14.sp)
+                                            Text(
+                                                text = if (isNotificationAllowedState.value && isCameraAllowedState.value) "🟢" else "⚠️",
+                                                fontSize = 14.sp
+                                            )
                                         }
                                     }
                                 }
 
-                                // 连接状态展开槽
+                                // 连接状态展开空间
                                 AnimatedVisibility(visible = isConnectionExpanded) {
                                     Card(
                                         modifier = Modifier.fillMaxWidth(),
@@ -507,14 +570,14 @@ class PhoneSyncMainFragment : Fragment() {
                                         Column(modifier = Modifier.padding(14.dp)) {
                                             Text(
                                                 text = if (isConnectedState.value) "骨干网络畅通。正在通过 GMS Wearable CapabilityClient 实时监听手表节点的动态响应。" 
-                                                      else "未检测到处于 activity 状态的手表节点。请检查手表是否开机、蓝牙是否连接、或 Wear OS 专属配对 App 是否在后台运行。",
+                                                      else "未检测到处于活动状态的手表节点。请检查手表是否开机、蓝牙是否连接、或 Wear OS 专属配对 App 是否在后台运行。",
                                                 fontSize = 13.sp, color = textColor, lineHeight = 18.sp
                                             )
                                         }
                                     }
                                 }
 
-                                // 核心权限展开槽
+                                // 核心权限展开空间
                                 AnimatedVisibility(visible = isPermissionExpanded) {
                                     Card(
                                         modifier = Modifier.fillMaxWidth(),
@@ -522,7 +585,7 @@ class PhoneSyncMainFragment : Fragment() {
                                         colors = CardDefaults.cardColors(containerColor = cardBgColor)
                                     ) {
                                         Row(modifier = Modifier.padding(12.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                            // 通知授权
+                                            // 通知卡片
                                             Card(modifier = Modifier.weight(1f).height(110.dp), shape = RoundedCornerShape(8.dp), colors = CardDefaults.cardColors(containerColor = backgroundColor)) {
                                                 Column(modifier = Modifier.padding(10.dp).fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
                                                     Column {
@@ -536,7 +599,7 @@ class PhoneSyncMainFragment : Fragment() {
                                                     }
                                                 }
                                             }
-                                            // 相机授权
+                                            // 相机卡片
                                             Card(modifier = Modifier.weight(1f).height(110.dp), shape = RoundedCornerShape(8.dp), colors = CardDefaults.cardColors(containerColor = backgroundColor)) {
                                                 Column(modifier = Modifier.padding(10.dp).fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
                                                     Column {
@@ -556,7 +619,7 @@ class PhoneSyncMainFragment : Fragment() {
                             }
 
                             // ==========================================================
-                            // 第四排：跨端文件传输枢纽 (独立单行)
+                            // 第四排：跨端文件传输枢纽 (独立一行)
                             // ==========================================================
                             Card(
                                 onClick = { isFileTransferExpanded = !isFileTransferExpanded },
@@ -601,11 +664,17 @@ class PhoneSyncMainFragment : Fragment() {
         checkNotificationPermission()
         isCameraAllowedState.value = requireContext().checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
         registerConnectivityListener()
+        
+        // 🚀 核心增加：当界面在前台活跃时，注册接收手表的 Message 报文监听
+        Wearable.getMessageClient(requireContext()).addListener(this)
     }
 
     override fun onPause() {
         super.onPause()
         unregisterConnectivityListener()
+        
+        // 🚀 核心增加：当界面退到后台时，注销监听释放资源
+        Wearable.getMessageClient(requireContext()).removeListener(this)
     }
 
     private fun checkNotificationPermission() {
