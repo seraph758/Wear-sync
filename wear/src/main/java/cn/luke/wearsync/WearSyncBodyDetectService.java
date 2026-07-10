@@ -73,7 +73,7 @@ public class WearSyncBodyDetectService extends WearableListenerService implement
                         "/wearsync-body-status", 
                         status.getBytes(StandardCharsets.UTF_8)
                 ).addOnFailureListener(e -> {
-                    Log.e(TAG, "发送状态到手机失败: " + e.getMessage());
+                    WearLog.e(TAG, "发送状态到手机失败: " + e.getMessage());
                 });
             }
         });
