@@ -122,12 +122,13 @@ public class PhoneSyncListenerService extends WearableListenerService {
     // ============================================================
    private void handleCamera(JSONObject json, String action) {
 
+       PhoneLog.d(TAG, "P-080 handleCamera action=" + action);
             String nodeId = WearSyncState.getNodeId(this);
         
             if ("CAMERA_READY".equalsIgnoreCase(action)) {
-        
-                PhoneLog.d(TAG, "CAMERA_READY synced");
-        
+
+                PhoneLog.d(TAG, "P-081 CAMERA_READY branch");
+            
                 PhoneSyncCameraService service = PhoneSyncCameraService.getInstance();
 
                 PhoneLog.d(
@@ -136,6 +137,7 @@ public class PhoneSyncListenerService extends WearableListenerService {
                             + " nodeId=" + nodeId);
 
                 if (service != null) {
+                    PhoneLog.d(TAG, "P-082 about to call startStreaming");
                     service.startStreaming(nodeId);
                 }
         
@@ -147,6 +149,7 @@ public class PhoneSyncListenerService extends WearableListenerService {
                 PhoneSyncCameraService service = PhoneSyncCameraService.getInstance();
         
                 if (service != null) {
+                    PhoneLog.d(TAG, "P-088 about to call startStreaming");
                     service.startStreaming(nodeId);
                 }
         
