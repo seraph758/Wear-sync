@@ -36,7 +36,9 @@ public class WearSyncBodyDetectService extends WearableListenerService implement
 
     @Override
     public void onSensorChanged(SensorEvent event) {
-        if (event.sensor.type == Sensor.TYPE_LOW_LATENCY_OFFBODY_DETECT) {
+      
+        // ✅ 正确代码：调用 getType() 方法来获取类型
+        if (event.sensor.getType() == Sensor.TYPE_LOW_LATENCY_OFFBODY_DETECT) {
             float state = event.values[0];
             // 1.0f 代表戴在手上 (on_body)，0.0f 代表摘下 (off_body)
             if (state == 0.0f) {
