@@ -74,7 +74,7 @@ public class PhoneLog {
         } catch (java.io.IOException e) {
             Log.e("PhoneLog", "动态命名保存日志文件失败", e);
             return null;
-        } final {
+        } finally {
             if (writer != null) {
                 try { writer.close(); } catch (java.io.IOException ignored) {}
             }
