@@ -28,8 +28,8 @@ public class WearSyncBodyDetectService extends WearableListenerService implement
             // 获取标准的离腕/佩戴检测传感器
             offBodySensor = sensorManager.getDefaultSensor(Sensor.TYPE_LOW_LATENCY_OFFBODY_DETECT);
             if (offBodySensor != null) {
-                // 注册监听器
-                sensorManager.registerListener(this, offBodySensor, SensorManager.SENSOR_DELAY_NORMAL);
+             // 在 onCreate 中修改注册行：
+                sensorManager.registerListener(this, offBodySensor, SensorManager.SENSOR_DELAY_ON_CHANGE);
                 Log.d(TAG, "🟢 WearSyncBodyDetectService: 离腕检测传感器注册成功");
             }
         }
