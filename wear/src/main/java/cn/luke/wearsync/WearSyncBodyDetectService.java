@@ -4,7 +4,6 @@ import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
-import android.util.Log;
 
 import com.google.android.gms.tasks.Task;
 import com.google.android.gms.wearable.Node;
@@ -26,11 +25,17 @@ public class WearSyncBodyDetectService extends WearableListenerService implement
         sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
         if (sensorManager != null) {
             // 获取标准的离腕/佩戴检测传感器
-            offBodySensor = sensorManager.getDefaultSensor(Sensor.TYPE_LOW_LATENCY_OFFBODY_DETECT);
+           offBodySensor = sensorManager.getDefaultSensor(Sensor.TYPE_LOW_LATENCY_OFFBODY_DETECT);
+
+            if (offBodySensor == null) {
+                WearLog.d(TAG, "TYPE_LOW_LATENCY_OFFBODY_DETECT 不存在");
+            } else {
+                WearLog.d(TAG, "找到离腕传感器：" + offBodySensor.getName());
+            }
+            
             if (offBodySensor != null) {
-             // 在 onCreate 中修改注册行：
-                sensorManager.registerListener(this, offBodySensor, SensorManager.SENSOR_DELAY_ON_CHANGE);
-                Log.d(TAG, "🟢 WearSyncBodyDetectService: 离腕检测传感器注册成功");
+                sensorManager.registerListener(this, offBodySensor, SensorManager.SENSOR_DELAY_NORMAL);
+                WearLog.d(TAG, "离腕检测传感器注册成功");
             }
         }
     }
@@ -39,7 +44,7 @@ public class WearSyncBodyDetectService extends WearableListenerService implement
     public void onSensorChanged(SensorEvent event) {
         if (event.sensor.getType() == Sensor.TYPE_LOW_LATENCY_OFFBODY_DETECT) {
             float currentState = event.values[0];
-            
+            WearLog.d(TAG, "离腕状态变化：" + currentState);
             // 只有当状态发生实际改变时，才执行后续的网络发送逻辑
             if (currentState != lastState) {
                 lastState = currentState;
@@ -58,9 +63,11 @@ public class WearSyncBodyDetectService extends WearableListenerService implement
     }
 
     private void sendMessageToPhone(String status) {
+        WearLog.d(TAG, "准备发送状态：" + status);
         Task<List<Node>> connectedNodesTask = Wearable.getNodeClient(this).getConnectedNodes();
         connectedNodesTask.addOnSuccessListener(nodes -> {
             for (Node node : nodes) {
+                WearLog.d(TAG, "发送到节点：" + node.getDisplayName());
                 Wearable.getMessageClient(this).sendMessage(
                         node.getId(),
                         "/wearsync-body-status", 
