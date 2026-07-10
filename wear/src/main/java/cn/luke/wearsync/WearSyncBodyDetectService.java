@@ -18,6 +18,7 @@ public class WearSyncBodyDetectService extends WearableListenerService implement
     private static final String TAG = "WearSync_Watch";
     private SensorManager sensorManager;
     private Sensor offBodySensor;
+    private float lastState = -1.0f; // 初始为 -1
 
     @Override
     public void onCreate() {
@@ -36,17 +37,17 @@ public class WearSyncBodyDetectService extends WearableListenerService implement
 
     @Override
     public void onSensorChanged(SensorEvent event) {
-      
-        // ✅ 正确代码：调用 getType() 方法来获取类型
         if (event.sensor.getType() == Sensor.TYPE_LOW_LATENCY_OFFBODY_DETECT) {
-            float state = event.values[0];
-            // 1.0f 代表戴在手上 (on_body)，0.0f 代表摘下 (off_body)
-            if (state == 0.0f) {
-                Log.d(TAG, "🚫 传感器事件: 手表已摘下，通知手机端");
-                sendMessageToPhone("off_body");
-            } else if (state == 1.0f) {
-                Log.d(TAG, "🟢 传感器事件: 手表已戴上，通知手机端");
-                sendMessageToPhone("on_body");
+            float currentState = event.values[0];
+            
+            // 只有当状态发生实际改变时，才执行后续的网络发送逻辑
+            if (currentState != lastState) {
+                lastState = currentState;
+                if (currentState == 0.0f) {
+                    sendMessageToPhone("off_body");
+                } else if (currentState == 1.0f) {
+                    sendMessageToPhone("on_body");
+                }
             }
         }
     }
