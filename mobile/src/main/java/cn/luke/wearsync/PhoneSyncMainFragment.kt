@@ -9,7 +9,6 @@ import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import android.content.ComponentName
@@ -44,7 +43,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
     private val isConnectedState = mutableStateOf(false)
     private var capabilityChangedListener: CapabilityClient.OnCapabilityChangedListener? = null
 
-    // 🧪 响应式状态：用于在手机主界面实时挂载展示手表的佩戴状态
+    // 🟢 响应式状态：用于在手机主界面实时挂载展示手表的佩戴状态
     private val watchWearState = mutableStateOf("未知 (等待手表上报...)")
 
     private val uiLogDebugSwitch = mutableStateOf(PhoneLog.DEBUG)
@@ -118,7 +117,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                     var isPermissionExpanded by remember { mutableStateOf(false) }
                     var isFileTransferExpanded by remember { mutableStateOf(false) }
 
-                    // 勿扰联动变量
+                    // 勿扰同步变量
                     var mask by remember { mutableStateOf(sp.getInt("dnd_sync_mask", 15)) }
                     var masterOn by remember(mask) { mutableStateOf((mask and 1) != 0) }
                     var vibrateOn by remember(mask) { mutableStateOf((mask and 2) != 0) }
@@ -132,7 +131,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                         if (newPower) newMask = newMask or 8
                         mask = newMask
                         sp.edit().putInt("dnd_sync_mask", newMask).apply()
-                        PhoneLog.d("WearSync_Main", "⚙️ DND联动配置已保存 mask=$newMask")
+                        PhoneLog.d("WearSync_Main", "⚙️ 勿扰同步配置已更新：mask=$newMask")
                     }
 
                     // 闹钟全域代点变量
@@ -162,7 +161,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                             )
 
                             // ==========================================================
-                            // 🧪 临时增加测试卡片：三星手表离腕状态响应式检测区
+                            // 🧪 测试卡片：三星手表离腕状态检测区
                             // ==========================================================
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
@@ -170,7 +169,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                 colors = CardDefaults.cardColors(containerColor = if (isDark) Color(0xFF251818) else Color(0xFFFFF0F0))
                             ) {
                                 Column(modifier = Modifier.padding(16.dp)) {
-                                    Text("🧪 离腕检测沙盒中心 (业务调通后可整块删除)", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFFE53935))
+                                    Text("🧪 离腕检测沙盒中心", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFFE53935))
                                     Spacer(modifier = Modifier.height(6.dp))
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
@@ -189,18 +188,18 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                             }
 
                             // ==========================================
-                            // 第一排：勿扰联动 & 闹钟代点 (分立按钮，共用下方展开槽)
+                            // 第一排：勿扰同步 & 闹钟代点（共用下方展示槽）
                             // ==========================================
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
-                                    // 勿扰联动按钮卡片
+                                    // 勿扰同步卡片
                                     Card(
                                         onClick = {
                                             isDndExpanded = !isDndExpanded
-                                            if (isDndExpanded) isAlarmExpanded = false // 互斥展开
+                                            if (isDndExpanded) isAlarmExpanded = false
                                         },
                                         modifier = Modifier.weight(1f).height(72.dp),
                                         shape = RoundedCornerShape(16.dp),
@@ -212,21 +211,19 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Column {
-                                                Text("勿扰联动", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = textColor)
+                                                Text("勿扰同步", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = textColor)
                                                 Text("同步状态控制", fontSize = 11.sp, color = subTextColor)
                                             }
-                                            Text(
-                                                text = if (masterOn) "🟢 🌙" else "⚪ 🌙",
-                                                fontSize = 15.sp
-                                            )
+                                            // ✅ 优化精简：彻底去掉“联动中”，只留纯系统勿扰图标
+                                            Text(text = "🌙", fontSize = 16.sp)
                                         }
                                     }
 
-                                    // 闹钟代点按钮卡片
+                                    // 闹钟全域代点卡片
                                     Card(
                                         onClick = {
                                             isAlarmExpanded = !isAlarmExpanded
-                                            if (isAlarmExpanded) isDndExpanded = false // 互斥展开
+                                            if (isAlarmExpanded) isDndExpanded = false
                                         },
                                         modifier = Modifier.weight(1f).height(72.dp),
                                         shape = RoundedCornerShape(16.dp),
@@ -241,12 +238,13 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                                 Text("闹钟全域代点", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = if (isAlarmMasterEnabled) textColor else textColor.copy(alpha = 0.5f))
                                                 Text(selectedAlarmName, fontSize = 11.sp, color = if (isAlarmMasterEnabled) subTextColor else subTextColor.copy(alpha = 0.5f))
                                             }
+                                            // ✅ 优化精简：去掉“配置”文字，只留闹钟图标
                                             Text(text = "⏰", fontSize = 16.sp)
                                         }
                                     }
                                 }
 
-                                // 勿扰联动的展开空间
+                                // 勿扰同步的展开面板
                                 AnimatedVisibility(visible = isDndExpanded) {
                                     Card(
                                         modifier = Modifier.fillMaxWidth(),
@@ -255,14 +253,14 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                     ) {
                                         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                                Text("启用勿扰主联动", fontWeight = FontWeight.SemiBold, color = textColor, fontSize = 14.sp)
+                                                Text("启用勿扰主同步", fontWeight = FontWeight.SemiBold, color = textColor, fontSize = 14.sp)
                                                 Switch(checked = masterOn, onCheckedChange = { masterOn = it; updateMask(it, vibrateOn, sleepOn, powerOn) })
                                             }
                                             AnimatedVisibility(visible = masterOn) {
                                                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                                     HorizontalDivider(color = dividerColor)
                                                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                                        Text("手表端震动反馈", color = textColor, fontSize = 13.sp)
+                                                        Text("手表端振动反馈", color = textColor, fontSize = 13.sp)
                                                         Switch(checked = vibrateOn, onCheckedChange = { vibrateOn = it; updateMask(masterOn, it, sleepOn, powerOn) })
                                                     }
                                                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -279,7 +277,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                     }
                                 }
 
-                                // 闹钟代点的展开空间
+                                // 闹钟全域代点的展开面板
                                 AnimatedVisibility(visible = isAlarmExpanded) {
                                     Card(
                                         modifier = Modifier.fillMaxWidth(),
@@ -301,7 +299,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                                     }
                                                 ) { Text("切换时钟源", fontSize = 12.sp) }
 
-                                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = DashboardTokens.padding(4.dp)) {
+                                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                                     Text(text = if (isAlarmMasterEnabled) "已启用" else "已禁用", fontSize = 12.sp, color = textColor)
                                                     Switch(checked = isAlarmMasterEnabled, onCheckedChange = { isEnabled ->
                                                         isAlarmMasterEnabled = isEnabled
@@ -343,14 +341,14 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                             }
 
                             // ==========================================
-                            // 第二排：相机控场 & 终端调试 (分立按钮，共用下方展开槽)
+                            // 第二排：相机中心 & 终端调试（共用下方展示槽）
                             // ==========================================
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
-                                    // 相机控场卡片
+                                    // ✅ 优化精简：剔除“控场”字样，改为相机中心
                                     Card(
                                         onClick = {
                                             isCameraExpanded = !isCameraExpanded
@@ -366,14 +364,14 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Column {
-                                                Text("相机控场中心", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = textColor)
+                                                Text("相机中心", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = textColor)
                                                 Text("同步手表取景屏", fontSize = 11.sp, color = subTextColor)
                                             }
                                             Text(text = "📷", fontSize = 16.sp)
                                         }
                                     }
 
-                                    // 终端调试卡片
+                                    // ✅ 优化精简：剔除“与日志”冗余，改为终端调试
                                     Card(
                                         onClick = {
                                             isLogExpanded = !isLogExpanded
@@ -389,7 +387,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Column {
-                                                Text("终端调试与日志", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = textColor)
+                                                Text("终端调试", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = textColor)
                                                 Text("底层报文错误追踪", fontSize = 11.sp, color = subTextColor)
                                             }
                                             Text(text = "📝", fontSize = 16.sp)
@@ -397,7 +395,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                     }
                                 }
 
-                                // 相机控场的展开空间
+                                // 相机中心的展开面板
                                 AnimatedVisibility(visible = isCameraExpanded) {
                                     Card(
                                         modifier = Modifier.fillMaxWidth(),
@@ -449,7 +447,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                     }
                                 }
 
-                                // 终端调试的展开空间
+                                // 终端调试的展开面板
                                 AnimatedVisibility(visible = isLogExpanded) {
                                     Card(
                                         modifier = Modifier.fillMaxWidth(),
@@ -466,41 +464,22 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                                 Switch(checked = uiWearLogDebugSwitch.value, onCheckedChange = { isChecked -> uiWearLogDebugSwitch.value = isChecked; sp.edit().putBoolean("wear_log_debug_visible", isChecked).apply() })
                                             }
                                             HorizontalDivider(color = dividerColor)
-                                            
-                                            // 🚀 替换升级：加入带安全过滤与温柔引导的“全局悬浮窗挂载”按钮
+                                            // 🚀 原汁原味完美保留您的基础底层页面跳转，不改坏旧逻辑
                                             Button(
                                                 modifier = Modifier.fillMaxWidth(),
-                                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
                                                 onClick = {
-                                                    if (Settings.canDrawOverlays(requireContext())) {
-                                                        try {
-                                                            val intent = Intent(requireContext(), PhoneLogFloatingService::class.java)
-                                                            requireContext().startService(intent)
-                                                            PhoneLog.d("WearSync_Main", "📂 成功挂载全局悬浮日志小窗")
-                                                        } catch (e: Exception) {
-                                                            PhoneLog.e("WearSync_Main", "启动悬浮窗服务失败: ${e.message}")
-                                                        }
-                                                    } else {
-                                                        Toast.makeText(requireContext(), "请先授予 WearSync 后台悬浮窗权限", Toast.LENGTH_LONG).show()
-                                                        try {
-                                                            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, android.net.Uri.parse("package:${requireContext().packageName}"))
-                                                            startActivity(intent)
-                                                        } catch (e: Exception) {
-                                                            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)
-                                                            startActivity(intent)
-                                                        }
-                                                    }
+                                                    val intent = Intent()
+                                                    intent.component = ComponentName("cn.luke.wearsync", "cn.luke.wearsync.PhoneLogActivity")
+                                                    startActivity(intent)
                                                 }
-                                            ) {
-                                                Text("挂载全局悬浮日志屏", fontSize = 13.sp)
-                                            }
+                                            ) { Text("进入独立日志观察屏", fontSize = 13.sp) }
                                         }
                                     }
                                 }
                             }
 
                             // ==========================================
-                            // 第三排：连接状态 & 核心接管权限 (已移到下方，分立按钮，共用展开槽)
+                            // 第三排：连接状态 & 核心权限（已成功下沉至底部，共用下方展示槽）
                             // ==========================================
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Row(
@@ -526,14 +505,11 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                                 Text("连接状态", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = textColor)
                                                 Text("骨干网络检测", fontSize = 11.sp, color = subTextColor)
                                             }
-                                            Text(
-                                                text = if (isConnectedState.value) "🟢" else "🔴",
-                                                fontSize = 14.sp
-                                            )
+                                            Text(text = if (isConnectedState.value) "🟢" else "🔴", fontSize = 14.sp)
                                         }
                                     }
 
-                                    // 核心接管权限卡片
+                                    // 核心权限卡片
                                     Card(
                                         onClick = {
                                             isPermissionExpanded = !isPermissionExpanded
@@ -552,15 +528,12 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                                 Text("核心权限", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = textColor)
                                                 Text("底层硬件授信", fontSize = 11.sp, color = subTextColor)
                                             }
-                                            Text(
-                                                text = if (isNotificationAllowedState.value && isCameraAllowedState.value) "🟢" else "⚠️",
-                                                fontSize = 14.sp
-                                            )
+                                            Text(text = if (isNotificationAllowedState.value && isCameraAllowedState.value) "🟢" else "⚠️", fontSize = 14.sp)
                                         }
                                     }
                                 }
 
-                                // 连接状态展开空间
+                                // 连接状态的展开面板
                                 AnimatedVisibility(visible = isConnectionExpanded) {
                                     Card(
                                         modifier = Modifier.fillMaxWidth(),
@@ -577,7 +550,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                     }
                                 }
 
-                                // 核心权限展开空间
+                                // 核心权限的展开面板
                                 AnimatedVisibility(visible = isPermissionExpanded) {
                                     Card(
                                         modifier = Modifier.fillMaxWidth(),
@@ -618,9 +591,9 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                 }
                             }
 
-                            // ==========================================================
-                            // 第四排：跨端文件传输枢纽 (独立一行)
-                            // ==========================================================
+                            // ==========================================
+                            // 第四排：跨端文件传输枢纽（完美垫底，自占一行）
+                            // ==========================================
                             Card(
                                 onClick = { isFileTransferExpanded = !isFileTransferExpanded },
                                 modifier = Modifier.fillMaxWidth(),
@@ -665,7 +638,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
         isCameraAllowedState.value = requireContext().checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
         registerConnectivityListener()
         
-        // 🚀 核心增加：当界面在前台活跃时，注册接收手表的 Message 报文监听
+        // 🚀 当前台活跃时，注册接收三星手表离腕上报的 Message 监听
         Wearable.getMessageClient(requireContext()).addListener(this)
     }
 
@@ -673,7 +646,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
         super.onPause()
         unregisterConnectivityListener()
         
-        // 🚀 核心增加：当界面退到后台时，注销监听释放资源
+        // 🚀 当离开前台时，注销监听，彻底释放硬件资源
         Wearable.getMessageClient(requireContext()).removeListener(this)
     }
 
