@@ -72,7 +72,8 @@ class PhoneLogFloatingService : Service() {
             setViewTreeLifecycleOwner(lifecycleOwner)
             setViewTreeViewModelStoreOwner(object : ViewModelStoreOwner { override val viewModelStore: ViewModelStore = viewModelStore })
             setViewTreeSavedStateRegistryOwner(object : androidx.savedstate.SavedStateRegistryOwner {
-                private val registry = androidx.savedstate.SavedStateRegistry(this)
+                private val controller = androidx.savedstate.SavedStateRegistryController.create(this)
+                private val registry = controller.savedstateRegistry                
                 override val savedStateRegistry: androidx.savedstate.SavedStateRegistry = registry
                 override val lifecycle: Lifecycle get() = lifecycleOwner.lifecycle
             })
