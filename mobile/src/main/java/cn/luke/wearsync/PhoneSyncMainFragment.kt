@@ -95,8 +95,8 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
         savedInstanceState: Bundle?
     ): View {
         val sp = requireContext().getSharedPreferences("dndsync_prefs", Context.MODE_PRIVATE)
-        uiLogDebugSwitch.value = sp.getBoolean("phone_log_debug_visible", PhoneLog.DEBUG)
-        uiWearLogDebugSwitch.value = sp.getBoolean("wear_log_debug_visible", true)
+        uiLogDebugSwitch.value = sp.getBoolean("phone_log_debug_visible", false)
+        uiWearLogDebugSwitch.value = sp.getBoolean("wear_log_debug_visible", false)
 
         return ComposeView(requireContext()).apply {
             setContent {
