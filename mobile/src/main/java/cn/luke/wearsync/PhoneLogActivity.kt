@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.delay
 import java.io.File
+import androidx.compose.material3.TopAppBar
 
 class PhoneLogActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -38,35 +39,37 @@ class PhoneLogActivity : ComponentActivity() {
                 }
             }
 
-            Scaffold(
-                topBar = {
-                    SmallTopAppBar(
-                        title = { Text("实时通信日志看板", color = Color.White, fontSize = 16.sp) },
-                        colors = TopAppBarDefaults.smallTopAppBarColors(containerColor = Color(0xFF121212)),
-                        actions = {
-                            // 🔥 新增按钮：保存并分享
-                            Button(
-                                onClick = {
-                                    val logFile = PhoneLog.saveToFile(this@PhoneLogActivity)
-                                    if (logFile != null && logFile.exists()) {
-                                        shareLogFile(logFile)
-                                    } else {
-                                        Toast.makeText(this@PhoneLogActivity, "日志文件生成失败", Toast.LENGTH_SHORT).show()
-                                    }
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                                modifier = Modifier.padding(end = 4.dp)
-                            ) {
-                                Text("保存并分享", fontSize = 12.sp)
-                            }
-
-                            Button(onClick = { PhoneLog.clear(); logLines = emptyList() }) {
-                                Text("清空", fontSize = 12.sp)
-                            }
+Scaffold(
+    topBar = {
+        // 💡 修正 1：改用正式版的 TopAppBar（需要 import androidx.compose.material3.TopAppBar）
+        TopAppBar(
+            title = { Text("实时通信日志看板", color = Color.White, fontSize = 16.sp) },
+            // 💡 修正 2：改用正式版的 topAppBarColors
+            colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF121212)),
+            actions = {
+                Button(
+                    onClick = {
+                        val logFile = PhoneLog.saveToFile(this@PhoneLogActivity)
+                        if (logFile != null && logFile.exists()) {
+                            shareLogFile(logFile)
+                        } else {
+                            Toast.makeText(this@PhoneLogActivity, "日志文件生成失败", Toast.LENGTH_SHORT).show()
                         }
-                    )
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                    modifier = Modifier.padding(end = 4.dp)
+                ) {
+                    Text("保存并分享", fontSize = 12.sp)
                 }
-            ) { paddingValues ->
+
+                Button(onClick = { PhoneLog.clear(); logLines = emptyList() }) {
+                    Text("清空", fontSize = 12.sp)
+                }
+            }
+        )
+    }
+)
+{ paddingValues ->
                 LazyColumn(
                     state = listState,
                     modifier = Modifier
