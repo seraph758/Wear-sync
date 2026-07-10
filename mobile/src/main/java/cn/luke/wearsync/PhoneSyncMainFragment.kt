@@ -46,8 +46,8 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
     // 🟢 响应式状态：用于在手机主界面实时挂载展示手表的佩戴状态
     private val watchWearState = mutableStateOf("未知 (等待手表上报...)")
 
-    private val uiLogDebugSwitch = mutableStateOf(PhoneLog.DEBUG)
-    private val uiWearLogDebugSwitch = mutableStateOf(true)
+    private val uiLogDebugSwitch = mutableStateOf(false)
+    private val uiWearLogDebugSwitch = mutableStateOf(false)
     private val alarmPickerLauncher =
     registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         val pkg = it.data?.getStringExtra("selected_alarm_package")
@@ -388,7 +388,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                         ) {
                                             Column {
                                                 Text("终端调试", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = textColor)
-                                                Text("底层报文错误追踪", fontSize = 11.sp, color = subTextColor)
+                                                Text("底层日志错误追踪", fontSize = 11.sp, color = subTextColor)
                                             }
                                             Text(text = "📝", fontSize = 16.sp)
                                         }
