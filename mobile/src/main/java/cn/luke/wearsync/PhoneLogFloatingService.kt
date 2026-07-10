@@ -1,13 +1,18 @@
 package cn.luke.wearsync
 
 import android.app.Service
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.graphics.PixelFormat
+import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.os.IBinder
+import android.provider.MediaStore
 import android.view.Gravity
 import android.view.WindowManager
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -22,12 +27,17 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.FileProvider
 import androidx.lifecycle.*
 import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import kotlinx.coroutines.delay
+import java.io.File
+import java.io.FileOutputStream
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
 
@@ -63,17 +73,16 @@ class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
 
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
-            650, // 💡 悬浮窗高度：微调到 650 像素，留出更宽裕的日志展示行数
+            650, // 💡 悬浮窗高度
             layoutType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.TOP or Gravity.START // 默认靠屏幕顶部显示
+            gravity = Gravity.TOP or Gravity.START
             x = 0
-            y = 150 // 距离顶部 150 像素，防止挡住系统状态栏和操作区
+            y = 150
         }
 
-        // 创建用来承载 Compose 布局的 View 容器
         floatingView = ComposeView(this).apply {
             val viewModelStore = ViewModelStore()
 
@@ -87,30 +96,28 @@ class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
                 var logLines by remember { mutableStateOf(listOf<String>()) }
                 val listState = rememberLazyListState()
 
-                // ✅ 改善点：替换掉不稳定的 Timer，使用 Compose 宿主协程进行绝对安全的、秒级实时日志同步
+                // 使用 Compose 宿主协程进行秒级实时日志同步
                 LaunchedEffect(Unit) {
                     while (true) {
                         val currentLogs = PhoneLog.getLogBuffer()
-                        // 只有在日志有变化时才更新状态，避免无意义的重绘
                         if (logLines.size != currentLogs.size) {
                             logLines = currentLogs
                         }
-                        delay(400) // ⚡ 每 400 毫秒高刷一次，操作完立马就能在悬浮窗里看到！
+                        delay(400)
                     }
                 }
 
-                // 每次有新日志进来，自动平滑滚动到底部
+                // 自动平滑滚动到底部
                 LaunchedEffect(logLines.size) {
                     if (logLines.isNotEmpty()) {
                         listState.animateScrollToItem(logLines.lastIndex)
                     }
                 }
 
-                // 悬浮窗半透明黑客面板
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color(0xD9151515)) // 0xD9 约 85% 不透明，背景更深、确保强光下日志也清晰可见
+                        .background(Color(0xD9151515))
                         .padding(6.dp)
                 ) {
                     LazyColumn(
@@ -126,45 +133,77 @@ class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
                             Text(
                                 text = line,
                                 color = color,
-                                fontSize = 11.sp, // 微调字体，保证小屏幕阅读体验
+                                fontSize = 11.sp,
                                 fontFamily = FontFamily.Monospace,
                                 modifier = Modifier.padding(vertical = 1.dp)
                             )
                         }
                     }
 
-                    // 🛠️ 底部迷你控制栏
+                    // 🛠️ 底部控制栏：包含清空、保存、分享、收起
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .align(Alignment.BottomCenter)
                             .background(Color(0xFF222222))
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                            .padding(horizontal = 4.dp, vertical = 4.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("WearSync 实时悬浮监视器", color = Color.LightGray, fontSize = 10.sp)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            // 清空按钮
+                        Text("实时悬浮监视", color = Color.Gray, fontSize = 9.sp, modifier = Modifier.weight(1f))
+                        
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // 1. 清空按钮
                             Button(
                                 onClick = { 
                                     PhoneLog.clear()
                                     logLines = emptyList() 
                                 },
-                                contentPadding = PaddingValues(horizontal = 10.dp),
+                                contentPadding = PaddingValues(horizontal = 6.dp),
                                 modifier = Modifier.height(26.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF424242))
                             ) {
-                                Text("清空", fontSize = 11.sp, color = Color.White)
+                                Text("清空", fontSize = 10.sp, color = Color.White)
                             }
-                            // 收起按钮（直接销毁并退出悬浮窗服务）
+
+                            // 2. 保存按钮：默认保存在 /Download/WearSync/WearSync.log 并在不存在时自动创建文件夹
+                            Button(
+                                onClick = {
+                                    val textToSave = PhoneLog.getLogBuffer().joinToString("\n")
+                                    val success = saveLogToDownload(this@PhoneLogFloatingService, textToSave)
+                                    Toast.makeText(this@PhoneLogFloatingService, if(success) "已保存至 Download/WearSync/" else "保存失败", Toast.LENGTH_SHORT).show()
+                                },
+                                contentPadding = PaddingValues(horizontal = 6.dp),
+                                modifier = Modifier.height(26.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00897B))
+                            ) {
+                                Text("保存", fontSize = 10.sp, color = Color.White)
+                            }
+
+                            // 3. 分享按钮：单独拉起系统分享面板
+                            Button(
+                                onClick = {
+                                    val textToShare = PhoneLog.getLogBuffer().joinToString("\n")
+                                    shareLogFile(this@PhoneLogFloatingService, textToShare)
+                                },
+                                contentPadding = PaddingValues(horizontal = 6.dp),
+                                modifier = Modifier.height(26.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E88E5))
+                            ) {
+                                Text("分享", fontSize = 10.sp, color = Color.White)
+                            }
+
+                            // 4. 收起按钮
                             Button(
                                 onClick = { stopSelf() },
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)),
-                                contentPadding = PaddingValues(horizontal = 10.dp),
+                                contentPadding = PaddingValues(horizontal = 6.dp),
                                 modifier = Modifier.height(26.dp)
                             ) {
-                                Text("收起", fontSize = 11.sp, color = Color.White)
+                                Text("收起", fontSize = 10.sp, color = Color.White)
                             }
                         }
                     }
@@ -172,8 +211,76 @@ class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
             }
         }
 
-        // 把这个小悬浮窗真正塞进 WindowManager
         windowManager.addView(floatingView, params)
+    }
+
+    /**
+     * 将日志保存在公共 Download/WearSync/ 目录下，自动创建文件夹并兼容 Android 高版本
+     */
+    private fun saveLogToDownload(context: Context, content: String): Boolean {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val resolver = context.contentResolver
+                val contentValues = ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, "WearSync.log")
+                    put(MediaStore.MediaColumns.MIME_TYPE, "text/plain")
+                    // 在公共 Download 文件夹下自动追加 WearSync 文件夹
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/WearSync")
+                }
+                val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+                if (uri != null) {
+                    resolver.openOutputStream(uri).use { outputStream ->
+                        outputStream?.write(content.toByteArray())
+                    }
+                    true
+                } else false
+            } else {
+                // 兼容 Android 9 及以下旧版本的老式写法
+                @Suppress("DEPRECATION")
+                val downloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                val wearSyncFolder = File(downloadDir, "WearSync")
+                if (!wearSyncFolder.exists()) {
+                    wearSyncFolder.mkdirs() // 自动创建 WearSync 文件夹
+                }
+                val logFile = File(wearSyncFolder, "WearSync.log")
+                FileOutputStream(logFile).use { outputStream ->
+                    outputStream.write(content.toByteArray())
+                }
+                true
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+    /**
+     * 单独的分享逻辑：利用应用内私有缓存生成临时分享文件，并拉起系统原生分享器
+     */
+    private fun shareLogFile(context: Context, content: String) {
+        try {
+            val cacheDir = context.cacheDir
+            val shareFile = File(cacheDir, "WearSync_Share_Log.txt")
+            FileOutputStream(shareFile).use { it.write(content.toByteArray()) }
+
+            val authority = "${context.packageName}.fileprovider"
+            val uri: Uri = FileProvider.getUriForFile(context, authority, shareFile)
+
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            
+            val chooser = Intent.createChooser(intent, "分享 WearSync 日志").apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(chooser)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Toast.makeText(context, "分享失败", Toast.LENGTH_SHORT).show()
+        }
     }
 
     override fun onDestroy() {
