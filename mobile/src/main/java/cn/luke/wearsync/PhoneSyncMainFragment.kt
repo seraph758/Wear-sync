@@ -465,14 +465,21 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                             }
                                             HorizontalDivider(color = dividerColor)
                                             // 🚀 原汁原味完美保留您的基础底层页面跳转，不改坏旧逻辑
-                                            Button(
+                                          Button(
                                                 modifier = Modifier.fillMaxWidth(),
                                                 onClick = {
-                                                    val intent = Intent()
-                                                    intent.component = ComponentName("cn.luke.wearsync", "cn.luke.wearsync.PhoneLogActivity")
-                                                    startActivity(intent)
+                                                    val context = requireContext()
+                                                    // 1. 如果没有 Android 系统的悬浮窗权限，先引导去系统设置开启
+                                                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M && !android.provider.Settings.canDrawOverlays(context)) {
+                                                        val intent = Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION, android.net.Uri.parse("package:${context.packageName}"))
+                                                        startActivity(intent)
+                                                    } else {
+                                                        // 2. 有权限则直接启动你的实时悬浮监视器
+                                                        val intent = Intent(context, PhoneLogFloatingService::class.java)
+                                                        context.startService(intent)
+                                                    }
                                                 }
-                                            ) { Text("进入独立日志观察屏", fontSize = 13.sp) }
+                                            ) { Text("开启实时悬浮监视器", fontSize = 13.sp) }
                                         }
                                     }
                                 }
