@@ -12,9 +12,7 @@
     <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <uses-permission android:name="android.permission.CAMERA" />
-
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <uses-feature android:name="android.hardware.camera" android:required="false" />
@@ -24,7 +22,15 @@
         android:icon="@mipmap/ic_launcher"
         android:label="Wear Sync"
         android:supportsRtl="true"
-        android:theme="@style/Theme.WearSync">
+        android:theme="@style/Theme.WearSync"> <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="cn.luke.wearsync.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
         <meta-data
             android:name="com.google.android.gms.version"
@@ -39,29 +45,27 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
         <activity
            android:name="cn.luke.wearsync.WearSyncRemoteCameraActivity"
            android:exported="true"
            android:excludeFromRecents="true"
-   
            android:theme="@style/Theme.Transparent">
             <intent-filter>
-        
                 <action android:name="android.intent.action.VIEW"/>
-        
                 <category android:name="android.intent.category.DEFAULT"/>
-        
                 <category android:name="android.intent.category.BROWSABLE"/>
-        
                 <data 
                     android:scheme="wearsync"
                     android:host="camera"/>
-        
             </intent-filter>
-        
-        
         </activity>      
-        
+
+        <activity
+            android:name="cn.luke.wearsync.PhoneLogActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Material3.DayNight.NoActionBar" />
+    
         <service
             android:name="cn.luke.wearsync.PhoneSyncNotificationService"
             android:exported="true"
@@ -88,5 +92,4 @@
         </service>
 
     </application>
-
 </manifest>
