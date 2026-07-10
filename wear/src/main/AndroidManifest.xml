@@ -67,12 +67,9 @@
 
         <service
             android:name=".WearSyncBodyDetectService"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="com.google.android.gms.wearable.BIND_LISTENER" />
-            </intent-filter>
+            android:exported="true"
+            android:permission="com.google.android.gms.wearable.BIND_CHANNEL">
         </service>
-
         <service
             android:name="cn.luke.wearsync.WearSyncListenerService"
             android:enabled="true"
