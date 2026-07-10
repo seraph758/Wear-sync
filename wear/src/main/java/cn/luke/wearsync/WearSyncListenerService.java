@@ -15,20 +15,27 @@ import java.nio.charset.StandardCharsets;
 public class WearSyncListenerService extends WearableListenerService {
 
     @Override
-    public void onCreate() {
-        super.onCreate();
-        WearLog.d(TAG, "CAM-W010 Listener Created");
-    }
+public void onCreate() {
+    super.onCreate();
+    WearLog.e(TAG, "★★★★★ WearSyncListenerService CREATED ★★★★★");
+    WearLog.d(TAG, "CAM-W010 Listener Created");
+}
 
     private static final String TAG = "WearSync_WearListener";
     private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
     private static final String CAMERA_PREVIEW_STREAM_PATH = "/camera-preview-stream";
 
     @Override
-    public void onMessageReceived(@NonNull MessageEvent messageEvent) {
-        if (!UNIVERSAL_SYNC_PATH.equalsIgnoreCase(messageEvent.getPath())) {
-            return;
-        }
+public void onMessageReceived(@NonNull MessageEvent messageEvent) {
+
+    WearLog.e(TAG, "========== MESSAGE RECEIVED ==========");
+    WearLog.e(TAG, "path = " + messageEvent.getPath());
+    WearLog.e(TAG, "sourceNode = " + messageEvent.getSourceNodeId());
+
+    if (!UNIVERSAL_SYNC_PATH.equalsIgnoreCase(messageEvent.getPath())) {
+        WearLog.e(TAG, "❌ Path not match. expected=" + UNIVERSAL_SYNC_PATH);
+        return;
+    }
         byte[] data = messageEvent.getData();
         // 【优化1】去掉了原本多余的 data == null 恒假判断，直接进行安全性拦截
         if (data == null) return;
