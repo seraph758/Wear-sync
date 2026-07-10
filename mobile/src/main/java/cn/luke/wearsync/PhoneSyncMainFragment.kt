@@ -38,25 +38,27 @@ class PhoneSyncMainFragment : Fragment() {
 
     private val isNotificationAllowedState = mutableStateOf(false)
     private val isCameraAllowedState = mutableStateOf(false)
+    private val isisConnectedState = mutableStateOf(false) // 保持您原始变量名或更正为 isConnectedState
     private val isConnectedState = mutableStateOf(false)
     private var capabilityChangedListener: CapabilityClient.OnCapabilityChangedListener? = null
 
     private val uiLogDebugSwitch = mutableStateOf(PhoneLog.DEBUG)
     private val uiWearLogDebugSwitch = mutableStateOf(true)
+    
     private val alarmPickerLauncher =
-    registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-        val pkg = it.data?.getStringExtra("selected_alarm_package")
-        val name = it.data?.getStringExtra("selected_alarm_name")
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+            val pkg = it.data?.getStringExtra("selected_alarm_package")
+            val name = it.data?.getStringExtra("selected_alarm_name")
 
-        if(pkg != null){
-            requireContext()
-                .getSharedPreferences("dndsync_prefs",Context.MODE_PRIVATE)
-                .edit()
-                .putString("selected_alarm_package",pkg)
-                .putString("selected_alarm_name",name ?: pkg)
-                .apply()
+            if (pkg != null) {
+                requireContext()
+                    .getSharedPreferences("dndsync_prefs", Context.MODE_PRIVATE)
+                    .edit()
+                    .putString("selected_alarm_package", pkg)
+                    .putString("selected_alarm_name", name ?: pkg)
+                    .apply()
+            }
         }
-    }
 
     private val requestCameraPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -505,7 +507,7 @@ class PhoneSyncMainFragment : Fragment() {
                                         Column(modifier = Modifier.padding(14.dp)) {
                                             Text(
                                                 text = if (isConnectedState.value) "骨干网络畅通。正在通过 GMS Wearable CapabilityClient 实时监听手表节点的动态响应。" 
-                                                      else "未检测到处于活动状态的手表节点。请检查手表是否开机、蓝牙是否连接、或 Wear OS 专属配对 App 是否在后台运行。",
+                                                      else "未检测到处于 activity 状态的手表节点。请检查手表是否开机、蓝牙是否连接、或 Wear OS 专属配对 App 是否在后台运行。",
                                                 fontSize = 13.sp, color = textColor, lineHeight = 18.sp
                                             )
                                         }
@@ -592,10 +594,9 @@ class PhoneSyncMainFragment : Fragment() {
                 } // 结束 MaterialTheme
             } // 结束 setContent
         } // 结束 ComposeView
- 
+    }
 
-    // ... 後續的 onResume(), onPause(), checkNotificationPermission() 等核心生命周期回調保持完全不變 ...
-        override fun onResume() {
+    override fun onResume() {
         super.onResume()
         checkNotificationPermission()
         isCameraAllowedState.value = requireContext().checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
