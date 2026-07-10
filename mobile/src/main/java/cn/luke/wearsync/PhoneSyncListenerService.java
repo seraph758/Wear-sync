@@ -1,6 +1,7 @@
 package cn.luke.wearsync;
 
 import android.content.Intent;
+import androidx.annotation.NonNull; // 🚀 完美修复 1：补齐 NonNull 的关键导包
 import com.google.android.gms.tasks.Tasks;
 import com.google.android.gms.wearable.ChannelClient;
 import com.google.android.gms.wearable.MessageEvent;
@@ -212,7 +213,6 @@ public class PhoneSyncListenerService extends WearableListenerService {
      
                     PhoneLog.e(TAG,
                             "handshake failed",
-                            // 修正打字间距，和原版保持百分之百字符级对齐
                             e);
      
                 }
@@ -291,13 +291,11 @@ public class PhoneSyncListenerService extends WearableListenerService {
     public void onChannelOpened(@NonNull ChannelClient.Channel channel) {
         super.onChannelOpened(channel);
         
-        // 当捕获到的长连接通道路径匹配日志通道时，开启后台对接
         if (channel.getPath().equals(WEAR_LOG_CHANNEL_PATH)) {
             PhoneLog.d(TAG, "🔌 成功捕获到手表端建立的无线日志大流通道，开始接通水管...");
 
             Wearable.getChannelClient(this).getInputStream(channel)
                 .addOnSuccessListener(inputStream -> {
-                    // 独立线程拉取，保证绝不阻塞主信令路由
                     REMOTE_EXECUTOR.execute(() -> readLogStream(inputStream));
                 })
                 .addOnFailureListener(e -> {
@@ -306,11 +304,12 @@ public class PhoneSyncListenerService extends WearableListenerService {
         }
     }
 
+    // 🚀 完美修复 2：将此方法参数修正为标准的 3 参数，契合最新 Wearable SDK 签名
     @Override
-    public void onInputClosed(@NonNull ChannelClient.Channel channel, int closeReason) {
-        super.onInputClosed(channel, closeReason);
+    public void onInputClosed(@NonNull ChannelClient.Channel channel, int closeReason, int appSpecificErrorCode) {
+        super.onInputClosed(channel, closeReason, appSpecificErrorCode);
         if (channel.getPath().equals(WEAR_LOG_CHANNEL_PATH)) {
-            PhoneLog.w(TAG, "🔌 手表端主动断开或熔断了日志大流通道。原因代码: " + closeReason);
+            PhoneLog.w(TAG, "🔌 手表端主动断开或熔断了日志大流通道。原因代码: " + closeReason + ", 错误码: " + appSpecificErrorCode);
         }
     }
 
@@ -321,7 +320,6 @@ public class PhoneSyncListenerService extends WearableListenerService {
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
             String line;
             while ((line = reader.readLine()) != null) {
-                // 原封不动推入你项目已有的全局 PhoneLog 缓冲区
                 PhoneLog.rawAppend(line);
             }
         } catch (Exception e) {
