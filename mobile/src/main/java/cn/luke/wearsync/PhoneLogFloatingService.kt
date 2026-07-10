@@ -25,21 +25,38 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.*
+import androidx.savedstate.SavedStateRegistry
+import androidx.savedstate.SavedStateRegistryController
+import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import java.util.Timer
 import kotlin.concurrent.fixedRateTimer
 
-class PhoneLogFloatingService : Service() {
+class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
 
     private lateinit var windowManager: WindowManager
     private var floatingView: ComposeView? = null
     private var timer: Timer? = null
 
+    // 🚀 核心修复：将全局控制器和状态注册器在类骨架最顶部正确声明，供基础设施与生命周期公共访问
+    private val controller = SavedStateRegistryController.create(this)
+    override val savedStateRegistry: SavedStateRegistry = controller.savedStateRegistry
+
+    // 绑定该 Service 自身提供给 Compose 底层环境的生命周期持有者
+    private val lifecycleRegistry = LifecycleRegistry(this)
+    override val lifecycle: Lifecycle get() = lifecycleRegistry
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
+        // ✅ 核心修复：优先在 super 之前初始化状态树恢复机制，避免框架报错
         controller.performRestore(null)
         super.onCreate()
+        
+        // 标记基础设施生命周期走向激活状态
+        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
+        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
+
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
 
         // 🌟 设置系统窗口参数：让其飘在最上层，默认不抢占焦点（FLAG_NOT_FOCUSABLE）从而可以操作下方的主界面
@@ -61,23 +78,17 @@ class PhoneLogFloatingService : Service() {
             y = 100 // 距离顶部 100 像素，防止挡住系统状态栏
         }
 
-        // 创建用来承载 Compose 布局的 
+        // 创建用来承载 Compose 布局的 View 容器
         floatingView = ComposeView(this).apply {
             // 必须绑定的 Android Lifecycle 基础设施，否则 Compose 在 Service 内部会报错
             val viewModelStore = ViewModelStore()
-            val lifecycleOwner = object : LifecycleOwner {
-                private val registry = LifecycleRegistry(this)
-                override val lifecycle: Lifecycle get() = registry
-                init { registry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE); registry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME) }
-            }
-            setViewTreeLifecycleOwner(lifecycleOwner)
-            setViewTreeViewModelStoreOwner(object : ViewModelStoreOwner { override val viewModelStore: ViewModelStore = viewModelStore })
-            setViewTreeSavedStateRegistryOwner(object : androidx.savedstate.SavedStateRegistryOwner {
-                private val controller = androidx.savedstate.SavedStateRegistryController.create(this)
-                private val registry = controller.savedstateRegistry                
-                override val savedStateRegistry: androidx.savedstate.SavedStateRegistry = registry
-                override val lifecycle: Lifecycle get() = lifecycleOwner.lifecycle
+            
+            setViewTreeLifecycleOwner(this@PhoneLogFloatingService)
+            setViewTreeViewModelStoreOwner(object : ViewModelStoreOwner { 
+                override val viewModelStore: ViewModelStore = viewModelStore 
             })
+            // ✅ 核心修复：将外部已完美初始化好的 Service 本身作为 SavedStateOwner 注入视图树中
+            setViewTreeSavedStateRegistryOwner(this@PhoneLogFloatingService)
 
             setContent {
                 var logLines by remember { mutableStateOf(listOf<String>()) }
@@ -163,8 +174,13 @@ class PhoneLogFloatingService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         timer?.cancel()
+        
+        // 销毁时同步卸载视图并停止生命周期分配
+        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
         floatingView?.let {
-            windowManager.removeView(it)
+            try {
+                windowManager.removeView(it)
+            } catch (_: Exception) {}
         }
     }
 }
