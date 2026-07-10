@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.PixelFormat
 import android.os.Build
-import android.os.Environment
 import android.os.IBinder
 import android.view.Gravity
 import android.view.WindowManager
@@ -34,9 +33,6 @@ import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import kotlinx.coroutines.delay
 import java.io.File
-import java.io.FileOutputStream
-import java.text.SimpleDateFormat
-import java.util.Locale
 import kotlin.math.max
 
 class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
@@ -96,30 +92,16 @@ class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
                 val phoneListState = rememberLazyListState()
                 val wearListState = rememberLazyListState()
 
-                var widthPx by remember { mutableStateOf(windowParams.width) }
-                var heightPx by remember { mutableStateOf(windowParams.height) }
-
                 val sp = remember { getSharedPreferences("dndsync_prefs", Context.MODE_PRIVATE) }
 
-                // 🔄 核心精准双舱分流
                 LaunchedEffect(Unit) {
                     while (true) {
-                        val showPhoneLog = sp.getBoolean("phone_log_debug_visible", true)
-                        val showWearLog = sp.getBoolean("wear_log_debug_visible", true)
+                        val showPhoneLog = sp.getBoolean("phone_log_debug_visible", false)
+                        val showWearLog = sp.getBoolean("wear_log_debug_visible", false)
                         val rawLogs = PhoneLog.getLogBuffer()
 
-                        // 🔍 依靠硬标签 [PHONE] 和 [WEAR] 或者包含特定关键字来进行百分百归位
-                        val pList = if (showPhoneLog) {
-                            rawLogs.filter { line -> 
-                                line.contains("[PHONE]") || (!line.contains("[WEAR]") && !line.contains("WearLog") && !line.contains("🎬"))
-                            }
-                        } else emptyList()
-
-                        val wList = if (showWearLog) {
-                            rawLogs.filter { line -> 
-                                line.contains("[WEAR]") || line.contains("WearLog") || line.contains("🎬")
-                            }
-                        } else emptyList()
+                        val pList = if (showPhoneLog) rawLogs.filter { it.contains("[PHONE]") } else emptyList()
+                        val wList = if (showWearLog) rawLogs.filter { it.contains("[WEAR]") } else emptyList()
 
                         if (phoneLogs.size != pList.size) phoneLogs = pList
                         if (wearLogs.size != wList.size) wearLogs = wList
@@ -140,15 +122,16 @@ class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
                         .fillMaxSize()
                         .background(Color(0xF2121212)) 
                 ) {
-                    // ================= 舱位上层：手机本地日志舱 =================
+                    // ================= 上层：手机本地日志舱 =================
                     Box(modifier = Modifier.weight(1f).fillMaxWidth().padding(4.dp)) {
                         if (phoneLogs.isEmpty()) {
                             Text("手机日志舱 (暂无内容或主页开关已关)", color = Color.DarkGray, fontSize = 11.sp, modifier = Modifier.align(Alignment.Center))
                         } else {
                             LazyColumn(state = phoneListState, modifier = Modifier.fillMaxSize()) {
                                 items(phoneLogs) { line ->
-                                    val color = if (line.contains(" E/") || line.contains("Error")) Color(0xFFFF5252) else Color(0xFF00E676)
-                                    Text(text = line, color = color, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                                    val cleanLine = line.replace("[PHONE] ", "").replace("[PHONE]", "")
+                                    val color = if (cleanLine.contains(" E/") || cleanLine.contains("Error")) Color(0xFFFF5252) else Color(0xFF00E676)
+                                    Text(text = cleanLine, color = color, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
                                 }
                             }
                         }
@@ -157,22 +140,23 @@ class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
 
                     Row(modifier = Modifier.fillMaxWidth().height(2.dp).background(Color(0xFF00B0FF))) {}
 
-                    // ================= 舱位下层：手表专属日志舱 =================
+                    // ================= 下层：手表专属日志舱 =================
                     Box(modifier = Modifier.weight(1f).fillMaxWidth().padding(4.dp)) {
                         if (wearLogs.isEmpty()) {
-                            Text("手表日志舱 (等待无线网络报文或主页开关已关)", color = Color.DarkGray, fontSize = 11.sp, modifier = Modifier.align(Alignment.Center))
+                            Text("手表日志舱 (等待无线通道报文或主页开关已关)", color = Color.DarkGray, fontSize = 11.sp, modifier = Modifier.align(Alignment.Center))
                         } else {
                             LazyColumn(state = wearListState, modifier = Modifier.fillMaxSize()) {
                                 items(wearLogs) { line ->
-                                    val color = if (line.contains(" E/") || line.contains("Error")) Color(0xFFFF5252) else Color(0xFF00B0FF)
-                                    Text(text = line, color = color, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                                    val cleanLine = line.replace("[WEAR] ", "").replace("[WEAR]", "")
+                                    val color = if (cleanLine.contains(" E/") || cleanLine.contains("Error")) Color(0xFFFF5252) else Color(0xFF00B0FF)
+                                    Text(text = cleanLine, color = color, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
                                 }
                             }
                         }
                         Text("⌚ 手表无线网络", color = Color.White.copy(alpha = 0.25f), fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.TopEnd).padding(4.dp))
                     }
 
-                    // ================= 底部第 1 行：全手势纯净拖动滑行带 =================
+                    // ================= 拖拽和拉伸交互条 =================
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -207,75 +191,70 @@ class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
                                         }
                                         windowParams.width = max(500, windowParams.width + dragAmount.x.toInt())
                                         windowParams.height = max(400, windowParams.height + dragAmount.y.toInt())
-                                        
-                                        widthPx = windowParams.width
-                                        heightPx = windowParams.height
                                         try { windowManager.updateViewLayout(floatingView, windowParams) } catch (_: Exception) {}
                                     }
                                 }
                         )
                     }
 
-                    // ================= 底部第 2 行：核心控制台 =================
+                    // ================= 底部功能控制台 =================
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(44.dp)
                             .background(Color(0xFF151518))
-                            .padding(horizontal = 8.dp),
+                            .padding(horizontal = 4.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("WearSync 核心监视器", color = Color.Gray, fontSize = 10.sp)
+                        Text("监视器", color = Color.Gray, fontSize = 10.sp, modifier = Modifier.padding(start = 2.dp))
                         
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             Button(
                                 onClick = { 
                                     PhoneLog.clear()
                                     phoneLogs = emptyList()
                                     wearLogs = emptyList()
                                 },
-                                contentPadding = PaddingValues(horizontal = 10.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp),
                                 modifier = Modifier.height(28.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3A3A3C))
-                            ) { Text("清空", fontSize = 11.sp, color = Color.White) }
+                            ) { Text("清空", fontSize = 11.sp) }
+
+                            // 🚀 核心画中画还原子舱：一键返回全屏大窗口
+                            Button(
+                                onClick = {
+                                    val activityIntent = Intent(this@PhoneLogFloatingService, PhoneLogActivity::class.java).apply {
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                                    }
+                                    startActivity(activityIntent)
+                                    stopSelf() // 隐退悬浮窗
+                                },
+                                contentPadding = PaddingValues(horizontal = 8.dp),
+                                modifier = Modifier.height(28.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00B0FF))
+                            ) { Text("返回全屏", fontSize = 11.sp, color = Color.Black, fontWeight = FontWeight.Bold) }
 
                             Button(
                                 onClick = {
-                                    try {
-                                        val allLogs = PhoneLog.getLogBuffer()
-                                        if (allLogs.isEmpty()) {
-                                            Toast.makeText(this@PhoneLogFloatingService, "当前缓冲区无日志，无需导出", Toast.LENGTH_SHORT).show()
-                                            return@Button
-                                        }
-                                        val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(System.currentTimeMillis())
-                                        val fileName = "WearSync_Log_$timeStamp.txt"
-                                        
-                                        val docDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
-                                        if (!docDir.exists()) docDir.mkdirs()
-                                        
-                                        val file = File(docDir, fileName)
-                                        FileOutputStream(file).use { os ->
-                                            allLogs.forEach { line ->
-                                                os.write((line + "\n").toByteArray())
-                                            }
-                                        }
-                                        Toast.makeText(this@PhoneLogFloatingService, "日志已成功保存至 Documents/$fileName", Toast.LENGTH_LONG).show()
-                                    } catch (e: Exception) {
-                                        Toast.makeText(this@PhoneLogFloatingService, "保存失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                                    val file: File? = PhoneLog.saveToFile(this@PhoneLogFloatingService)
+                                    if (file != null && file.exists()) {
+                                        Toast.makeText(this@PhoneLogFloatingService, "保存成功！文件保存在:\n${file.absolutePath}", Toast.LENGTH_LONG).show()
+                                    } else {
+                                        Toast.makeText(this@PhoneLogFloatingService, "日志导出失败", Toast.LENGTH_SHORT).show()
                                     }
                                 },
-                                contentPadding = PaddingValues(horizontal = 10.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp),
                                 modifier = Modifier.height(28.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF007AFF)) 
-                            ) { Text("保存日志", fontSize = 11.sp, color = Color.White) }
+                            ) { Text("保存", fontSize = 11.sp) }
 
                             Button(
                                 onClick = { stopSelf() },
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF3B30)), 
-                                contentPadding = PaddingValues(horizontal = 10.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp),
                                 modifier = Modifier.height(28.dp)
-                            ) { Text("收起", fontSize = 11.sp, color = Color.White) }
+                            ) { Text("收起", fontSize = 11.sp) }
                         }
                     }
                 }
@@ -289,9 +268,7 @@ class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
         super.onDestroy()
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
         floatingView?.let {
-            try {
-                windowManager.removeView(it)
-            } catch (_: Exception) {}
+            try { windowManager.removeView(it) } catch (_: Exception) {}
         }
     }
 }
