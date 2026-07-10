@@ -147,11 +147,22 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
         }
         
         CameraState currentState = getState();
+        PhoneLog.d(TAG,
+        "STREAM REQUEST state=" + currentState);
         
         if (currentState == CameraState.CAMERA_READY) {
-            if (!transition(CameraState.CAMERA_READY, CameraState.CHANNEL_OPENING)) return;
-            openChannel(nodeId);
-        } else {
+
+    PhoneLog.d(TAG, "准备进入 openChannel");
+
+    if (!transition(CameraState.CAMERA_READY, CameraState.CHANNEL_OPENING)) {
+        PhoneLog.d(TAG, "transition failed");
+        return;
+    }
+
+    PhoneLog.d(TAG, "transition success");
+
+    openChannel(nodeId);
+} else {
             // ✅ 保存到积压队列，等待相机初始化完成后自动处理
             mPendingStreamingNodeId = nodeId;
             PhoneLog.d(TAG, "⏳ 状态非 CAMERA_READY，保存请求待处理");
