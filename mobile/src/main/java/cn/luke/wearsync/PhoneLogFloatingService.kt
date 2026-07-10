@@ -5,11 +5,11 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.PixelFormat
 import android.os.Build
+import android.os.Environment
 import android.os.IBinder
 import android.view.Gravity
-import android.view.MotionEvent
-import android.view.View
 import android.view.WindowManager
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
@@ -33,8 +33,11 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import kotlinx.coroutines.delay
+import java.io.File
+import java.io.FileOutputStream
+import java.text.SimpleDateFormat
+import java.util.Locale
 import kotlin.math.max
-import kotlin.math.min
 
 class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
 
@@ -65,17 +68,17 @@ class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
             @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
         }
 
-        // 🌟 初始参数配置
+        // 🌟 物理懸浮窗基礎參數設置
         windowParams = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
-            700, // 默认初始总高度为 700 像素
+            750, // 默認初始總高度
             layoutType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
             x = 0
-            y = 200 // 距离顶部留出空间
+            y = 250
         }
 
         floatingView = ComposeView(this).apply {
@@ -88,165 +91,198 @@ class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
             setViewTreeSavedStateRegistryOwner(this@PhoneLogFloatingService)
 
             setContent {
-                // 🚀 双舱独立数据源
                 var phoneLogs by remember { mutableStateOf(listOf<String>()) }
                 var wearLogs by remember { mutableStateOf(listOf<String>()) }
 
-                // 🚀 双舱独立滚动状态机
                 val phoneListState = rememberLazyListState()
                 val wearListState = rememberLazyListState()
 
-                // 高度动态调整状态（本地 Compose 维护，并同步反馈给物理窗口）
-                var currentHeight by remember { mutableStateOf(700) }
+                // 實時追蹤窗口大小，方便手勢縮放反饋
+                var widthPx by remember { mutableStateOf(windowParams.width) }
+                var heightPx by remember { mutableStateOf(windowParams.height) }
 
                 val sp = remember { getSharedPreferences("dndsync_prefs", Context.MODE_PRIVATE) }
 
-                // 🔄 核心双通道高刷轮询机制
+                // 🔄 核心精準通道歸位過濾機制
                 LaunchedEffect(Unit) {
                     while (true) {
                         val showPhoneLog = sp.getBoolean("phone_log_debug_visible", true)
                         val showWearLog = sp.getBoolean("wear_log_debug_visible", true)
                         val rawLogs = PhoneLog.getLogBuffer()
 
-                        // 独立过滤出手机日志舱
+                        // 🔍 精准甄別依據：嚴格匹配 PhoneLog 和 WearLog 前綴
                         val pList = if (showPhoneLog) {
-                            rawLogs.filter { !it.contains("Wear", ignoreCase = true) && !it.contains("Watch", ignoreCase = true) }
+                            rawLogs.filter { line -> line.contains("PhoneLog", ignoreCase = true) }
                         } else emptyList()
 
-                        // 独立过滤出手表日志舱
                         val wList = if (showWearLog) {
-                            rawLogs.filter { it.contains("Wear", ignoreCase = true) || it.contains("Watch", ignoreCase = true) }
+                            rawLogs.filter { line -> line.contains("WearLog", ignoreCase = true) }
                         } else emptyList()
 
                         if (phoneLogs.size != pList.size) phoneLogs = pList
                         if (wearLogs.size != wList.size) wearLogs = wList
 
-                        delay(400) // 400ms 高刷
+                        delay(400)
                     }
                 }
 
-                // 📱 手机舱自动触底
+                // 雙艙觸底自動追蹤
                 LaunchedEffect(phoneLogs.size) {
                     if (phoneLogs.isNotEmpty()) phoneListState.animateScrollToItem(phoneLogs.lastIndex)
                 }
-
-                // ⌚ 手表舱自动触底
                 LaunchedEffect(wearLogs.size) {
                     if (wearLogs.isNotEmpty()) wearListState.animateScrollToItem(wearLogs.lastIndex)
                 }
 
-                // 全局大外壳容器
+                // 全局大外殼容器
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color(0xF2121212)) // 极具质感的近纯黑底色
+                        .background(Color(0xF2121212)) 
                 ) {
-                    
-                    // ================= 舱位上层：手机本地日志舱 =================
+                    // ================= 艙位上層：手機本地日誌艙 =================
                     Box(modifier = Modifier.weight(1f).fillMaxWidth().padding(4.dp)) {
                         if (phoneLogs.isEmpty()) {
-                            Text("手机日志舱 (已清空或主页开关已关闭)", color = Color.DarkGray, fontSize = 11.sp, modifier = Modifier.align(Alignment.Center))
+                            Text("手机日志舱 (暂无内容或主页开关已关)", color = Color.DarkGray, fontSize = 11.sp, modifier = Modifier.align(Alignment.Center))
                         } else {
                             LazyColumn(state = phoneListState, modifier = Modifier.fillMaxSize()) {
                                 items(phoneLogs) { line ->
                                     val color = if (line.contains(" E/") || line.contains("Error")) Color(0xFFFF5252) else Color(0xFF00E676)
-                                    Text(text = line, color = color, fontSize = 10.5.sp, fontFamily = FontFamily.Monospace)
+                                    Text(text = line, color = color, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
                                 }
                             }
                         }
-                        Text("📱 手机本地通道", color = Color.White.copy(alpha = 0.3f), fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.apply { align(Alignment.TopEnd).padding(4.dp) })
+                        Text("📱 手机本地通道 (PhoneLog)", color = Color.White.copy(alpha = 0.25f), fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.TopEnd).padding(4.dp))
                     }
 
-                    // 🛠️ 贯穿中轴：完美的双端分界线
-                    Row(
-                        modifier = Modifier.fillMaxWidth().height(2.dp).background(Color(0xFF00B0FF)) // 冰蓝色隔离带
-                    ) {}
+                    // 🛠️ 貫穿中軸隔離帶
+                    Row(modifier = Modifier.fillMaxWidth().height(2.dp).background(Color(0xFF00B0FF))) {}
 
-                    // ================= 舱位下层：手表专属日志舱 =================
+                    // ================= 艙位下層：手表專屬日誌艙 =================
                     Box(modifier = Modifier.weight(1f).fillMaxWidth().padding(4.dp)) {
                         if (wearLogs.isEmpty()) {
-                            Text("手表日志舱 (等待上报或主页开关已关闭)", color = Color.DarkGray, fontSize = 11.sp, modifier = Modifier.align(Alignment.Center))
+                            Text("手表日志舱 (等待无线网络报文或主页开关已关)", color = Color.DarkGray, fontSize = 11.sp, modifier = Modifier.align(Alignment.Center))
                         } else {
                             LazyColumn(state = wearListState, modifier = Modifier.fillMaxSize()) {
                                 items(wearLogs) { line ->
                                     val color = if (line.contains(" E/") || line.contains("Error")) Color(0xFFFF5252) else Color(0xFF00B0FF)
-                                    Text(text = line, color = color, fontSize = 10.5.sp, fontFamily = FontFamily.Monospace)
+                                    Text(text = line, color = color, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
                                 }
                             }
                         }
-                        Text("⌚ 手表无线网络", color = Color.White.copy(alpha = 0.3f), fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.apply { align(Alignment.TopEnd).padding(4.dp) })
+                        Text("⌚ 手表无线网络 (WearLog)", color = Color.White.copy(alpha = 0.25f), fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.TopEnd).padding(4.dp))
                     }
 
-                    // ================= 底部：一体化多维控制台 (集成拖动与高度缩放) =================
+                    // ================= 底部第 1 行：全手勢純淨拖動滑行帶（無按鈕阻斷阻礙） =================
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(42.dp)
-                            .background(Color(0xFF1A1A1A))
+                            .height(36.dp)
+                            .background(Color(0xFF1F1F23))
                             .pointerInput(Unit) {
-                                // 🌟 核心手势：允许用户在控制台区域按住任意上下拖动悬浮窗位置
+                                // ✨ 純淨手勢：按住這行直接在手機屏幕上全自由漂移
                                 detectDragGestures { change, dragAmount ->
                                     change.consume()
+                                    windowParams.x += dragAmount.x.toInt()
                                     windowParams.y += dragAmount.y.toInt()
-                                    try {
-                                        windowManager.updateViewLayout(floatingView, windowParams)
-                                    } catch (_: Exception) {}
+                                    try { windowManager.updateViewLayout(floatingView, windowParams) } catch (_: Exception) {}
                                 }
                             }
+                            .padding(horizontal = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("↕ 按住此行可在屏幕任意拖放位置", color = Color(0xFF00B0FF), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        
+                        // 📐 右側直接拉伸大小手勢塊
+                        Text(
+                            text = "📐 拖拽此边缘调大小",
+                            color = Color.LightGray,
+                            fontSize = 11.sp,
+                            modifier = Modifier
+                                .background(Color(0xFF2D2D34))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                .pointerInput(Unit) {
+                                    // ✨ 核心手勢：按住這個標籤向右或向下拖，直接自由伸縮懸浮窗大小
+                                    detectDragGestures { change, dragAmount ->
+                                        change.consume()
+                                        if (windowParams.width == WindowManager.LayoutParams.MATCH_PARENT) {
+                                            windowParams.width = floatingView?.width ?: 1000
+                                        }
+                                        windowParams.width = max(500, windowParams.width + dragAmount.x.toInt())
+                                        windowParams.height = max(400, windowParams.height + dragAmount.y.toInt())
+                                        
+                                        widthPx = windowParams.width
+                                        heightPx = windowParams.height
+                                        try { windowManager.updateViewLayout(floatingView, windowParams) } catch (_: Exception) {}
+                                    }
+                                }
+                        )
+                    }
+
+                    // ================= 底部第 2 行：深度核心功能控制台 =================
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp)
+                            .background(Color(0xFF151518))
                             .padding(horizontal = 8.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // 左侧状态文字提示拖拽
-                        Text("↕ 拖动此行改变位置", color = Color.Gray, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                        Text("WearSync 核心监视器", color = Color.Gray, fontSize = 10.sp)
                         
-                        // 右侧动作按钮方阵
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // 高度 - 缩小按钮
-                            Button(
-                                onClick = {
-                                    currentHeight = max(400, currentHeight - 120)
-                                    windowParams.height = currentHeight
-                                    try { windowManager.updateViewLayout(floatingView, windowParams) } catch (_: Exception) {}
-                                },
-                                contentPadding = PaddingValues(horizontal = 6.dp),
-                                modifier = Modifier.height(26.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF333333))
-                            ) { Text("矮 ➖", fontSize = 11.sp, color = Color.LightGray) }
-
-                            // 高度 + 放大按钮
-                            Button(
-                                onClick = {
-                                    currentHeight = min(1500, currentHeight + 120)
-                                    windowParams.height = currentHeight
-                                    try { windowManager.updateViewLayout(floatingView, windowParams) } catch (_: Exception) {}
-                                },
-                                contentPadding = PaddingValues(horizontal = 6.dp),
-                                modifier = Modifier.height(26.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF333333))
-                            ) { Text("高 ➕", fontSize = 11.sp, color = Color.LightGray) }
-
-                            // 一键清空核心缓冲区
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            // 一鍵清除
                             Button(
                                 onClick = { 
                                     PhoneLog.clear()
                                     phoneLogs = emptyList()
                                     wearLogs = emptyList()
                                 },
-                                contentPadding = PaddingValues(horizontal = 8.dp),
-                                modifier = Modifier.height(26.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF424242))
+                                contentPadding = PaddingValues(horizontal = 10.dp),
+                                modifier = Modifier.height(28.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3A3A3C))
                             ) { Text("清空", fontSize = 11.sp, color = Color.White) }
 
-                            // 完美收起卸载服务
+                            // 💾 導出保存日誌功能
+                            Button(
+                                onClick = {
+                                    try {
+                                        val allLogs = PhoneLog.getLogBuffer()
+                                        if (allLogs.isEmpty()) {
+                                            Toast.makeText(this@PhoneLogFloatingService, "当前缓冲区无日志，无需导出", Toast.LENGTH_SHORT).show()
+                                            return@Button
+                                        }
+                                        val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(System.currentTimeMillis())
+                                        val fileName = "WearSync_Log_$timeStamp.txt"
+                                        
+                                        // 保存到手機公開文檔目錄中
+                                        val docDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
+                                        if (!docDir.exists()) docDir.mkdirs()
+                                        
+                                        val file = File(docDir, fileName)
+                                        FileOutputStream(file).use { os ->
+                                            allLogs.forEach { line ->
+                                                os.write((line + "\n").toByteArray())
+                                            }
+                                        }
+                                        Toast.makeText(this@PhoneLogFloatingService, "日志已成功保存至 Documents/$fileName", Toast.LENGTH_LONG).show()
+                                    } catch (e: Exception) {
+                                        Toast.makeText(this@PhoneLogFloatingService, "保存失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                contentPadding = PaddingValues(horizontal = 10.dp),
+                                modifier = Modifier.height(28.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF007AFF)) 
+                            ) { Text("保存日志", fontSize = 11.sp, color = Color.White) }
+
+                            // 卸載關閉
                             Button(
                                 onClick = { stopSelf() },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)),
-                                contentPadding = PaddingValues(horizontal = 8.dp),
-                                modifier = Modifier.height(26.dp)
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF3B30)), 
+                                contentPadding = PaddingValues(horizontal = 10.dp),
+                                modifier = Modifier.height(28.dp)
                             ) { Text("收起", fontSize = 11.sp, color = Color.White) }
                         }
                     }
@@ -254,7 +290,6 @@ class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
             }
         }
 
-        // 正式挂载
         windowManager.addView(floatingView, windowParams)
     }
 
