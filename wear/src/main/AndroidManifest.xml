@@ -75,15 +75,22 @@
             android:enabled="true"
             android:exported="true">
         
+            <!-- Filter 1: 专门接收消息，带精确路径过滤 -->
             <intent-filter>
-        
                 <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED"/>
+                <data 
+                    android:scheme="wear" 
+                    android:host="*" 
+                    android:path="/wear-universal-sync" />
+            </intent-filter>
         
+            <!-- Filter 2: 专门接收通道事件，不加路径限制 -->
+            <intent-filter>
                 <action android:name="com.google.android.gms.wearable.CHANNEL_EVENT"/>
-        
             </intent-filter>
         
         </service>
+
 
         <service
             android:name="cn.luke.wearsync.WearSyncNotificationService"
