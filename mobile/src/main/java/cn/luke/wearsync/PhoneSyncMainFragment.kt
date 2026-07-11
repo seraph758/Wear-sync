@@ -447,23 +447,87 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                     }
                                 }
 
-                                // 终端调试的展开面板
-                                AnimatedVisibility(visible = isLogExpanded) {
-                                    Card(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(12.dp),
-                                        colors = CardDefaults.cardColors(containerColor = cardBgColor)
-                                    ) {
-                                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                                Text("开启手机端调试日志", color = textColor, fontSize = 14.sp)
-                                                Switch(checked = uiLogDebugSwitch.value, onCheckedChange = { isChecked -> uiLogDebugSwitch.value = isChecked; sp.edit().putBoolean("phone_log_debug_visible", isChecked).apply(); PhoneLog.DEBUG = isChecked })
-                                            }
-                                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                                Text("同步监听手表端核心日志", color = textColor, fontSize = 14.sp)
-                                                Switch(checked = uiWearLogDebugSwitch.value, onCheckedChange = { isChecked -> uiWearLogDebugSwitch.value = isChecked; sp.edit().putBoolean("wear_log_debug_visible", isChecked).apply() })
-                                            }
-                                            HorizontalDivider(color = dividerColor)
+ // 终端调试的展开面板
+AnimatedVisibility(visible = isLogExpanded) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = cardBgColor)
+    ) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            
+            // ============================================================
+            // 📱 开关 1：开启手机端调试日志
+            // ============================================================
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("开启手机端调试日志", color = textColor, fontSize = 14.sp)
+                Switch(
+                    checked = uiLogDebugSwitch.value, 
+                    onCheckedChange = { isChecked -> 
+                        uiLogDebugSwitch.value = isChecked
+                        sp.edit().putBoolean("phone_log_debug_visible", isChecked).apply()
+                        PhoneLog.DEBUG = isChecked 
+                        
+                        // 🚀 痕迹：记录本地手机日志开关状态
+                        PhoneLog.d("WearSync_Main", "用户切换手机端调试日志开关，当前状态: $isChecked")
+                    }
+                )
+            }
+            
+            // ============================================================
+            // ⌚ 开关 2：同步监听手表端核心日志（真正连通手表）
+            // ============================================================
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("同步监听手表端核心日志", color = textColor, fontSize = 14.sp)
+                Switch(
+                    checked = uiWearLogDebugSwitch.value, 
+                    onCheckedChange = { isChecked -> 
+                        uiWearLogDebugSwitch.value = isChecked
+                        sp.edit().putBoolean("wear_log_debug_visible", isChecked).apply()
+                        
+                        // 🚀 痕迹 1：记录UI层触发
+                        PhoneLog.d("WearSync_Main", "用户切换同步监听手表端核心日志开关，当前状态: $isChecked")
+                        
+                        // 🚀 痕迹 2：按照手表端正在等待的格式组装 JSON
+                        try {
+                            val msgJson = org.json.JSONObject().apply {
+                                put("type", "wear_log_control")      // 完美契合手表: "wear_log_control".equalsIgnoreCase(type)
+                                put("wear_log_debug", isChecked)     // 完美契合手表: json.optBoolean("wear_log_debug", true)
+                                put("timestamp", System.currentTimeMillis())
+                            }
+                            
+                            // 🚀 痕迹 3：打印即将发往手表的原始信令内容
+                            PhoneLog.d("WearSync_Main", "准备向手表端发送日志控制信令: $msgJson")
+                            
+                            // 🚀 痕迹 4：真正执行无线发送（在协程后台线程中执行，防止卡死UI）
+                            val nodeId = WearSyncState.getNodeId(context) // 获取当前配对的手表节点ID
+                            if (!nodeId.isNullOrEmpty()) {
+                                kotlinx.coroutines.MainScope().launch(kotlinx.coroutines.Dispatchers.IO) {
+                                    try {
+                                        com.google.android.gms.wearable.Wearable.getMessageClient(context)
+                                            .sendMessage(
+                                                nodeId,
+                                                "/wear-universal-sync", // 保持与你原本通用同步路径一致
+                                                msgJson.toString().toByteArray(java.nio.charset.StandardCharsets.UTF_8)
+                                            )
+                                        PhoneLog.d("WearSync_Main", "日志控制信令已成功送出到消息队列")
+                                    } catch (sendError: Exception) {
+                                        PhoneLog.e("WearSync_Main", "通过MessageClient发送信令时遭遇物理失败", sendError)
+                                    }
+                                }
+                            } else {
+                                PhoneLog.w("WearSync_Main", "无法发送信令给手表：当前未捕获到有效的手表 NodeId")
+                            }
+                            
+                        } catch (e: Exception) {
+                            PhoneLog.e("WearSync_Main", "组装手表日志开关信令数据失败", e)
+                        }
+                    }
+                )
+            }
+            
+            HorizontalDivider(color = dividerColor)
+
                                             // 🚀 原汁原味完美保留您的基础底层页面跳转，不改坏旧逻辑
                                           Button(
                                                 modifier = Modifier.fillMaxWidth(),
