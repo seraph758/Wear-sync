@@ -1,16 +1,19 @@
 package cn.luke.wearsync;
 
+import android.app.NotificationManager;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.widget.Toast;
+
 import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
+
 import com.google.android.gms.wearable.CapabilityClient;
 import com.google.android.gms.wearable.Wearable;
 
-import android.app.NotificationManager;
+import cn.luke.wearsync.wear.R;
 
 /**
  * 🎬 WearOS 手表端主控制与权限状态 Fragment 面板
@@ -54,7 +57,7 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
                     startActivity(accIntent);
                 } catch (Exception e) {
                     WearLog.e(TAG, "🔴 [物理跳转崩溃] 无法完成向系统无障碍设置页面的跳转动作: " + e.getMessage(), e);
-                    Toast.makeText(getContext(), "无法跳转无障碍设置", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(getContext(), getString(R.string.acc_jump_failed), Toast.LENGTH_SHORT).show();
                 }
                 return true;
             });
@@ -137,7 +140,7 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
         if (dndPref != null && nm != null) {
             boolean hasDnd = nm.isNotificationPolicyAccessGranted();
             WearLog.d(TAG, "🌓 [系统权限检索] 📋 勿扰模式(DND/系统通知)权限最新状态: 【" + (hasDnd ? "已授权/TRUE" : "未授权/FALSE") + "】");
-            dndPref.setSummary(hasDnd ? "🟢 已获得系统通知读取权限" : "🔴 未授权系统通知权限（使用ADB授权）");
+            dndPref.setSummary(hasDnd ? getString(R.string.dnd_granted) : getString(R.string.dnd_denied));
         } else {
             WearLog.w(TAG, "⚠️ [系统权限检索] 边缘跳过：dndPref 或 NotificationManager 实体不存续。");
         }
@@ -147,7 +150,7 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
         WearLog.d(TAG, "♿ [系统权限检索] 📋 无障碍辅助功能服务实时活体状态: 【" + (hasAccessibility ? "服务已激活/TRUE" : "服务死亡/FALSE") + "】");
         
         if (accPref != null) {
-            accPref.setSummary(hasAccessibility ? "🟢 辅助功能已激活" : "🔴 辅助功能未激活");
+            accPref.setSummary(hasAccessibility ? ? getString(R.string.acc_activated) : getString(R.string.acc_deactivated));
         }
     }
 
@@ -236,7 +239,7 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
 
     private void updateConnectionUI(boolean connected) {
         if (connectivityPref != null) {
-            connectivityPref.setSummary(connected ? "🟢 已连接到宿主手机" : "🔴 与手机断开联络");
+            connectivityPref.setSummary(connected ? getString(R.string.connectivity_connected) : getString(R.string.connectivity_disconnected));
             WearLog.w(TAG, "📡 [UI渲染变更] ─── 联络链路状态突变探查 ➔ 在线=[" + connected + "] ───");
         } else {
             WearLog.e(TAG, "❌ [UI渲染失败] 试图将联络状态 [" + connected + "] 推送至卡面，但 connectivityPref 组件尚未加载，数据流丢失！");

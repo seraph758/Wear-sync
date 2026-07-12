@@ -8,4 +8,17 @@
     <string name="btn_capture_description">Capture</string>
     <string name="alarm_date_format">%1$s   %2$s</string>
     <string name="accessibility_service_label">WearSync 自動化核心</string>
+    <string name="temp_camera_text">临时相机同显画面</string>
+
+    <string name="connectivity_connected">🟢 已连接到宿主手机</string>
+    <string name="connectivity_disconnected">🔴 与手机断开联络</string>
+
+    <string name="dnd_granted">🟢 已获得系统通知读取权限</string>
+    <string name="dnd_denied">🔴 未授权系统通知权限（使用ADB授权）</string>
+    <string name="acc_activated">🟢 辅助功能已激活</string>
+    <string name="acc_deactivated">🔴 辅助功能未激活</string>
+    <string name="acc_jump_failed">无法跳转无障碍设置</string>
+
+    <string name="camera_control_title">远端相机控制</string>
+    <string name="camera_launch_failed">本地 WearCameraActivity 启动失败</string>
 </resources>

@@ -317,7 +317,8 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                                         PhoneSyncAppPicker.show(requireContext()) { pkg, name ->
                                                             selectedAlarmName = name
                                                             selectedAlarmPkg = pkg
-                                                            sp.edit { putBoolean("alarm_proxy_master_switch", isEnabled) }
+                                                            // 🎯 修复：这里应该是保存当前开关状态 isAlarmMasterEnabled
+                                                            sp.edit { putBoolean("alarm_proxy_master_switch", isAlarmMasterEnabled) }
                                                             PhoneLog.d("WearSync_Main", "🎯 切换时钟源: $name [$pkg]")
                                                         }
                                                     }
@@ -327,26 +328,33 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                                     Text(text = if (isAlarmMasterEnabled) "已启用" else "已禁用", fontSize = 12.sp, color = textColor)
                                                     Switch(checked = isAlarmMasterEnabled, onCheckedChange = { isEnabled ->
                                                         isAlarmMasterEnabled = isEnabled
-                                                        sp.edit {.putBoolean("alarm_proxy_master_switch", isEnabled}
+                                                        // 🎯 修复：使用 KTX 标准闭包，完美闭合括号
+                                                        sp.edit {
+                                                            putBoolean("alarm_proxy_master_switch", isEnabled)
+                                                        }
                                                     })
-                                                }
+                                                } // 🎯 修复：补齐了原本漏掉的 Row 闭合括号
                                             }
+
                                             Text("目标包名: $selectedAlarmPkg", fontSize = 11.sp, color = subTextColor)
                                             HorizontalDivider(color = dividerColor)
+
                                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                                 OutlinedTextField(
                                                     enabled = isAlarmMasterEnabled, value = dismissKeyText,
-                                                    onValueChange = { dismissKeyText = it; sp.edit {putString("alarm_dismiss_key", it)}},
+                                                    onValueChange = { dismissKeyText = it; sp.edit { putString("alarm_dismiss_key", it) } },
                                                     label = { Text("停止关键字") }, singleLine = true, modifier = Modifier.weight(1f), textStyle = TextStyle(fontSize = 13.sp)
                                                 )
                                                 OutlinedTextField(
                                                     enabled = isAlarmMasterEnabled, value = snoozeKeyText,
-                                                    onValueChange = { snoozeKeyText = it; sp.edit {putString("alarm_snooze_key", it)}},
+                                                    onValueChange = { snoozeKeyText = it; sp.edit { putString("alarm_snooze_key", it) } },
                                                     label = { Text("延后关键字") }, singleLine = true, modifier = Modifier.weight(1f), textStyle = TextStyle(fontSize = 13.sp)
                                                 )
                                             }
+
                                             HorizontalDivider(color = dividerColor)
                                             Text("🧪 业务流联调测试面板", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = textColor)
+
                                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                                 Button(
                                                     enabled = isAlarmMasterEnabled, modifier = Modifier.weight(1f),
@@ -362,7 +370,6 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                         }
                                     }
                                 }
-                            }
 
                             // ==========================================
                             // 第二排：相机中心 & 终端调试（共用下方展示槽）
