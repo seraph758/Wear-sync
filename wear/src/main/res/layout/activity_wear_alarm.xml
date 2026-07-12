@@ -1,70 +1,74 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/alarm_container"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#000000"
-    android:orientation="vertical">
+    android:orientation="vertical"
+    tools:ignore="ButtonStyle">
 
     <!-- 上部：日期+时间（68%） -->
-    <LinearLayout
+    <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/layout_time"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="6.8"
-        android:gravity="center"
-        android:orientation="vertical"
-        android:paddingTop="21dp"
-        >
+        android:paddingTop="20dp"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp">
 
         <TextView
             android:id="@+id/tv_alarm_day"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="6月27日 周六"
+            android:text="@string/alarm_data"
             android:textColor="#C8A74A"
             android:textSize="21sp"
             android:textStyle="bold"
-            
             android:shadowColor="#C8A74A"
             android:shadowDx="0"
             android:shadowDy="5"
-            android:shadowRadius="6"/>
+            android:shadowRadius="6"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
 
         <TextView
             android:id="@+id/tv_alarm_time"
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_marginTop="0dp"
-            android:layout_weight="1"
-            android:autoSizeMaxTextSize="104sp"
+            android:layout_marginTop="-4dp"
+            android:layout_marginBottom="6dp"
             android:autoSizeMinTextSize="60sp"
+            android:autoSizeMaxTextSize="96sp"
             android:autoSizeTextType="uniform"
+            android:includeFontPadding="false"
             android:gravity="center"
             android:shadowColor="#A85542"
             android:shadowDx="0"
             android:shadowDy="10"
-
             android:shadowRadius="6"
-            android:text="22:36"
+            android:text="@string/alarm_time"
             android:textColor="#D4AF37"
-            android:textStyle="bold" />
+            android:textStyle="bold"
 
-        <!-- 保留给 Java -->
-        
+            app:layout_constraintTop_toBottomOf="@+id/tv_alarm_day"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
 
-    </LinearLayout>
+    </androidx.constraintlayout.widget.ConstraintLayout>
 
     <!-- 下部：按钮（32%） -->
-    <LinearLayout
+    <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/layout_buttons"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="3.2"
-        android:gravity="center"
-        android:orientation="horizontal"
-        android:paddingLeft="30dp"
-        android:paddingRight="30dp"
+        android:paddingStart="30dp"
+        android:paddingEnd="30dp"
         android:paddingTop="0dp"
         android:paddingBottom="20dp">
 
@@ -72,38 +76,46 @@
             android:id="@+id/btn_snooze"
             android:layout_width="0dp"
             android:layout_height="47dp"
-            android:layout_marginRight="2dp"
-            android:layout_weight="1"
+            android:layout_marginEnd="2dp"
             android:background="@drawable/bg_alarm_snooze"
             android:backgroundTint="@null"
             android:gravity="center"
             android:minWidth="0dp"
             android:minHeight="0dp"
             android:stateListAnimator="@null"
-            android:text="延后"
+            android:text="@string/alarm_snooze"
             android:textAllCaps="false"
             android:textColor="#FFFFFF"
             android:textSize="18sp"
-            android:textStyle="bold" />
+            android:textStyle="bold"
+
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toStartOf="@+id/btn_dismiss"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent" />
 
         <Button
             android:id="@+id/btn_dismiss"
             android:layout_width="0dp"
             android:layout_height="47dp"
-            android:layout_marginLeft="2dp"
-            android:layout_weight="1"
+            android:layout_marginStart="2dp"
             android:background="@drawable/bg_alarm_stop"
             android:backgroundTint="@null"
             android:gravity="center"
             android:minWidth="0dp"
             android:minHeight="0dp"
             android:stateListAnimator="@null"
-            android:text="停止"
+            android:text="@string/alarm_dismiss"
             android:textAllCaps="false"
             android:textColor="#FFFFFF"
             android:textSize="18sp"
-            android:textStyle="bold" />
+            android:textStyle="bold"
 
-    </LinearLayout>
+            app:layout_constraintStart_toEndOf="@+id/btn_snooze"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
 
 </LinearLayout>

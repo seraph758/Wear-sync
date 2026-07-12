@@ -4,8 +4,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:id="@+id/main_layout"
-    android:background="?attr/colorSurface">
+    android:id="@+id/main_layout">
 
     <com.google.android.material.appbar.AppBarLayout
         android:layout_width="match_parent"
@@ -38,6 +37,6 @@
         android:elevation="8dp"
         android:background="#000000"
         android:visibility="gone"
-        android:contentDescription="临时相机同显画面" />
+        android:contentDescription="@string/temp_camera_text" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

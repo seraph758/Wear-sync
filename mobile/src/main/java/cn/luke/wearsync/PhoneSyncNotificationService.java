@@ -154,7 +154,7 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
     private final Handler alarmWatchdogHandler = new Handler(Looper.getMainLooper());
     private Runnable alarmWatchdogRunnable = null;
 
-    @Deprecated
+
     private boolean isAlarmCurrentlyRinging = false;
     private boolean alarmReady = false;
     private final Handler readyHandler = new Handler(Looper.getMainLooper());

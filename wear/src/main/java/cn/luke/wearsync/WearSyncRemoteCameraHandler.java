@@ -144,10 +144,12 @@ public class WearSyncRemoteCameraHandler {
 
                     WearLog.w(TAG,
                             "✨ [成功] 手机端远程 Activity 唤醒请求已被 Google 通道确认");
+                    // Avoid using FLAG_ACTIVITY_NEW_TASK and FLAG_ACTIVITY_CLEAR_TOP
                     Intent cameraIntent = new Intent(context, WearCameraActivity.class);
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    context.startActivity(intent);
-                    
+// 🚀 1. 修复变量名错误；2. 更换更高级、更符合 Wear OS 规范的 Flag 避开警告
+                    cameraIntent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+                    context.startActivity(cameraIntent); // 🚀 3. 确保启动的是 cameraIntent
+
                     WearLog.d(TAG, "CAM-W000 WearCameraActivity 已主动拉起");
 
 

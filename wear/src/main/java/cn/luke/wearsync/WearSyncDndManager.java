@@ -266,40 +266,65 @@ if (isPowerSaveLinkageOpen) {
     private static void toggleBedtimeMode(Context context) {
         WearSyncAccessService serv = WearSyncAccessService.getSharedInstance();
         if (serv == null) {
-            new Handler(Looper.getMainLooper()).post(() -> 
-                Toast.makeText(context.getApplicationContext(), "無障礙服務未連接，無法同步睡眠模式", Toast.LENGTH_LONG).show()
-            );
+            Toast.makeText(context.getApplicationContext(),
+                    "無障礙服務未連接，無法同步睡眠模式", Toast.LENGTH_LONG).show();
             return;
         }
 
-        PowerManager pm = (PowerManager) context.getApplicationContext().getSystemService(Context.POWER_SERVICE);
+        // ✅ 使用合法组合强制唤醒屏幕 + 保持CPU运转
+        PowerManager pm = (PowerManager) context.getApplicationContext()
+                .getSystemService(Context.POWER_SERVICE);
         if (pm == null) return;
 
-        PowerManager.WakeLock wakeLock = pm.newWakeLock(PowerManager.FULL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP, "dndsync:MyWakeLock");
-        wakeLock.acquire(2 * 60 * 1000L); // 2 分鐘安全期
+        final PowerManager.WakeLock wakeLock = pm.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK
 
-        new Handler(Looper.getMainLooper()).post(() -> 
-            Toast.makeText(context.getApplicationContext(), "正在同步睡眠模式...", Toast.LENGTH_SHORT).show()
+                        | PowerManager.ACQUIRE_CAUSES_WAKEUP
+                        | PowerManager.ON_AFTER_RELEASE,
+                "dndsync:BedtimeAutomation"
         );
 
-        new Thread(() -> {
+        // 15秒安全兜底，防止异常导致永久亮屏
+        wakeLock.acquire(15 * 1000L);
+
+        Toast.makeText(context.getApplicationContext(),
+                "正在同步睡眠模式...", Toast.LENGTH_SHORT).show();
+
+        // ✅ 所有UI自动化必须在主线程顺序执行
+        new Handler(Looper.getMainLooper()).post(() -> {
             try {
-                Thread.sleep(2000);
-                serv.swipeDown();      // 下滑拉出快捷面板
-                Thread.sleep(1000);
-                serv.clickIcon1_1();   // 精準呼叫你現有的 clickIcon1_1() 點擊首排中心
-                Thread.sleep(1000);
-                serv.goBack();         // 返回，關閉面板
-                WearLog.d(TAG, "✨ [無障礙聯動] 就寢模式（睡眠模式）自動化模擬腳本執行完畢。");
+                serv.swipeDown();
+
+                new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                    try {
+                        serv.clickIcon1_1();
+
+                        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                            try {
+                                serv.goBack();
+                                WearLog.d(TAG, "✨ [無障礙聯動] 就寢模式自動化執行完畢");
+                            } catch (Exception e) {
+                                WearLog.e(TAG, "❌ 返回操作失敗", e);
+                            } finally {
+                                // 自动化结束立即释放锁
+                                if (wakeLock.isHeld()) {
+                                    wakeLock.release();
+                                    WearLog.d(TAG, "🔒 Wakelock 提前釋放成功");
+                                }
+                            }
+                        }, 800);
+
+                    } catch (Exception e) {
+                        WearLog.e(TAG, "❌ 點擊就寢模式失敗", e);
+                        if (wakeLock.isHeld()) wakeLock.release();
+                    }
+                }, 600);
+
             } catch (Exception e) {
-                WearLog.e(TAG, "❌ 無障礙操作中途被系統熔断或中斷", e);
-            } finally {
-                if (wakeLock.isHeld()) {
-                    wakeLock.release();
-                    WearLog.d(TAG, "🔒 Wakelock 釋放成功，手錶螢幕重回休眠機制。");
-                }
+                WearLog.e(TAG, "❌ 下拉快捷面板失敗", e);
+                if (wakeLock.isHeld()) wakeLock.release();
             }
-        }).start();
+        });
     }
 
     private static void vibrate(Context context) {

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:tools="http://schemas.android.com/tools"
+    xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
@@ -16,6 +17,7 @@
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="Wear Sync"
         android:supportsRtl="true"
         android:theme="@style/Theme.WearSync">
@@ -29,7 +31,9 @@
             android:value="false" />
         <activity
             android:name="cn.luke.wearsync.WearSyncMainActivity"
-            android:exported="true">
+            android:exported="true"
+            android:theme="@style/Theme.WearSync"
+            tools:ignore="WearRecents">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -39,23 +43,28 @@
         <activity
             android:name="cn.luke.wearsync.WearAlarmActivity"
             android:exported="false"
-            android:showWhenLocked="true"
-            android:turnScreenOn="true"
             android:launchMode="singleTop"
-            android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen" />
+            android:theme="@style/Theme.WearSync.Alarm"
+            android:taskAffinity="cn.luke.wearsync.alarm" >
+
+            <meta-data android:name="android.wear.resume_to_app" android:value="true" />
+        </activity>
 
         <activity
             android:name="cn.luke.wearsync.WearCameraActivity"
             android:exported="false"
             android:launchMode="singleTask"
-            android:screenOrientation="portrait" 
-            android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
+            android:theme="@style/Theme.WearSync.Camera"
+            android:taskAffinity="cn.luke.wearsync.camera" android:allowTaskReparenting="true">
+
+            <meta-data android:name="android.wear.resume_to_app" android:value="true" />
+        </activity>
         <service
             android:name="cn.luke.wearsync.WearSyncAccessService"
             android:description="@string/access_desc"
             android:enabled="true"
-            android:exported="false"
-            android:label="WearSync 自動化核心"
+            android:exported="true"
+            android:label="@string/accessibility_service_label"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />
@@ -66,7 +75,7 @@
         </service>
 
         <service
-            android:name=".WearSyncBodyDetectService"
+            android:name="cn.luke.wearsync.WearSyncBodyDetectService"
             android:exported="true"
             android:permission="com.google.android.gms.wearable.BIND_CHANNEL">
         </service>

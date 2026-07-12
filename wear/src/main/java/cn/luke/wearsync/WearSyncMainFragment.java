@@ -49,7 +49,7 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
                 WearLog.d(TAG, "🔘 [交互触发] 用户点击了无障碍辅助功能 Preference 项，准备穿透调起系统设置页面...");
                 try {
                     Intent accIntent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
-                    accIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+// 🚀 直接把原本的 accIntent.addFlags(...) 这一行整行删掉！
                     WearLog.d(TAG, "🚀 [物理跳转] 正在呼叫 startActivity -> ACTION_ACCESSIBILITY_SETTINGS");
                     startActivity(accIntent);
                 } catch (Exception e) {
@@ -74,10 +74,9 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
         
                 try {
                         WearLog.d(TAG, "① 正在准备启动本地 WearCameraActivity...");
-                    
+
+                    // 🎯 干净清爽！直接把那行 addFlags 删掉即可
                         Intent intent = new Intent(requireContext(), WearCameraActivity.class);
-                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    
                         startActivity(intent);
                     
                         WearLog.d(TAG, "✅ 本地 WearCameraActivity 启动请求已发出。");

@@ -1,21 +1,26 @@
 pluginManagement {
     repositories {
+        // 🚀 优先从国内阿里云和腾讯镜像源拉取插件，完美解决拉取失败和 TLS 握手断开问题
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://maven.aliyun.com/repository/public' }
+        maven { url 'https://mirrors.cloud.tencent.com/nexus/repository/maven-public/' }
         gradlePluginPortal()
         google()
         mavenCentral()
-    }
-    plugins {
-        id 'com.android.application' version '7.1.0-alpha10'
-        id 'com.android.library' version '7.1.0-alpha10'
     }
 }
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
+        // 🚀 优先从国内镜像源拉取项目依赖库
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://maven.aliyun.com/repository/public' }
+        maven { url 'https://mirrors.cloud.tencent.com/nexus/repository/maven-public/' }
         google()
         mavenCentral()
     }
 }
-rootProject.name = "DNDSync"
+
+rootProject.name = "WearSync"
 include ':mobile'
 include ':wear'

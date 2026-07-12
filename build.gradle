@@ -1,29 +1,16 @@
 // Top-level build file where you can add configuration options common to all sub-projects/modules.
 
-// Top-level build file where you can add configuration options common to all sub-projects/modules.
-
-buildscript {
-    // 🟢 移动到这里：在构建初始化时立刻执行压制 SDK 34 警告，完美符合 Gradle 铁律
-    System.setProperty("android.suppressUnsupportedCompileSdk", "34")
-
-    repositories {
-        google()
-        mavenCentral()
-    }
-    dependencies {
-        // 保持 8.0.2 版本以适配 Gradle 8.0
-        classpath 'com.android.tools.build:gradle:8.13.2'
-    }
-}
-
 plugins {
-    // 🎯 核心升級：在根目錄定義全域 Kotlin 插件版本為 1.9.24
+    // 🎯 统一管理：在这里统领全项目所有模块（mobile / wear）的构建插件版本
+    id 'com.android.application' version '8.13.2' apply false
+    id 'com.android.library' version '8.13.2' apply false
     id 'org.jetbrains.kotlin.android' version '1.9.24' apply false
 }
 
-// 🟢 其他非声明性打印日志，可以安全地放在 plugins 块下方
-logger.warn("WearSync 编译提示: 已成功激活 suppressUnsupportedCompileSdk 为 SDK 34")
+// 🟢 打印日志提示
+logger.warn("WearSync 编译提示: 根目录配置加载成功")
 
-task clean(type: Delete) {
-    delete rootProject.buildDir
+// 现代化的 clean 任务写法（适配 Gradle 9.x）
+tasks.register('clean', Delete) {
+    delete rootProject.layout.buildDirectory
 }

@@ -70,10 +70,12 @@ public class WearSyncBodyDetectService extends WearableListenerService implement
                 WearLog.d(TAG, "发送到节点：" + node.getDisplayName());
                 Wearable.getMessageClient(this).sendMessage(
                         node.getId(),
-                        "/wearsync-body-status", 
+                        "/wearsync-body-status",
                         status.getBytes(StandardCharsets.UTF_8)
-                ).addOnFailureListener(e -> {
-                    WearLog.e(TAG, "发送状态到手机失败: " + e.getMessage());
+                ).addOnSuccessListener(task -> {
+                    WearLog.d(TAG, "✅ 离腕消息发送成功: " + status); // 确认消息已提交给 Wear OS
+                }).addOnFailureListener(e -> {
+                    WearLog.e(TAG, "❌ 离腕消息发送失败: " + e.getMessage()); // 定位是节点问题还是通道问题
                 });
             }
         });

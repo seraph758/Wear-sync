@@ -58,11 +58,8 @@ class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
 
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
 
-        val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-        } else {
-            @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
-        }
+        // 🚀 因为 minSdk >= 26，直接使用全新的前台悬浮窗类型，无需再做版本判断和废弃警告压制
+        val layoutType = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
 
         windowParams = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,

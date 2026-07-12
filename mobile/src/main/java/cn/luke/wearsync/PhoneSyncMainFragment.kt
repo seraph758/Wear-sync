@@ -11,30 +11,52 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import android.content.ComponentName
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.edit
+import androidx.core.net.toUri
 import androidx.fragment.app.Fragment
 import com.google.android.gms.wearable.CapabilityClient
-import com.google.android.gms.wearable.Wearable
 import com.google.android.gms.wearable.MessageClient
 import com.google.android.gms.wearable.MessageEvent
-import androidx.compose.ui.graphics.Color
+import com.google.android.gms.wearable.Wearable
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.nio.charset.StandardCharsets
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.foundation.interaction.MutableInteractionSource
 
 class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListener {
 
@@ -56,10 +78,11 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
         if(pkg != null){
             requireContext()
                 .getSharedPreferences("dndsync_prefs", Context.MODE_PRIVATE)
-                .edit()
-                .putString("selected_alarm_package", pkg)
-                .putString("selected_alarm_name", name ?: pkg)
-                .apply()
+                .edit { // 🎯 瞧！直接用花括号把存储行为包起来
+                    putString("selected_alarm_package", pkg)
+                    putString("selected_alarm_name", name ?: pkg)
+                    // ❌ 不需要写最后的 .apply() 了，KTX 会在退出花括号时自动帮你隐式调用！
+                }
         }
     }
 
@@ -76,6 +99,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
 
     // 🚀 底层联调：实时拦截并处理来自三星手表端的离腕报文
     override fun onMessageReceived(messageEvent: MessageEvent) {
+        PhoneLog.d("WearSync_Main", "📩 收到原始消息: path=${messageEvent.path}, data=${String(messageEvent.data, StandardCharsets.UTF_8)}")
         if (messageEvent.path == "/wearsync-body-status") {
             val rawStatus = String(messageEvent.data, StandardCharsets.UTF_8)
             activity?.runOnUiThread {
@@ -118,7 +142,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                     var isFileTransferExpanded by remember { mutableStateOf(false) }
 
                     // 勿扰同步变量
-                    var mask by remember { mutableStateOf(sp.getInt("dnd_sync_mask", 15)) }
+                    var mask by remember { mutableIntStateOf (sp.getInt("KEY_MASK", 15)) }
                     var masterOn by remember(mask) { mutableStateOf((mask and 1) != 0) }
                     var vibrateOn by remember(mask) { mutableStateOf((mask and 2) != 0) }
                     var sleepOn by remember(mask) { mutableStateOf((mask and 4) != 0) }
@@ -130,7 +154,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                         if (newSleep) newMask = newMask or 4
                         if (newPower) newMask = newMask or 8
                         mask = newMask
-                        sp.edit().putInt("dnd_sync_mask", newMask).apply()
+                        sp.edit { putInt("KEY_MASK", newMask) }
                         PhoneLog.d("WearSync_Main", "⚙️ 勿扰同步配置已更新：mask=$newMask")
                     }
 
@@ -293,7 +317,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                                         PhoneSyncAppPicker.show(requireContext()) { pkg, name ->
                                                             selectedAlarmName = name
                                                             selectedAlarmPkg = pkg
-                                                            sp.edit().putString("selected_alarm_package", pkg).putString("selected_alarm_name", name).apply()
+                                                            sp.edit { putBoolean("alarm_proxy_master_switch", isEnabled) }
                                                             PhoneLog.d("WearSync_Main", "🎯 切换时钟源: $name [$pkg]")
                                                         }
                                                     }
@@ -303,7 +327,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                                     Text(text = if (isAlarmMasterEnabled) "已启用" else "已禁用", fontSize = 12.sp, color = textColor)
                                                     Switch(checked = isAlarmMasterEnabled, onCheckedChange = { isEnabled ->
                                                         isAlarmMasterEnabled = isEnabled
-                                                        sp.edit().putBoolean("alarm_proxy_master_switch", isEnabled).apply()
+                                                        sp.edit {.putBoolean("alarm_proxy_master_switch", isEnabled}
                                                     })
                                                 }
                                             }
@@ -312,12 +336,12 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                                 OutlinedTextField(
                                                     enabled = isAlarmMasterEnabled, value = dismissKeyText,
-                                                    onValueChange = { dismissKeyText = it; sp.edit().putString("alarm_dismiss_key", it).apply() },
+                                                    onValueChange = { dismissKeyText = it; sp.edit {putString("alarm_dismiss_key", it)}},
                                                     label = { Text("停止关键字") }, singleLine = true, modifier = Modifier.weight(1f), textStyle = TextStyle(fontSize = 13.sp)
                                                 )
                                                 OutlinedTextField(
                                                     enabled = isAlarmMasterEnabled, value = snoozeKeyText,
-                                                    onValueChange = { snoozeKeyText = it; sp.edit().putString("alarm_snooze_key", it).apply() },
+                                                    onValueChange = { snoozeKeyText = it; sp.edit {putString("alarm_snooze_key", it)}},
                                                     label = { Text("延后关键字") }, singleLine = true, modifier = Modifier.weight(1f), textStyle = TextStyle(fontSize = 13.sp)
                                                 )
                                             }
@@ -447,15 +471,15 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                     }
                                 }
 
- // 终端调试的展开面板
-AnimatedVisibility(visible = isLogExpanded) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = cardBgColor)
-    ) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            
+     // 终端调试的展开面板
+    AnimatedVisibility(visible = isLogExpanded) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = cardBgColor)
+        ) {
+            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+
             // ============================================================
             // 📱 开关 1：开启手机端调试日志
             // ============================================================
@@ -465,7 +489,7 @@ AnimatedVisibility(visible = isLogExpanded) {
                     checked = uiLogDebugSwitch.value, 
                     onCheckedChange = { isChecked -> 
                         uiLogDebugSwitch.value = isChecked
-                        sp.edit().putBoolean("phone_log_debug_visible", isChecked).apply()
+                        sp.edit {putBoolean("phone_log_debug_visible", isChecked)}
                         PhoneLog.DEBUG = isChecked 
                         
                         // 🚀 痕迹：记录本地手机日志开关状态
@@ -483,7 +507,7 @@ AnimatedVisibility(visible = isLogExpanded) {
                     checked = uiWearLogDebugSwitch.value, 
                     onCheckedChange = { isChecked -> 
                         uiWearLogDebugSwitch.value = isChecked
-                        sp.edit().putBoolean("wear_log_debug_visible", isChecked).apply()
+                        sp.edit { putBoolean("wear_log_debug_visible", isChecked)}
                         
                         // 🚀 痕迹 1：记录UI层触发
                         PhoneLog.d("WearSync_Main", "用户切换同步监听手表端核心日志开关，当前状态: $isChecked")
@@ -534,8 +558,12 @@ AnimatedVisibility(visible = isLogExpanded) {
                                                 onClick = {
                                                     val context = requireContext()
                                                     // 1. 如果没有 Android 系统的悬浮窗权限，先引导去系统设置开启
-                                                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M && !android.provider.Settings.canDrawOverlays(context)) {
-                                                        val intent = Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION, android.net.Uri.parse("package:${context.packageName}"))
+                                                    // 🚀 既然 minSdk >= 26，直接判断是否有悬浮窗权限即可，彻底删掉多余的 SDK_INT >= M
+                                                    if (!android.provider.Settings.canDrawOverlays(context)) {
+                                                        val intent = Intent(
+                                                            android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                                            "package:${context.packageName}".toUri() // 🎯 直接点 toUri()，不仅更短，而且读起来像英语一样顺畅
+                                                        )
                                                         startActivity(intent)
                                                     } else {
                                                         // 2. 有权限则直接启动你的实时悬浮监视器

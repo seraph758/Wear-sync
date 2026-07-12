@@ -30,6 +30,6 @@
         android:background="?android:attr/selectableItemBackgroundBorderless"
         android:drawableTop="@android:drawable/ic_menu_camera"
         android:paddingTop="12dp"
-        android:contentDescription="Capture" />
+        android:contentDescription="@string/btn_capture_description" />
 
 </RelativeLayout>

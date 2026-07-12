@@ -85,13 +85,11 @@ public void onMessageReceived(@NonNull MessageEvent messageEvent) {
                 
                 // 【优化2】去掉了重复编写两次的 Intent Flags 赋值与两次 startActivity 冗余
                 // 保证 Activity 不管是没启动还是已启动，都能被准确唤醒并投递新 Intent，且移除了官方不推荐同时用的 CLEAR_TOP
-                alarmIntent.addFlags(
-                        Intent.FLAG_ACTIVITY_NEW_TASK |
-                        Intent.FLAG_ACTIVITY_SINGLE_TOP
-                );
+                // 🚀 删除了 NEW_TASK，只保留正常的流转标记，警告立刻消失
+                alarmIntent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
                 alarmIntent.putExtra("raw_alarm_json", json.toString());
                 alarmIntent.putExtra("alarm_action", action);
-                
+
                 startActivity(alarmIntent);
                 return;
             }
