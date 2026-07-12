@@ -736,6 +736,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                 } // 结束 MaterialTheme
             } // 结束 setContent
         } // 结束 ComposeView
+    } // ✅ 新增：结束 onCreateView 函数
     }
 
     override fun onResume() {
