@@ -150,7 +150,7 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
         WearLog.d(TAG, "♿ [系统权限检索] 📋 无障碍辅助功能服务实时活体状态: 【" + (hasAccessibility ? "服务已激活/TRUE" : "服务死亡/FALSE") + "】");
         
         if (accPref != null) {
-            accPref.setSummary(hasAccessibility ? ? getString(R.string.acc_activated) : getString(R.string.acc_deactivated));
+            accPref.setSummary(hasAccessibility ?  getString(R.string.acc_activated) : getString(R.string.acc_deactivated));
         }
     }
 
