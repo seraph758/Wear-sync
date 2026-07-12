@@ -2,6 +2,8 @@ package cn.luke.wearsync;
 
 import android.os.Bundle;
 import androidx.appcompat.app.AppCompatActivity;
+import cn.luke.wearsync.wear.R;  // 🎯 指向你最新的手表端 namespace
+
 
 /**
  * 🎬 WearOS 手表端主框架入口 Activity 骨架
