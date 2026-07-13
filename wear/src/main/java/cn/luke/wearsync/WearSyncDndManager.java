@@ -272,20 +272,20 @@ if (isPowerSaveLinkageOpen) {
         }
 
         // ✅ 使用合法组合强制唤醒屏幕 + 保持CPU运转
-        PowerManager pm = (PowerManager) context.getApplicationContext()
-                .getSystemService(Context.POWER_SERVICE);
-        if (pm == null) return;
+        // ✅ 修正：使用 SCREEN_BRIGHT_WAKE_LOCK 替代 PARTIAL_WAKE_LOCK
+PowerManager pm = (PowerManager) context.getApplicationContext()
+        .getSystemService(Context.POWER_SERVICE);
+if (pm == null) return;
 
-        final PowerManager.WakeLock wakeLock = pm.newWakeLock(
-                PowerManager.PARTIAL_WAKE_LOCK
+final PowerManager.WakeLock wakeLock = pm.newWakeLock(
+        PowerManager.SCREEN_BRIGHT_WAKE_LOCK       // 🔑 关键修改：确保屏幕可被点亮
+                | PowerManager.ACQUIRE_CAUSES_WAKEUP // 强制唤醒屏幕
+                | PowerManager.ON_AFTER_RELEASE,     // 释放后短暂保持亮屏防闪烁
+        "dndsync:BedtimeAutomation"
+);
 
-                        | PowerManager.ACQUIRE_CAUSES_WAKEUP
-                        | PowerManager.ON_AFTER_RELEASE,
-                "dndsync:BedtimeAutomation"
-        );
-
-        // 15秒安全兜底，防止异常导致永久亮屏
-        wakeLock.acquire(15 * 1000L);
+        // 10秒安全兜底，防止异常导致永久亮屏
+        wakeLock.acquire(10 * 1000L);
 
         Toast.makeText(context.getApplicationContext(),
                 "正在同步睡眠模式...", Toast.LENGTH_SHORT).show();
