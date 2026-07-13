@@ -14,10 +14,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -29,14 +29,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 
-
-
 @OptIn(ExperimentalFoundationApi::class)
 class PhoneLogActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // 每次打开界面，确保目录被强制检查和建立
+        // 强制初始化日志目录
         PhoneLog.initDirectories()
 
         setContent {
@@ -48,15 +46,15 @@ class PhoneLogActivity : ComponentActivity() {
             var selectedIndices by remember { mutableStateOf(setOf<Int>()) }
             val isMultiSelectMode by remember { derivedStateOf { selectedIndices.isNotEmpty() } }
 
-            // 0阻拦定时刷新：手机、手表所有日志混在一起
+            // 定时刷新日志缓冲区
             LaunchedEffect(Unit) {
                 while (true) {
                     logLines = PhoneLog.getLogBuffer()
-                    delay(400) // 略微调快刷新率
+                    delay(400)
                 }
             }
 
-            // 自动滚动到最新日志
+            // 自动滚动到最新
             LaunchedEffect(logLines.size) {
                 if (logLines.isNotEmpty() && !isMultiSelectMode) {
                     listState.animateScrollToItem(logLines.lastIndex)
@@ -64,24 +62,23 @@ class PhoneLogActivity : ComponentActivity() {
             }
 
             Box(modifier = Modifier.fillMaxSize().background(Color(0xFF101012))) {
-                // 1. 占满全屏的日志流
+                // 1. 全屏日志流
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 80.dp) // 给悬浮控制按钮留出底部空间
+                    contentPadding = PaddingValues(bottom = 80.dp)
                 ) {
                     items(logLines.size) { index ->
                         val line = logLines[index]
                         val isSelected = index in selectedIndices
                         
-                        // 判定前缀决定颜色（不裁剪任何文本，保证前缀分明）
                         val isWear = line.uppercase().contains("WEAR")
                         val isError = line.uppercase().contains(" E/") || line.uppercase().contains("ERROR")
                         
                         val textColor = when {
-                            isError -> Color(0xFFFF5252) // 报错依然用红色高亮
-                            isWear -> Color(0xFF00B0FF)  // 手表用科技蓝
-                            else -> Color(0xFF00E676)    // 手机用荧光绿
+                            isError -> Color(0xFFFF5252)
+                            isWear -> Color(0xFF00B0FF)
+                            else -> Color(0xFF00E676)
                         }
 
                         val rowBgColor = if (isSelected) Color(0xFF1A365D) else Color.Transparent
@@ -95,7 +92,6 @@ class PhoneLogActivity : ComponentActivity() {
                                         if (isMultiSelectMode) {
                                             selectedIndices = if (isSelected) selectedIndices - index else selectedIndices + index
                                         } else {
-                                            // 正常模式下点击单条直接复制
                                             copyToClipboard(context, line)
                                         }
                                     },
@@ -116,18 +112,17 @@ class PhoneLogActivity : ComponentActivity() {
                     }
                 }
 
-                // 2. 右下角极简悬浮工具箱（不遮挡视觉，不占用系统上下栏栏位）
+                // 2. 右下角悬浮工具箱
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .padding(16.dp)
                 ) {
                     if (isMultiSelectMode) {
-                        // 多选状态下的控制条
+                        // 多选模式控制面板
                         Surface(
                             shape = ShapeDefaults.Large,
-                            color = Color(0xFF1F1F23),
-                            tonalElevation = 6.dp
+                            color = Color(0xFF1F1F23)
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
@@ -144,6 +139,7 @@ class PhoneLogActivity : ComponentActivity() {
                                     copyToClipboard(context, copiedText)
                                     selectedIndices = emptySet()
                                 }) {
+                                    // 🎯 精准调用：系统绝对自带的 Share 按钮标识复制
                                     Icon(Icons.Default.Share, "复制", tint = Color(0xFF00E676))
                                 }
                                 IconButton(onClick = { selectedIndices = emptySet() }) {
@@ -152,9 +148,8 @@ class PhoneLogActivity : ComponentActivity() {
                             }
                         }
                     } else {
-                        // 正常状态下的极简快捷圆形按钮组
+                        // 正常流控制按钮
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            // 清空按钮
                             FloatingActionButton(
                                 onClick = { PhoneLog.clear(); logLines = emptyList() },
                                 containerColor = Color(0xFF2C2C30),
@@ -163,7 +158,6 @@ class PhoneLogActivity : ComponentActivity() {
                             ) {
                                 Icon(Icons.Default.Delete, "清空", modifier = Modifier.size(18.dp))
                             }
-                            // 备份导出按钮
                             FloatingActionButton(
                                 onClick = {
                                     val backup = PhoneLog.exportBackupFile()
@@ -175,6 +169,7 @@ class PhoneLogActivity : ComponentActivity() {
                                 contentColor = Color.White,
                                 modifier = Modifier.size(42.dp)
                             ) {
+                                // 🎯 精准调用：系统绝对自带的 Check 按钮标识保存
                                 Icon(Icons.Default.Check, "保存备份", modifier = Modifier.size(18.dp))
                             }
                         }
