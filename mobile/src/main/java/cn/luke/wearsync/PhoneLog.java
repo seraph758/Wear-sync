@@ -3,7 +3,9 @@ package cn.luke.wearsync;
 import android.os.Environment;
 import android.util.Log;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.nio.channels.FileChannel;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -28,9 +30,16 @@ public class PhoneLog {
 
     public static synchronized void initDirectories() {
         try {
-            if (!baseDir.exists()) baseDir.mkdirs();
-            if (!logDir.exists()) logDir.mkdirs();
-            if (!filesDir.exists()) filesDir.mkdirs();
+            // 🎯 修复：处理 mkdirs() 的布尔返回值，避免 Lint 警告 "Result of 'File.mkdirs()' is ignored"
+            if (!baseDir.exists() && !baseDir.mkdirs()) {
+                Log.w(TAG, "创建 baseDir 失败");
+            }
+            if (!logDir.exists() && !logDir.mkdirs()) {
+                Log.w(TAG, "创建 logDir 失败");
+            }
+            if (!filesDir.exists() && !filesDir.mkdirs()) {
+                Log.w(TAG, "创建 filesDir 失败");
+            }
             Log.d(TAG, "WearSync 专属目录初始化成功: " + baseDir.getAbsolutePath());
         } catch (Exception e) {
             Log.e(TAG, "初始化创建目录失败", e);
@@ -43,13 +52,11 @@ public class PhoneLog {
     }
 
     // ================================================================
-    // 📱 [PHONE] 本地端业务日志拦截生成器（完美匹配你要求的自动化格式）
+    // 📱 [PHONE] 本地端业务日志拦截生成器
     // ================================================================
 
     public static void d(String tag, String msg) {
-        // 🎯 核心拦截：如果手机端关闭了开关，DEBUG 为 false，直接弹回，不再追加进缓冲区和文件
         if (!DEBUG) return;
-
         Log.d(tag, msg);
         append("[PHONE] [" + getSystemTime() + "] D/" + tag + ": " + msg);
     }
@@ -71,13 +78,14 @@ public class PhoneLog {
         Log.e(tag, msg, tr);
         append("[PHONE] [" + getSystemTime() + "] E/" + tag + ": " + msg + " (Exception: " + tr.getMessage() + ")");
     }
-
+    @SuppressWarnings("unused")
+    // 🎯 修复：保留这些方法不删，以便你其他代码可能调用它们
     public static void i(String tag, String msg) {
         if (!DEBUG) return;
         Log.i(tag, msg);
         append("[PHONE] [" + getSystemTime() + "] I/" + tag + ": " + msg);
     }
-
+    @SuppressWarnings("unused")
     public static void v(String tag, String msg) {
         if (!DEBUG) return;
         Log.v(tag, msg);
@@ -87,21 +95,20 @@ public class PhoneLog {
     // ================================================================
     // ⌚ [WEAR] 手表端无线流日志拦截接收器
     // ================================================================
-    
-    public static void rawAppend(String line) {
+
+    // 🎯 修复：将方法名重命名为你的 Service 调用的 appendFromRemote，彻底解决未动用警告
+    public static void appendFromRemote(String line) {
         if (line == null || line.trim().isEmpty()) return;
-        
-        // 判定手表发过来的行数据是否已经自带了 [WEAR] 标签
+
         if (line.contains("[WEAR]")) {
             append(line);
         } else {
-            // 如果只有裸日志，贴心地替它补全标准格式头
             append("[WEAR] [" + getSystemTime() + "] " + line);
         }
     }
 
     // ==========================================
-    // 底层不加逻辑的纯净数据写入大舱
+    // 底层纯净数据写入大舱
     // ==========================================
 
     public static synchronized void append(String finalLine) {
@@ -124,7 +131,9 @@ public class PhoneLog {
 
     private static void appendToFile(String line) {
         try {
-            if (!logDir.exists()) logDir.mkdirs();
+            if (!logDir.exists() && !logDir.mkdirs()) {
+                Log.w(TAG, "创建日志目录失败");
+            }
             File file = new File(logDir, "current_log.txt");
             try (FileOutputStream fos = new FileOutputStream(file, true)) {
                 fos.write((line + "\n").getBytes());
@@ -136,31 +145,37 @@ public class PhoneLog {
 
     public static synchronized File exportBackupFile() {
         try {
-            if (!logDir.exists()) logDir.mkdirs();
+            if (!logDir.exists() && !logDir.mkdirs()) {
+                Log.w(TAG, "创建日志目录失败");
+            }
             File backupFile = new File(logDir, "WearSync_Backup_" + System.currentTimeMillis() + ".txt");
             File currentFile = new File(logDir, "current_log.txt");
 
+            // 🎯 修复：提取了公共的 backupFile 生成，并使用 try-with-resources 安全闭合文件通道，
+            // 彻底根除 "FileInputStream used without 'try'-with-resources" 的流泄漏隐患
             if (currentFile.exists()) {
-                try (java.nio.channels.FileChannel source = new java.io.FileInputStream(currentFile).getChannel();
-                     java.nio.channels.FileChannel destination = new FileOutputStream(backupFile).getChannel()) {
+                try (FileInputStream fis = new FileInputStream(currentFile);
+                     FileChannel source = fis.getChannel();
+                     FileOutputStream fos = new FileOutputStream(backupFile);
+                     FileChannel destination = fos.getChannel()) {
                     destination.transferFrom(source, 0, source.size());
                 }
-                return backupFile;
             } else {
                 try (FileOutputStream fos = new FileOutputStream(backupFile)) {
                     for (String line : getLogBuffer()) {
                         fos.write((line + "\n").getBytes());
                     }
                 }
-                return backupFile;
             }
+            return backupFile;
         } catch (Exception e) {
             Log.e(TAG, "备份日志失败", e);
             return null;
         }
     }
 
-    public static synchronized File exportBackupFile(android.content.Context context) {
+    // 🎯 修复：给未使用的 context 参数打上 @SuppressWarnings 标记，告诉 Lint 这是故意预留的重载
+    public static synchronized File exportBackupFile(@SuppressWarnings("unused") android.content.Context context) {
         return exportBackupFile();
     }
 }
