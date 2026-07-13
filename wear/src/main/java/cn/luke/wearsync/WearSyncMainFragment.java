@@ -13,7 +13,6 @@ import androidx.preference.PreferenceFragmentCompat;
 import com.google.android.gms.wearable.CapabilityClient;
 import com.google.android.gms.wearable.Wearable;
 
-import cn.luke.wearsync.wear.R;
 
 /**
  * 🎬 WearOS 手表端主控制与权限状态 Fragment 面板
