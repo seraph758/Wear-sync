@@ -290,52 +290,96 @@ Toast.makeText(context.getApplicationContext(),
         "正在同步睡眠模式...", Toast.LENGTH_SHORT).show();
 
 new Handler(Looper.getMainLooper()).post(() -> {
-    try {
-        // 🔑 关键修复：等待屏幕真正亮起 + SystemUI 就绪
-        // Wear OS 冷启动亮屏通常需要 500-800ms，这里给足余量
-        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            try {
-                WearLog.d(TAG, "🖥️ 屏幕已就绪，开始下拉快捷面板");
-                serv.swipeDown();
 
-                // ⏱️ 下拉动画完成后，再等待图标可交互
-                // 从亮屏确认后重新计算，而非从 swipeDown 调用时计算
-                new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                    try {
-                        WearLog.d(TAG, "👆 点击就寢模式圖標");
-                        serv.clickIcon1_1();
+    waitScreenReady(pm, () -> {
 
-                        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                            try {
-                                serv.goBack();
-                                WearLog.d(TAG, "✨ [無障礙聯動] 就寢模式自動化執行完畢");
-                            } catch (Exception e) {
-                                WearLog.e(TAG, "❌ 返回操作失敗", e);
-                            } finally {
-                                if (wakeLock.isHeld()) {
-                                    wakeLock.release();
-                                    WearLog.d(TAG, "🔒 Wakelock 提前釋放成功");
-                                }
-                            }
-                        }, 800);
+        try {
 
-                    } catch (Exception e) {
-                        WearLog.e(TAG, "❌ 點擊就寢模式失敗", e);
-                        if (wakeLock.isHeld()) wakeLock.release();
+            WearLog.d(TAG, "🖥️ 屏幕已亮，开始下拉快捷面板");
+            serv.swipeDown();
+
+            waitQuickPanelReady(serv, () -> {
+
+                try {
+
+                    WearLog.d(TAG, "👆 快捷面板已就绪，点击就寝模式");
+                    serv.clickIcon1_1();
+
+                    serv.goBack();
+
+                    WearLog.d(TAG, "✨ [無障礙聯動] 就寢模式自動化執行完畢");
+
+                } catch (Exception e) {
+
+                    WearLog.e(TAG, "❌ 點擊就寢模式失敗", e);
+
+                } finally {
+
+                    if (wakeLock.isHeld()) {
+                        wakeLock.release();
+                        WearLog.d(TAG, "🔒 Wakelock 提前釋放成功");
                     }
-                }, 800); // 🔑 从亮屏确认后算起，给足下拉动画+图标渲染时间
 
-            } catch (Exception e) {
-                WearLog.e(TAG, "❌ 下拉快捷面板失敗", e);
-                if (wakeLock.isHeld()) wakeLock.release();
+                }
+
+            });
+
+        } catch (Exception e) {
+
+            WearLog.e(TAG, "❌ 下拉快捷面板失敗", e);
+
+            if (wakeLock.isHeld()) {
+                wakeLock.release();
             }
-        }, 800); // 🔑 关键新增：亮屏等待时间
 
-    } catch (Exception e) {
-        WearLog.e(TAG, "❌ 主線程任務提交失敗", e);
-        if (wakeLock.isHeld()) wakeLock.release();
-    }
+        }
+
+    });
+
 });
+}
+private static void waitQuickPanelReady(WearSyncAccessService serv,Runnable next){
+    Handler handler=new Handler(Looper.getMainLooper());
+
+    Runnable[] task=new Runnable[1];
+
+    task[0]=new Runnable(){
+        @Override
+        public void run(){
+
+            if(serv.isQuickPanelReady()){
+                WearLog.d(TAG,"✅ QuickPanel Ready");
+                next.run();
+                return;
+            }
+
+            handler.postDelayed(this,50);
+        }
+    };
+
+    handler.post(task[0]);
+}
+
+private static void waitScreenReady(PowerManager pm,Runnable next){
+    Handler handler=new Handler(Looper.getMainLooper());
+
+    Runnable[] task=new Runnable[1];
+
+    task[0]=new Runnable(){
+        @Override
+        public void run(){
+
+            if(pm.isInteractive()){
+                WearLog.d(TAG,"✅ Screen Interactive");
+                next.run();
+                return;
+            }
+
+            handler.postDelayed(this,50);
+        }
+    };
+
+    handler.post(task[0]);
 }
 
     private static void vibrate(Context context) {
