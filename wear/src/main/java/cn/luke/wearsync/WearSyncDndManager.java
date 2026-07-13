@@ -28,237 +28,153 @@ public class WearSyncDndManager {
      * 📥 模組一：更新聯動配置掩碼（先到達）
      * 🧩 替代了原本混亂的 handleIncomingMask，只純淨更新和儲存開關配置
      */
-        public static void updateConfigs(JSONObject json) {
+    public static void updateConfigs(JSONObject json) {
         if (json == null) return;
-    
+
         int statusMask = json.optInt("mask", -1);
         if (statusMask == -1) {
             WearLog.w(TAG, "⚠️ [Mask读取失败] 未找到mask");
             return;
         }
-    
+
         isSyncAllowed = (statusMask & 0x01) != 0;
-    
+
         if (!isSyncAllowed) {
             WearLog.w(TAG, "🛑 [Mask拦截] Bit0=0，总同步关闭");
             return;
         }
-    
+
         isVibrateSwitchOn = (statusMask & 0x02) != 0;
         isSleepLinkageOpen = (statusMask & 0x04) != 0;
         isPowerSaveLinkageOpen = (statusMask & 0x08) != 0;
-    
+
         WearLog.d(TAG,
                 "📥 [Mask解析] mask=" + statusMask
                         + " 震动=" + isVibrateSwitchOn
                         + " 睡眠=" + isSleepLinkageOpen
                         + " 省电=" + isPowerSaveLinkageOpen);
-        }
+    }
 
     /**
      * 📥 模組二：接收原生 DND 狀態並強行指揮所有子聯動（後到達）
      * 🔥 100% 復刻舊代碼比對精髓，唯有狀態不相等時才驅動變更！
      * @param dndStatePhone 手機傳過來的系統原生 filter 狀態值 (1, 2, 3, 4)
      */
-public static void executeDndSync(Context context, int dndStatePhone) {
-
-    if (!isSyncAllowed) {
-        WearLog.w(TAG, "🛑 [DND拦截] 总开关关闭");
-        return;
-    }
-
-
-    NotificationManager mNotificationManager =
-            (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-
-
-    if (mNotificationManager == null) {
-        WearLog.e(TAG, "❌ NotificationManager 获取失败");
-        return;
-    }
-
-
-    int currentDndState =
-            mNotificationManager.getCurrentInterruptionFilter();
-
-
-    WearLog.d(TAG,
-            "🔍 [DND状态检查] 手机="
-                    + dndStatePhone
-                    + " 手表="
-                    + currentDndState
-                    + " mask震动="
-                    + isVibrateSwitchOn
-                    + " 睡眠="
-                    + isSleepLinkageOpen
-                    + " 省电="
-                    + isPowerSaveLinkageOpen);
-
-
-
-    /*
-     * 注意：
-     * 这里以前如果DND一致直接return，会导致：
-     * 省电不同步
-     * 睡眠不同步
-     * 关闭勿扰无法恢复省电
-     *
-     * 所以只记录，不退出
-     */
-    if (dndStatePhone == currentDndState) {
-
-        WearLog.d(TAG,
-                "✅ [DND一致] 继续执行子联动");
-
-    } else {
-
-        WearLog.d(TAG,
-                "⚡ [DND变化] 开始同步");
-
-    }
-
-
-
-    WearSyncNotificationService.isInternalUpdate = true;
-    WearSyncNotificationService.lastInternalUpdateTime =
-        System.currentTimeMillis();
-
-
-    /*
-     * 1. 优先震动
-     * 避免后面的省电/DND切换影响震动
-     */
-    WearLog.d(TAG,
-            "📳 [震动判断] 开关="
-                    + isVibrateSwitchOn
-                    + " dnd="
-                    + dndStatePhone);
-
-
-
-    if (isVibrateSwitchOn && dndStatePhone > 1) {
-
-        WearLog.d(TAG,
-                "📳 [开始震动]");
-
-        vibrate(context);
-
-    } else {
-
-        WearLog.d(TAG,
-                "🔇 [未满足震动条件]");
-
-    }
-
-
-
-
-    /*
-     * 2. 睡眠模式联动
-     */
-    if (isSleepLinkageOpen) {
-
-        WearLog.d(TAG,
-                "🛌 [睡眠联动]执行");
-
-        toggleBedtimeMode(context);
-
-    } else {
-
-        WearLog.d(TAG,
-                "🛌 [睡眠联动]关闭");
-
-    }
-
-
-
-
-    /*
- * 3. 省电模式联动
- * 延迟执行，避免抢占DND系统服务
- */
-if (isPowerSaveLinkageOpen) {
-
-    boolean enable = dndStatePhone > 1;
-
-    new Handler(Looper.getMainLooper()).postDelayed(() -> {
-
-        try {
-
-            Settings.Global.putInt(
-                    context.getContentResolver(),
-                    "low_power",
-                    enable ? 1 : 0
-            );
-
-            context.sendBroadcast(
-                    new Intent(
-                            PowerManager.ACTION_POWER_SAVE_MODE_CHANGED
-                    )
-            );
-
-            WearLog.d(TAG,
-                    "🔋 [省电异步同步] "
-                            +(enable ? "开启" : "关闭"));
-
-        } catch(Exception e){
-
-            WearLog.e(TAG,
-                    "❌ [省电同步失败] "
-                            + e.getMessage());
-
+    public static void executeDndSync(Context context, int dndStatePhone) {
+        if (!isSyncAllowed) {
+            WearLog.w(TAG, "🛑 [DND拦截] 总开关关闭");
+            return;
         }
 
-    },5500);
+        NotificationManager mNotificationManager =
+                (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
 
+        if (mNotificationManager == null) {
+            WearLog.e(TAG, "❌ NotificationManager 获取失败");
+            return;
+        }
 
-} else {
-
-    WearLog.d(TAG,
-            "🔋 [省电联动]关闭");
-
-}
-
-
-
-    /*
-     * 4. 最后写入手表DND状态
-     */
-    if (mNotificationManager.isNotificationPolicyAccessGranted()) {
-
-
-        mNotificationManager.setInterruptionFilter(
-                dndStatePhone
-        );
-
+        int currentDndState = mNotificationManager.getCurrentInterruptionFilter();
 
         WearLog.d(TAG,
-                "🌗 [写入DND] "
+                "🔍 [DND状态检查] 手机="
+                        + dndStatePhone
+                        + " 手表="
+                        + currentDndState
+                        + " mask震动="
+                        + isVibrateSwitchOn
+                        + " 睡眠="
+                        + isSleepLinkageOpen
+                        + " 省电="
+                        + isPowerSaveLinkageOpen);
+
+        /*
+         * 注意：
+         * 这里以前如果DND一致直接return，会导致：
+         * 省电不同步
+         * 睡眠不同步
+         * 关闭勿扰无法恢复省电
+         *
+         * 所以只记录，不退出
+         */
+        if (dndStatePhone == currentDndState) {
+            WearLog.d(TAG, "✅ [DND一致] 继续执行子联动");
+        } else {
+            WearLog.d(TAG, "⚡ [DND变化] 开始同步");
+        }
+
+        WearSyncNotificationService.isInternalUpdate = true;
+        WearSyncNotificationService.lastInternalUpdateTime = System.currentTimeMillis();
+
+        /*
+         * 1. 优先震动
+         * 避免后面的省电/DND切换影响震动
+         */
+        WearLog.d(TAG,
+                "📳 [震动判断] 开关="
+                        + isVibrateSwitchOn
+                        + " dnd="
                         + dndStatePhone);
 
+        if (isVibrateSwitchOn && dndStatePhone > 1) {
+            WearLog.d(TAG, "📳 [开始震动]");
+            vibrate(context);
+        } else {
+            WearLog.d(TAG, "🔇 [未满足震动条件]");
+        }
 
-    } else {
+        /*
+         * 2. 睡眠模式联动
+         */
+        if (isSleepLinkageOpen) {
+            WearLog.d(TAG, "🛌 [睡眠联动]执行");
+            toggleBedtimeMode(context);
+        } else {
+            WearLog.d(TAG, "🛌 [睡眠联动]关闭");
+        }
 
+        /*
+         * 3. 省电模式联动
+         * 延迟执行，避免抢占DND系统服务
+         */
+        if (isPowerSaveLinkageOpen) {
+            boolean enable = dndStatePhone > 1;
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                try {
+                    Settings.Global.putInt(
+                            context.getContentResolver(),
+                            "low_power",
+                            enable ? 1 : 0
+                    );
 
-        WearLog.e(TAG,
-                "❌ 无DND权限");
+                    context.sendBroadcast(
+                            new Intent(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED)
+                    );
 
+                    WearLog.d(TAG, "🔋 [省电异步同步] " + (enable ? "开启" : "关闭"));
+                } catch(Exception e){
+                    WearLog.e(TAG, "❌ [省电同步失败] " + e.getMessage());
+                }
+            }, 5500);
+        } else {
+            WearLog.d(TAG, "🔋 [省电联动]关闭");
+        }
+
+        /*
+         * 4. 最后写入手表DND状态
+         */
+        if (mNotificationManager.isNotificationPolicyAccessGranted()) {
+            mNotificationManager.setInterruptionFilter(dndStatePhone);
+            WearLog.d(TAG, "🌗 [写入DND] " + dndStatePhone);
+        } else {
+            WearLog.e(TAG, "❌ 无DND权限");
+        }
+
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            WearSyncNotificationService.isInternalUpdate = false;
+            WearLog.d(TAG, "🔓 内部同步锁释放");
+        }, 7000);
     }
-
-
-
-
-    new Handler(Looper.getMainLooper())
-            .postDelayed(() -> {
-
-
-                WearSyncNotificationService.isInternalUpdate = false;
-
-
-                           WearLog.d(TAG,"🔓 内部同步锁释放");
-
-        },7000);
-}
 
     /**
      * 🛌 透過無障礙模擬點擊切換手錶系統的就寢模式（睡眠模式）
@@ -271,142 +187,113 @@ if (isPowerSaveLinkageOpen) {
             return;
         }
 
-        // ✅ 使用合法组合强制唤醒屏幕 + 保持// ✅ 修正：使用 SCREEN_BRIGHT_WAKE_LOCK 替代 PARTIAL_WAKE_LOCK
-PowerManager pm = (PowerManager) context.getApplicationContext()
-        .getSystemService(Context.POWER_SERVICE);
-if (pm == null) return;
+        PowerManager pm = (PowerManager) context.getApplicationContext().getSystemService(Context.POWER_SERVICE);
+        if (pm == null) return;
 
-final PowerManager.WakeLock wakeLock = pm.newWakeLock(
-        PowerManager.SCREEN_BRIGHT_WAKE_LOCK
-                | PowerManager.ACQUIRE_CAUSES_WAKEUP
-                | PowerManager.ON_AFTER_RELEASE,
-        "dndsync:BedtimeAutomation"
-);
+        final PowerManager.WakeLock wakeLock = pm.newWakeLock(
+                PowerManager.SCREEN_BRIGHT_WAKE_LOCK
+                        | PowerManager.ACQUIRE_CAUSES_WAKEUP
+                        | PowerManager.ON_AFTER_RELEASE,
+                "dndsync:BedtimeAutomation"
+        );
 
-// 10秒安全兜底
-wakeLock.acquire(10 * 1000L);
+        // 10秒安全兜底
+        wakeLock.acquire(10 * 1000L);
 
-Toast.makeText(context.getApplicationContext(),
-        "正在同步睡眠模式...", Toast.LENGTH_SHORT).show();
+        Toast.makeText(context.getApplicationContext(), "正在同步睡眠模式...", Toast.LENGTH_SHORT).show();
 
-new Handler(Looper.getMainLooper()).post(() -> {
-
-    waitScreenReady(pm, () -> {
-
-        try {
-
-            waitQuickPanelReady(serv, () -> {
-
-    try {
-
-        WearLog.d(TAG, "👆 快捷面板已就緒，點擊就寢模式");
-
-        serv.clickIcon1_1();
-
-        serv.goBack();
-
-        WearLog.d(TAG, "✨ [無障礙聯動] 就寢模式自動化執行完畢");
-
-    } catch (Exception e) {
-
-        WearLog.e(TAG, "❌ 點擊就寢模式失敗", e);
-
-    } finally {
-
-        if (wakeLock.isHeld()) {
-            wakeLock.release();
-            WearLog.d(TAG, "🔒 Wakelock 提前釋放成功");
-        }
-
+        new Handler(Looper.getMainLooper()).post(() -> {
+            // 🎯 修复点：重新梳理了嵌套的回调层级，保证 try-catch-finally 能够安全回收锁，同时恢复全局方法的正常边界
+            waitScreenReady(pm, () -> {
+                try {
+                    waitQuickPanelReady(serv, () -> {
+                        try {
+                            WearLog.d(TAG, "👆 快捷面板已就緒，點擊就寢模式");
+                            serv.clickIcon1_1();
+                            serv.goBack();
+                            WearLog.d(TAG, "✨ [無障礙聯動] 就寢模式自動化執行完畢");
+                        } catch (Exception e) {
+                            WearLog.e(TAG, "❌ 點擊就寢模式失敗", e);
+                        } finally {
+                            if (wakeLock.isHeld()) {
+                                wakeLock.release();
+                                WearLog.d(TAG, "🔒 Wakelock 提前釋放成功");
+                            }
+                        }
+                    });
+                } catch (Exception e) {
+                    WearLog.e(TAG, "❌ 自动下推面板流异常", e);
+                    if (wakeLock.isHeld()) {
+                        wakeLock.release();
+                    }
+                }
+            });
+        });
     }
 
-});
-}
+    private static void waitQuickPanelReady(WearSyncAccessService serv, Runnable next) {
+        Handler handler = new Handler(Looper.getMainLooper());
+        final int[] retry = {0};
+        Runnable[] task = new Runnable[1];
 
-private static void waitQuickPanelReady(WearSyncAccessService serv,Runnable next){
+        task[0] = new Runnable() {
+            @Override
+            public void run() {
+                if (serv.isQuickPanelReady()) {
+                    WearLog.d(TAG, "✅ QuickPanel Ready");
+                    next.run();
+                    return;
+                }
 
-    Handler handler = new Handler(Looper.getMainLooper());
+                retry[0]++;
+                if (retry[0] > 30) {
+                    WearLog.e(TAG, "❌ QuickPanel 打開超時");
+                    return;
+                }
 
-    final int[] retry = {0};
-
-    Runnable[] task = new Runnable[1];
-
-    task[0] = new Runnable() {
-
-        @Override
-        public void run() {
-
-            if (serv.isQuickPanelReady()) {
-
-                WearLog.d(TAG, "✅ QuickPanel Ready");
-
-                next.run();
-
-                return;
-
+                WearLog.d(TAG, "⬇️ QuickPanel 未打開，第 " + retry[0] + " 次重新下拉");
+                serv.swipeDown();
+                handler.postDelayed(this, 100);
             }
+        };
 
-            retry[0]++;
+        handler.post(task[0]);
+    }
 
-            if (retry[0] > 30) {
+    private static void waitScreenReady(PowerManager pm, Runnable next) {
+        Handler handler = new Handler(Looper.getMainLooper());
+        Runnable[] task = new Runnable[1];
 
-                WearLog.e(TAG, "❌ QuickPanel 打開超時");
-
-                return;
-
+        task[0] = new Runnable() {
+            @Override
+            public void run() {
+                if (pm.isInteractive()) {
+                    WearLog.d(TAG, "✅ Screen Interactive");
+                    next.run();
+                    return;
+                }
+                handler.postDelayed(this, 50);
             }
+        };
 
-            WearLog.d(TAG, "⬇️ QuickPanel 未打開，第 " + retry[0] + " 次重新下拉");
-
-            serv.swipeDown();
-
-            handler.postDelayed(this,100);
-
-        }
-
-    };
-
-    handler.post(task[0]);
-
-}
-
-private static void waitScreenReady(PowerManager pm,Runnable next){
-    Handler handler=new Handler(Looper.getMainLooper());
-
-    Runnable[] task=new Runnable[1];
-
-    task[0]=new Runnable(){
-        @Override
-        public void run(){
-
-            if(pm.isInteractive()){
-                WearLog.d(TAG,"✅ Screen Interactive");
-                next.run();
-                return;
-            }
-
-            handler.postDelayed(this,50);
-        }
-    };
-
-    handler.post(task[0]);
-}
+        handler.post(task[0]);
+    }
 
     private static void vibrate(Context context) {
-        Vibrator v=(Vibrator)context.getSystemService(Context.VIBRATOR_SERVICE);
-    
-        if(v==null){
-            WearLog.e(TAG,"❌ Vibrator==null");
+        Vibrator v = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
+
+        if (v == null) {
+            WearLog.e(TAG, "❌ Vibrator==null");
             return;
         }
-    
-        if(!v.hasVibrator()){
-            WearLog.e(TAG,"❌ 设备没有振动器");
+
+        if (!v.hasVibrator()) {
+            WearLog.e(TAG, "❌ 设备没有振动器");
             return;
         }
-    
-        WearLog.d(TAG,"📳 真正执行系统震动");
-    
+
+        WearLog.d(TAG, "📳 真正执行系统震动");
+
         v.vibrate(
                 VibrationEffect.createOneShot(
                         50,
