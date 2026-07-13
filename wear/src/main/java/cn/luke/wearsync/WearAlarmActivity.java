@@ -20,8 +20,6 @@ import java.lang.ref.WeakReference;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
-import cn.luke.wearsync.wear.R;
-
 public class WearAlarmActivity extends Activity {
     private static final String TAG = "WearSync_WearAlarmUI";
     private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
