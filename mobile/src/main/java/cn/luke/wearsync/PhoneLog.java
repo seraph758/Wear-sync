@@ -1,99 +1,111 @@
 package cn.luke.wearsync;
 
-import android.content.Context;
+import android.os.Environment;
 import android.util.Log;
 import java.io.File;
+import java.io.FileOutputStream;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 
 public class PhoneLog {
-    public static boolean DEBUG = true; 
-    private static final int MAX_LOG_LINES = 150;
-    private static final List<String> logBuffer = Collections.synchronizedList(new ArrayList<>());
+    private static final String TAG = "PhoneLog";
+    private static final List<String> logBuffer = new ArrayList<>();
+    private static final int MAX_BUFFER_SIZE = 2000;
 
-    public static List<String> getLogBuffer() {
+    // 🎯 锁定根目录：/storage/emulated/0/Download/WearSync
+    private static final File baseDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "WearSync");
+    public static final File logDir = new File(baseDir, "Log");
+    public static final File filesDir = new File(baseDir, "Files");
+
+    // 静态代码块：类加载时自动创建你所需要的全部目录
+    static {
+        initDirectories();
+    }
+
+    /**
+     * 提前强制创建 Log 和 Files 目录
+     */
+    public static synchronized void initDirectories() {
+        try {
+            if (!baseDir.exists()) baseDir.mkdirs();
+            if (!logDir.exists()) logDir.mkdirs();
+            if (!filesDir.exists()) filesDir.mkdirs();
+            Log.d(TAG, "WearSync 专属目录初始化成功: " + baseDir.getAbsolutePath());
+        } catch (Exception e) {
+            Log.e(TAG, "初始化创建目录失败", e);
+        }
+    }
+
+    /**
+     * 只有当你主动调用 append 时，日志才会被塞进缓冲区和文件
+     */
+    public static synchronized void append(String message) {
+        String timeStamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault()).format(new Date());
+        String formattedLine = "[" + timeStamp + "] " + message;
+
+        if (logBuffer.size() >= MAX_BUFFER_SIZE) {
+            logBuffer.remove(0);
+        }
+        logBuffer.add(formattedLine);
+
+        // 实时追加到本地 current_log.txt 中，确保手表传过来的日志瞬间落地
+        appendToFile(formattedLine);
+    }
+
+    public static synchronized List<String> getLogBuffer() {
         return new ArrayList<>(logBuffer);
     }
 
-    public static void clear() {
+    public static synchronized void clear() {
         logBuffer.clear();
     }
 
-    // 手机本地产生的一律加上 [PHONE] 钢印
-    private static void appendToBuffer(String level, String tag, String msg) {
-        String time = new java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.getDefault()).format(new java.util.Date());
-        logBuffer.add("[PHONE] [" + time + "] " + level + "/" + tag + ": " + msg);
-        if (logBuffer.size() > MAX_LOG_LINES) {
-            logBuffer.remove(0);
-        }
-    }
-
-    // 🚀 新增：接收无线通道传过来的手表日志，原封不动推入缓冲区（因为手表发来时自带 [WEAR] 标记）
-    public static void rawAppend(String fullLine) {
-        if (fullLine == null || fullLine.trim().isEmpty()) return;
-        logBuffer.add(fullLine);
-        if (logBuffer.size() > MAX_LOG_LINES) {
-            logBuffer.remove(0);
-        }
-    }
-
-    // 🚀 升级版：自动在文件最顶端添加简体中文日志格式注释说明书
-    public static File saveToFile(Context context) {
-        java.text.SimpleDateFormat dateFormat = new java.text.SimpleDateFormat("MMdd-HHmm", java.util.Locale.getDefault());
-        String timeStamp = dateFormat.format(new java.util.Date());
-        String fileName = "wearsync-" + timeStamp + ".txt";
-        File logFile = new File(context.getExternalCacheDir(), fileName);
-
-        java.io.FileWriter writer = null;
+    /**
+     * 实时将单条日志追加写入到本地文件
+     */
+    private static void appendToFile(String line) {
         try {
-            writer = new java.io.FileWriter(logFile, false);
-
-            // ====== 顶端通用日志格式注释（简体中文） ======
-            writer.write("================================================================\n");
-            writer.write(" WearSync 自动化联调日志文件说明（Log Format Info）\n");
-            writer.write(" 生成时间: " + new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(new java.util.Date()) + "\n");
-            writer.write("----------------------------------------------------------------\n");
-            writer.write(" 【日志分流与标签说明】\n");
-            writer.write(" 1. 开头包含 [PHONE] ➔ 代表手机本地端产生的业务或系统日志。\n");
-            writer.write(" 2. 开头包含 [WEAR]  ➔ 代表手表无线网络端实时上报传回的日志。\n");
-            writer.write(" \n");
-            writer.write(" 【标准单行数据格式】\n");
-            writer.write(" [端属性标记] [发生时间.毫秒] 日志级别/业务标签(TAG): 具体执行日志内容\n");
-            writer.write(" \n");
-            writer.write(" 【日志级别提示】\n");
-            writer.write(" D/ 代表 Debug（调试常规流） | W/ 代表 Warn（警告提示） | E/ 代表 Error（核心报错）\n");
-            writer.write("================================================================\n\n");
-
-            for (String line : getLogBuffer()) {
-                writer.write(line + "\n");
+            if (!logDir.exists()) logDir.mkdirs();
+            File file = new File(logDir, "current_log.txt");
+            try (FileOutputStream fos = new FileOutputStream(file, true)) {
+                fos.write((line + "\n").getBytes());
             }
-            writer.flush();
-            Log.d("PhoneLog", "成功生成带注释的动态日志文件: " + fileName);
-            return logFile;
-        } catch (java.io.IOException e) {
-            Log.e("PhoneLog", "动态命名保存日志文件失败", e);
-            return null;
-        } finally {
-            if (writer != null) {
-                try { writer.close(); } catch (java.io.IOException ignored) {}
-            }
+        } catch (Exception e) {
+            Log.e(TAG, "实时追加日志到本地文件失败", e);
         }
     }
 
-    public static void d(String tag, String msg) {
-        if (DEBUG) { Log.d(tag, msg); appendToBuffer("D", tag, msg); }
-    }
+    /**
+     * 手动保存/备份一份当前的日志
+     */
+    public static synchronized File exportBackupFile() {
+        try {
+            if (!logDir.exists()) logDir.mkdirs();
+            File backupFile = new File(logDir, "WearSync_Backup_" + System.currentTimeMillis() + ".txt");
+            File currentFile = new File(logDir, "current_log.txt");
 
-    public static void w(String tag, String msg) {
-        if (DEBUG) { Log.w(tag, msg); appendToBuffer("W", tag, msg); }
-    }
-
-    public static void e(String tag, String msg) {
-        Log.e(tag, msg); appendToBuffer("E", tag, msg);
-    }
-
-    public static void e(String tag, String msg, Throwable tr) {
-        Log.e(tag, msg, tr); appendToBuffer("E", tag, msg + "\n" + Log.getStackTraceString(tr));
+            if (currentFile.exists()) {
+                // 原生 Java 管道流复制，兼容性最好
+                try (java.nio.channels.FileChannel source = new java.io.FileInputStream(currentFile).getChannel();
+                     java.nio.channels.FileChannel destination = new FileOutputStream(backupFile).getChannel()) {
+                    destination.transferFrom(source, 0, source.size());
+                }
+                return backupFile;
+            } else {
+                // 如果实时文件意外不存在，直接拿内存 Buffer 生成
+                try (FileOutputStream fos = new FileOutputStream(backupFile)) {
+                    for (String line : getLogBuffer()) {
+                        fos.write((line + "\n").getBytes());
+                    }
+                }
+                return backupFile;
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "备份日志失败", e);
+            return null;
+        }
     }
 }
