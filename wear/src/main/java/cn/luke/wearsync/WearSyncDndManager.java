@@ -271,32 +271,38 @@ if (isPowerSaveLinkageOpen) {
             return;
         }
 
-        // ✅ 使用合法组合强制唤醒屏幕 + 保持CPU运转
-        // ✅ 修正：使用 SCREEN_BRIGHT_WAKE_LOCK 替代 PARTIAL_WAKE_LOCK
+        // ✅ 使用合法组合强制唤醒屏幕 + 保持// ✅ 修正：使用 SCREEN_BRIGHT_WAKE_LOCK 替代 PARTIAL_WAKE_LOCK
 PowerManager pm = (PowerManager) context.getApplicationContext()
         .getSystemService(Context.POWER_SERVICE);
 if (pm == null) return;
 
 final PowerManager.WakeLock wakeLock = pm.newWakeLock(
-        PowerManager.SCREEN_BRIGHT_WAKE_LOCK       // 🔑 关键修改：确保屏幕可被点亮
-                | PowerManager.ACQUIRE_CAUSES_WAKEUP // 强制唤醒屏幕
-                | PowerManager.ON_AFTER_RELEASE,     // 释放后短暂保持亮屏防闪烁
+        PowerManager.SCREEN_BRIGHT_WAKE_LOCK
+                | PowerManager.ACQUIRE_CAUSES_WAKEUP
+                | PowerManager.ON_AFTER_RELEASE,
         "dndsync:BedtimeAutomation"
 );
 
-        // 10秒安全兜底，防止异常导致永久亮屏
-        wakeLock.acquire(10 * 1000L);
+// 10秒安全兜底
+wakeLock.acquire(10 * 1000L);
 
-        Toast.makeText(context.getApplicationContext(),
-                "正在同步睡眠模式...", Toast.LENGTH_SHORT).show();
+Toast.makeText(context.getApplicationContext(),
+        "正在同步睡眠模式...", Toast.LENGTH_SHORT).show();
 
-        // ✅ 所有UI自动化必须在主线程顺序执行
-        new Handler(Looper.getMainLooper()).post(() -> {
+new Handler(Looper.getMainLooper()).post(() -> {
+    try {
+        // 🔑 关键修复：等待屏幕真正亮起 + SystemUI 就绪
+        // Wear OS 冷启动亮屏通常需要 500-800ms，这里给足余量
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
             try {
+                WearLog.d(TAG, "🖥️ 屏幕已就绪，开始下拉快捷面板");
                 serv.swipeDown();
 
+                // ⏱️ 下拉动画完成后，再等待图标可交互
+                // 从亮屏确认后重新计算，而非从 swipeDown 调用时计算
                 new Handler(Looper.getMainLooper()).postDelayed(() -> {
                     try {
+                        WearLog.d(TAG, "👆 点击就寢模式圖標");
                         serv.clickIcon1_1();
 
                         new Handler(Looper.getMainLooper()).postDelayed(() -> {
@@ -306,7 +312,6 @@ final PowerManager.WakeLock wakeLock = pm.newWakeLock(
                             } catch (Exception e) {
                                 WearLog.e(TAG, "❌ 返回操作失敗", e);
                             } finally {
-                                // 自动化结束立即释放锁
                                 if (wakeLock.isHeld()) {
                                     wakeLock.release();
                                     WearLog.d(TAG, "🔒 Wakelock 提前釋放成功");
@@ -318,14 +323,20 @@ final PowerManager.WakeLock wakeLock = pm.newWakeLock(
                         WearLog.e(TAG, "❌ 點擊就寢模式失敗", e);
                         if (wakeLock.isHeld()) wakeLock.release();
                     }
-                }, 600);
+                }, 800); // 🔑 从亮屏确认后算起，给足下拉动画+图标渲染时间
 
             } catch (Exception e) {
                 WearLog.e(TAG, "❌ 下拉快捷面板失敗", e);
                 if (wakeLock.isHeld()) wakeLock.release();
             }
-        });
+        }, 800); // 🔑 关键新增：亮屏等待时间
+
+    } catch (Exception e) {
+        WearLog.e(TAG, "❌ 主線程任務提交失敗", e);
+        if (wakeLock.isHeld()) wakeLock.release();
     }
+});
+}
 
     private static void vibrate(Context context) {
         Vibrator v=(Vibrator)context.getSystemService(Context.VIBRATOR_SERVICE);
