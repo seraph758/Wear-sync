@@ -144,7 +144,7 @@ class PhoneLogActivity : ComponentActivity() {
                                     copyToClipboard(context, copiedText)
                                     selectedIndices = emptySet()
                                 }) {
-                                    Icon(Icons.Default.ContentCopy, "复制", tint = Color(0xFF00E676))
+                                    Icon(Icons.Default.Share, "复制", tint = Color(0xFF00E676))
                                 }
                                 IconButton(onClick = { selectedIndices = emptySet() }) {
                                     Icon(Icons.Default.Close, "取消", tint = Color.LightGray)
@@ -175,7 +175,7 @@ class PhoneLogActivity : ComponentActivity() {
                                 contentColor = Color.White,
                                 modifier = Modifier.size(42.dp)
                             ) {
-                                Icon(Icons.Default.Save, "保存备份", modifier = Modifier.size(18.dp))
+                                Icon(Icons.Default.Check, "保存备份", modifier = Modifier.size(18.dp))
                             }
                         }
                     }
