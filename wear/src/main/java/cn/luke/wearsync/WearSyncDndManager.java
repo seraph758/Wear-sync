@@ -295,69 +295,79 @@ new Handler(Looper.getMainLooper()).post(() -> {
 
         try {
 
-            WearLog.d(TAG, "🖥️ 屏幕已亮，开始下拉快捷面板");
-            serv.swipeDown();
-
             waitQuickPanelReady(serv, () -> {
 
-                try {
+    try {
 
-                    WearLog.d(TAG, "👆 快捷面板已就绪，点击就寝模式");
-                    serv.clickIcon1_1();
+        WearLog.d(TAG, "👆 快捷面板已就緒，點擊就寢模式");
 
-                    serv.goBack();
+        serv.clickIcon1_1();
 
-                    WearLog.d(TAG, "✨ [無障礙聯動] 就寢模式自動化執行完畢");
+        serv.goBack();
 
-                } catch (Exception e) {
+        WearLog.d(TAG, "✨ [無障礙聯動] 就寢模式自動化執行完畢");
 
-                    WearLog.e(TAG, "❌ 點擊就寢模式失敗", e);
+    } catch (Exception e) {
 
-                } finally {
+        WearLog.e(TAG, "❌ 點擊就寢模式失敗", e);
 
-                    if (wakeLock.isHeld()) {
-                        wakeLock.release();
-                        WearLog.d(TAG, "🔒 Wakelock 提前釋放成功");
-                    }
+    } finally {
 
-                }
-
-            });
-
-        } catch (Exception e) {
-
-            WearLog.e(TAG, "❌ 下拉快捷面板失敗", e);
-
-            if (wakeLock.isHeld()) {
-                wakeLock.release();
-            }
-
+        if (wakeLock.isHeld()) {
+            wakeLock.release();
+            WearLog.d(TAG, "🔒 Wakelock 提前釋放成功");
         }
 
-    });
+    }
 
 });
 }
+
 private static void waitQuickPanelReady(WearSyncAccessService serv,Runnable next){
-    Handler handler=new Handler(Looper.getMainLooper());
 
-    Runnable[] task=new Runnable[1];
+    Handler handler = new Handler(Looper.getMainLooper());
 
-    task[0]=new Runnable(){
+    final int[] retry = {0};
+
+    Runnable[] task = new Runnable[1];
+
+    task[0] = new Runnable() {
+
         @Override
-        public void run(){
+        public void run() {
 
-            if(serv.isQuickPanelReady()){
-                WearLog.d(TAG,"✅ QuickPanel Ready");
+            if (serv.isQuickPanelReady()) {
+
+                WearLog.d(TAG, "✅ QuickPanel Ready");
+
                 next.run();
+
                 return;
+
             }
 
-            handler.postDelayed(this,50);
+            retry[0]++;
+
+            if (retry[0] > 30) {
+
+                WearLog.e(TAG, "❌ QuickPanel 打開超時");
+
+                return;
+
+            }
+
+            WearLog.d(TAG, "⬇️ QuickPanel 未打開，第 " + retry[0] + " 次重新下拉");
+
+            serv.swipeDown();
+
+            handler.postDelayed(this,100);
+
         }
+
     };
 
     handler.post(task[0]);
+
 }
 
 private static void waitScreenReady(PowerManager pm,Runnable next){
