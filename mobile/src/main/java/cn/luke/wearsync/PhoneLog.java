@@ -15,6 +15,9 @@ public class PhoneLog {
     private static final List<String> logBuffer = new ArrayList<>();
     private static final int MAX_BUFFER_SIZE = 2000;
 
+    // 🎯 开关状态常量兼容（修复 BuildConfig.DEBUG 或其他地方 Unresolved reference: DEBUG）
+    public static final boolean DEBUG = true;
+
     // 🎯 锁定根目录：/storage/emulated/0/Download/WearSync
     private static final File baseDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "WearSync");
     public static final File logDir = new File(baseDir, "Log");
@@ -38,6 +41,40 @@ public class PhoneLog {
             Log.e(TAG, "初始化创建目录失败", e);
         }
     }
+
+    // ==========================================
+    // 🚀 核心补全：传统 Log 兼容层 (带 Tag 打印)
+    // 补上这些方法后，MainFragment 的报错会瞬间消失！
+    // ==========================================
+
+    public static void d(String tag, String msg) {
+        Log.d(tag, msg); // 同时输出到系统 Logcat
+        append("[" + tag + "] D: " + msg); // 捕获到专属大日志舱
+    }
+
+    public static void w(String tag, String msg) {
+        Log.w(tag, msg);
+        append("[" + tag + "] W: " + msg);
+    }
+
+    public static void e(String tag, String msg) {
+        Log.e(tag, msg);
+        append("[" + tag + "] E: " + msg);
+    }
+
+    public static void i(String tag, String msg) {
+        Log.i(tag, msg);
+        append("[" + tag + "] I: " + msg);
+    }
+
+    public static void v(String tag, String msg) {
+        Log.v(tag, msg);
+        append("[" + tag + "] V: " + msg);
+    }
+
+    // ==========================================
+    // 底层数据流动逻辑
+    // ==========================================
 
     /**
      * 只有当你主动调用 append 时，日志才会被塞进缓冲区和文件
@@ -64,7 +101,7 @@ public class PhoneLog {
     }
 
     /**
-     * 实时将单条日志追加写入到本地文件
+     * 实时将单条日志追加写入到本地 file
      */
     private static void appendToFile(String line) {
         try {
