@@ -79,6 +79,12 @@ public class PhoneLog {
     /**
      * 只有当你主动调用 append 时，日志才会被塞进缓冲区和文件
      */
+    // 🎯 核心补全：兼容接收手表原始日志行的 rawAppend 方法
+    // 补上它后，PhoneSyncListenerService 接收到的手表日志就能完美顺畅地流入并保存了！
+    public static void rawAppend(String line) {
+        append(line);
+    }
+
     public static synchronized void append(String message) {
         String timeStamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault()).format(new Date());
         String formattedLine = "[" + timeStamp + "] " + message;
