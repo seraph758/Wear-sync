@@ -78,22 +78,22 @@ public void onMessageReceived(@NonNull MessageEvent messageEvent) {
             // =========================================================================
             // 🔋 模组三：闹钟拦截控制模组（极致精简・快递员模式）
             // =========================================================================
-            if ("alarm".equalsIgnoreCase(type)) {
-                WearLog.d(TAG, "⏰ 收到手机闹钟信令，正在将其无损打包并直发 WearAlarmActivity ➔ " + action);
-                
-                Intent alarmIntent = new Intent(this, WearAlarmActivity.class);
-                
-                // 【优化2】去掉了重复编写两次的 Intent Flags 赋值与两次 startActivity 冗余
-                // 保证 Activity 不管是没启动还是已启动，都能被准确唤醒并投递新 Intent，且移除了官方不推荐同时用的 CLEAR_TOP
-                // 🚀 删除了 NEW_TASK，只保留正常的流转标记，警告立刻消失
-                alarmIntent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
-                alarmIntent.putExtra("raw_alarm_json", json.toString());
-                alarmIntent.putExtra("alarm_action", action);
+if ("alarm".equalsIgnoreCase(type)) {
+    WearLog.d(TAG, "⏰ 收到手机闹钟信令，正在将其无损打包并直发 WearAlarmActivity ➔ " + action);
 
-                startActivity(alarmIntent);
-                return;
-            }
+    Intent alarmIntent = new Intent(this, WearAlarmActivity.class);
 
+    // 🎯 【终极正确配置】：使用位运算符 | 将两个关键 Flag 融合在一起
+    // 1. FLAG_ACTIVITY_NEW_TASK: 必须加！满足从后台 Service 启动 Activity 的系统底层铁律，防止引发崩溃。
+    // 2. FLAG_ACTIVITY_SINGLE_TOP: 必须加！若 Activity 已在前台活跃，则直接复用它并触发 onNewIntent()，防止重复创建多个闹钟界面。
+    alarmIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+    
+    alarmIntent.putExtra("raw_alarm_json", json.toString());
+    alarmIntent.putExtra("alarm_action", action);
+
+    startActivity(alarmIntent);
+    return;
+}
             // =========================================================================
             // 4. 相机穿透控制模组
             // =========================================================================
