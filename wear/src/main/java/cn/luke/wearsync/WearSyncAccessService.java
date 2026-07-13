@@ -6,7 +6,7 @@ import android.content.Intent;
 import android.graphics.Path;
 import android.util.DisplayMetrics;
 import android.view.accessibility.AccessibilityEvent;
-
+import android.view.accessibility.AccessibilityNodeInfo;
 public class WearSyncAccessService extends AccessibilityService {
     private static final String TAG = "WearSync_AccessService";
     private static WearSyncAccessService instance;
@@ -34,6 +34,13 @@ public class WearSyncAccessService extends AccessibilityService {
     @Override
     public void onInterrupt() {}
 
+    public boolean isQuickPanelReady() {
+    AccessibilityNodeInfo root = getRootInActiveWindow();
+    if (root == null) {
+        return false;
+    }
+    return root.getChildCount() > 0;
+}
     public void openQuickSettings() {
         WearLog.d(TAG, "⚙️ 触发执行模拟动作 ➔ 打开系统快捷控制中心");
         performGlobalAction(GLOBAL_ACTION_QUICK_SETTINGS);
