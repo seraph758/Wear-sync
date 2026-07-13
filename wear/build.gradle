@@ -16,7 +16,7 @@ if (signingPropsFile.exists()) {
 def githubRunNumber = System.getenv("GITHUB_RUN_NUMBER") ?: "1"
 
 android {
-    namespace "cn.luke.wearsync.wear" // 🚀 优化：手表端namespace建议明确区分，避免资源合并冲突
+    namespace "cn.luke.wearsync" // 🚀 优化：手表端namespace建议明确区分，避免资源合并冲突
     compileSdk = 34
 
     defaultConfig {
