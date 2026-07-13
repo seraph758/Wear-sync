@@ -13,8 +13,6 @@ import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.WindowManager;
 import android.widget.Button;
-import cn.luke.wearsync.wear.R;  // 🎯 指向你最新的手表端 namespace 
-
 
 import androidx.core.content.ContextCompat;
 
