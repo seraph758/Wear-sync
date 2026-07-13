@@ -234,7 +234,7 @@ class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
 
                             Button(
                                 onClick = {
-                                    val file: File? = PhoneLog.saveToFile(this@PhoneLogFloatingService)
+                                    val file: File? = PhoneLog.exportBackupFile(this@PhoneLogFloatingService)
                                     if (file != null && file.exists()) {
                                         Toast.makeText(this@PhoneLogFloatingService, "保存成功！文件保存在:\n${file.absolutePath}", Toast.LENGTH_LONG).show()
                                     } else {
