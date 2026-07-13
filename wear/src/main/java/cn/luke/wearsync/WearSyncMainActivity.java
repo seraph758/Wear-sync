@@ -2,7 +2,6 @@ package cn.luke.wearsync;
 
 import android.os.Bundle;
 import androidx.appcompat.app.AppCompatActivity;
-import cn.luke.wearsync.wear.R;  // 🎯 指向你最新的手表端 namespace
 
 
 /**
