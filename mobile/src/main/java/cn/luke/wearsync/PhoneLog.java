@@ -16,7 +16,7 @@ public class PhoneLog {
     private static final int MAX_BUFFER_SIZE = 2000;
 
     // 🎯 开关状态常量兼容（修复 BuildConfig.DEBUG 或其他地方 Unresolved reference: DEBUG）
-    public static final boolean DEBUG = true;
+    public static boolean DEBUG = true;
 
     // 🎯 锁定根目录：/storage/emulated/0/Download/WearSync
     private static final File baseDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "WearSync");
