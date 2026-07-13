@@ -128,8 +128,15 @@ if ("alarm".equalsIgnoreCase(type)) {
             // =========================================================================
             if ("wear_log_control".equalsIgnoreCase(type)) {
                 boolean wearDebug = json.optBoolean("wear_log_debug", true);
-                WearLog.DEBUG = wearDebug; 
+                WearLog.DEBUG = wearDebug;
                 WearLog.d(TAG, "🎛️ [远程同步] 接收到手机端远程控场，手表日志开闭状态同步修改为 ➔ " + wearDebug);
+
+                // 🎯 核心改动：去掉原先的 return，实现开关打开时同步连接 Channel！
+                if (wearDebug) {
+                    openLogChannelToPhone(messageEvent.getSourceNodeId());
+                } else {
+                    WearLog.setLogOutputStream(null);
+                }
                 return;
             }
 
@@ -207,5 +214,20 @@ if ("alarm".equalsIgnoreCase(type)) {
                 WearLog.e(TAG, "⚠️ 视频流高频泵送遭遇通道闭合熔断: " + e.getMessage(), e);
             }
         }).start();
+    }
+    // 🎯 全新粘贴在文件最底部的大括号上方
+    private void openLogChannelToPhone(String phoneNodeId) {
+        WearLog.d(TAG, "🔌 正在尝试与手机建立日志专属 Channel 管道...");
+        com.google.android.gms.wearable.Wearable.getChannelClient(this)
+                .openChannel(phoneNodeId, "/wear_log_path")
+                .addOnSuccessListener(channel -> {
+                    com.google.android.gms.wearable.Wearable.getChannelClient(this)
+                            .getOutputStream(channel)
+                            .addOnSuccessListener(outputStream -> {
+                                WearLog.setLogOutputStream(outputStream);
+                                WearLog.d(TAG, "🟢 成功与手机建立日志 Channel 传输通道！");
+                            });
+                })
+                .addOnFailureListener(e -> WearLog.e(TAG, "❌ 建立日志通道失败: " + e.getMessage()));
     }
 }

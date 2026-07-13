@@ -316,14 +316,28 @@ public class PhoneSyncListenerService extends WearableListenerService {
     /**
      * 📥 后台无线日志连续行读取器
      */
+    /**
+     * 📥 后台无线日志连续行读取器
+     */
     private void readLogStream(InputStream inputStream) {
+        // 创建一个用于过滤处理的时间格式工具
+        java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", java.util.Locale.getDefault());
+
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
             String line;
             while ((line = reader.readLine()) != null) {
-                PhoneLog.rawAppend(line);
+                // 🎯 核心微调：如果手表发过来的日志没有带具体时间戳，我们在这里强行为其注入当前时间戳
+                // 这样前面的 10 分钟自动过期过滤器就能稳定解析并把它移出屏幕了！
+                if (line.startsWith("[WEAR]") && !line.contains("] [20")) {
+                    String timeStr = sdf.format(new java.util.Date());
+                    line = "[WEAR] [" + timeStr + "]" + line.substring(6);
+                }
+
+                // 将日志喂入内存池及本地 current_log.txt
+                PhoneLog.appendFromRemote(line);
             }
         } catch (Exception e) {
-            PhoneLog.e(TAG, "⚠️ 手机端读取手表无线日志流时遭遇阻断异常", e);
+            PhoneLog.e(TAG, "无线日志流读取中断（手表可能熔断或离远了）");
         }
     }
 }

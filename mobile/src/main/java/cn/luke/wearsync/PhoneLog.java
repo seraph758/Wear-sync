@@ -47,31 +47,39 @@ public class PhoneLog {
     // ================================================================
 
     public static void d(String tag, String msg) {
+        // 🎯 核心拦截：如果手机端关闭了开关，DEBUG 为 false，直接弹回，不再追加进缓冲区和文件
+        if (!DEBUG) return;
+
         Log.d(tag, msg);
         append("[PHONE] [" + getSystemTime() + "] D/" + tag + ": " + msg);
     }
 
     public static void w(String tag, String msg) {
+        if (!DEBUG) return;
         Log.w(tag, msg);
         append("[PHONE] [" + getSystemTime() + "] W/" + tag + ": " + msg);
     }
 
     public static void e(String tag, String msg) {
+        if (!DEBUG) return;
         Log.e(tag, msg);
         append("[PHONE] [" + getSystemTime() + "] E/" + tag + ": " + msg);
     }
 
     public static void e(String tag, String msg, Throwable tr) {
+        if (!DEBUG) return;
         Log.e(tag, msg, tr);
         append("[PHONE] [" + getSystemTime() + "] E/" + tag + ": " + msg + " (Exception: " + tr.getMessage() + ")");
     }
 
     public static void i(String tag, String msg) {
+        if (!DEBUG) return;
         Log.i(tag, msg);
         append("[PHONE] [" + getSystemTime() + "] I/" + tag + ": " + msg);
     }
 
     public static void v(String tag, String msg) {
+        if (!DEBUG) return;
         Log.v(tag, msg);
         append("[PHONE] [" + getSystemTime() + "] V/" + tag + ": " + msg);
     }

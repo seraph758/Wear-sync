@@ -493,14 +493,18 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text("开启手机端调试日志", color = textColor, fontSize = 14.sp)
                 Switch(
-                    checked = uiLogDebugSwitch.value, 
-                    onCheckedChange = { isChecked -> 
-                        uiLogDebugSwitch.value = isChecked
-                        sp.edit {putBoolean("phone_log_debug_visible", isChecked)}
-                        PhoneLog.DEBUG = isChecked 
-                        
-                        // 🚀 痕迹：记录本地手机日志开关状态
-                        PhoneLog.d("WearSync_Main", "用户切换手机端调试日志开关，当前状态: $isChecked")
+                    checked = uiLogDebugSwitch.value,
+                    onCheckedChange = { isEnabled ->
+                        uiLogDebugSwitch.value = isEnabled
+
+                        // 🎯 核心改动：同步改变你的 PhoneLog.java 里的那个静态 DEBUG 变量！
+                        cn.luke.wearsync.PhoneLog.DEBUG = isEnabled
+
+                        if (isEnabled) {
+                            context.startService(Intent(context, PhoneLogFloatingService::class.java))
+                        } else {
+                            context.stopService(Intent(context, PhoneLogFloatingService::class.java))
+                        }
                     }
                 )
             }
