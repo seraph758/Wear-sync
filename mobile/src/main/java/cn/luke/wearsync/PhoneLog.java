@@ -145,4 +145,15 @@ public class PhoneLog {
             return null;
         }
     }
+    // 🎯 1. 兼容悬浮窗里的传参调用（直接无视传入的参数）
+    public static synchronized File exportBackupFile(android.content.Context context) {
+        return exportBackupFile();
+    }
+
+    // 🎯 2. 兼容 MainFragment 传入 Exception 异常对象的 3 参数 e 打印
+    public static void e(String tag, String msg, Throwable tr) {
+        android.util.Log.e(tag, msg, tr);
+        append("[" + tag + "] E: " + msg + " (Exception: " + tr.getMessage() + ")");
+    }
+
 }
