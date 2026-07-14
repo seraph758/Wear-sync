@@ -58,7 +58,7 @@ public class WearChannelTester {
 
                 // 關閉流與通道，觸發手機端的測試完成報告
                 outputStream.close();
-                Tasks.await(channelClient.closeChannel(channel));
+                Tasks.await(channelClient.close(channel));
                 Log.d(TAG, "🏆 [測試端] 所有數據包發送完畢，通道已安全關閉。");
 
             } catch (Exception e) {
