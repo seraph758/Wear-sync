@@ -29,21 +29,17 @@ public class PhoneLog {
 
     public static synchronized void initDirectories() {
         try {
-            if (!baseDir.exists() && !baseDir.mkdirs()) Log.w(TAG, "创建 baseDir 失败");
-            if (!logDir.exists() && !logDir.mkdirs()) Log.w(TAG, "创建 logDir 失败");
-            if (!filesDir.exists() && !filesDir.mkdirs()) Log.w(TAG, "创建 filesDir 失败");
+            if (!baseDir.exists() && !baseDir.mkdirs()) Log.w(TAG, "創建 baseDir 失敗");
+            if (!logDir.exists() && !logDir.mkdirs()) Log.w(TAG, "創建 logDir 失敗");
+            if (!filesDir.exists() && !filesDir.mkdirs()) Log.w(TAG, "創建 filesDir 失敗");
         } catch (Exception e) {
-            Log.e(TAG, "初始化创建目录失败", e);
+            Log.e(TAG, "初始化創建目錄失敗", e);
         }
     }
 
     private static String getSystemTime() {
         return new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault()).format(new Date());
     }
-
-    // ================================================================
-    // 🪵 统一的日志吞入入口（无论是本地还是远程，都走这里）
-    // ================================================================
 
     public static void d(String tag, String msg) {
         if (!DEBUG) return;
@@ -71,10 +67,9 @@ public class PhoneLog {
 
     public static void appendFromRemote(String line) {
         if (line == null || line.trim().isEmpty()) return;
-        // 🔬 全链路追踪：记录手机端真的收到了流数据
-        Log.d("PhoneLog_Trace", "📥 [流接收成功] 底层收到了来自手表的裸行: " + line);
+        Log.d("PhoneLog_Trace", "📥 [流接收成功] 底層收到了來自手錶的裸行: " + line);
         
-        if (line.contains("[WEAR]")) {
+        if (line.contains("[WEAR]") || line.contains("[TEST]")) {
             append(line);
         } else {
             append("[WEAR] [" + getSystemTime() + "] " + line);
@@ -89,9 +84,7 @@ public class PhoneLog {
         appendToFile(finalLine);
     }
 
-    // ================================================================
-    // 🎯 核心改动：统一收拢！统一输出最近 10 分钟内的日志大池子
-    // ================================================================
+    // 🎯 統一輸出 10 分鐘內日誌的緩衝池方法
     public static synchronized List<String> getLatestTenMinutesLogs() {
         long currentTime = System.currentTimeMillis();
         long tenMinutesAgo = currentTime - 10 * 60 * 1000;
@@ -113,7 +106,7 @@ public class PhoneLog {
                     }
                 }
             } catch (Exception e) {
-                // 解析失败说明是没有时间戳的异常行，选择保留
+                // 忽略解析失敗的行並保留
             }
             filteredList.add(line);
         }
@@ -131,7 +124,7 @@ public class PhoneLog {
                 fos.write((line + "\n").getBytes());
             }
         } catch (Exception e) {
-            Log.e(TAG, "追加到本地失败", e);
+            Log.e(TAG, "追加到本地失敗", e);
         }
     }
 
@@ -156,7 +149,7 @@ public class PhoneLog {
             }
             return backupFile;
         } catch (Exception e) {
-            Log.e(TAG, "备份失败", e);
+            Log.e(TAG, "備份失敗", e);
             return null;
         }
     }
