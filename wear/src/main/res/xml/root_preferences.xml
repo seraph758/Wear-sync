@@ -2,7 +2,6 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
-
     <PreferenceCategory
         android:title="系统核心权限"
         android:order="1"
@@ -31,7 +30,6 @@
 
     </PreferenceCategory>
 
-
     <PreferenceCategory
         android:title="Wear Sync 连线状态"
         android:order="2"
@@ -46,5 +44,18 @@
 
     </PreferenceCategory>
 
+    <PreferenceCategory
+        android:title="开发者调试与测试"
+        android:order="3"
+        app:iconSpaceReserved="false">
+
+        <Preference
+            android:key="channel_test_key"
+            android:title="测试 Channel 压力传输"
+            android:summary="点击向手机发送 1.5MB 压力数据包"
+            android:order="1"
+            app:iconSpaceReserved="false" />
+
+    </PreferenceCategory>
 
 </PreferenceScreen>
