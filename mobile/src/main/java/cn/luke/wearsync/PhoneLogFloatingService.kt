@@ -80,57 +80,55 @@ class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
             setViewTreeSavedStateRegistryOwner(this@PhoneLogFloatingService)
 
             setContent {
-                var mixedLogLines by remember { mutableStateOf(listOf<String>()) }
-                val listState = rememberLazyListState()
+    val context = LocalContext.current
+    var logLines by remember { mutableStateOf(listOf<String>()) }
+    val listState = rememberLazyListState()
 
-                     // 定时去底层统一池子里同步 10 分钟数据即可，不需要自己再算逻辑
-            LaunchedEffect(Unit) {
-                while (true) {
-                    val freshLogs = PhoneLog.getLatestTenMinutesLogs()
-                    if (logLines.size != freshLogs.size) {
-                        logLines = freshLogs
+    // 🎯 核心簡化：每 400ms 直接向大艙獲取過濾後的 10 分鐘純淨日誌
+    LaunchedEffect(Unit) {
+        while (true) {
+            val freshLogs = PhoneLog.getLatestTenMinutesLogs()
+            if (logLines.size != freshLogs.size) {
+                logLines = freshLogs
+            }
+            delay(400)
+        }
+    }
+
+    LaunchedEffect(logLines.size) {
+        if (logLines.isNotEmpty()) {
+            listState.animateScrollToItem(logLines.lastIndex)
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize().background(Color(0xFF101012))) {
+        androidx.compose.foundation.text.selection.SelectionContainer {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 80.dp)
+            ) {
+                items(logLines.size) { index ->
+                    val line = logLines[index]
+                    val isWear = line.contains("[WEAR]")
+                    val isTest = line.contains("[TEST]") // 新增測試高亮
+                    val isError = line.contains(" E/") || line.contains("Error")
+                    
+                    val textColor = when {
+                        isError -> Color(0xFFFF5252) // 紅色
+                        isTest -> Color(0xFFE040FB)  // 紫色（高壓大包測試專屬高亮）
+                        isWear -> Color(0xFF00B0FF)  // 藍色
+                        else -> Color(0xFF00E676)    // 綠色
                     }
-                    delay(400)
+                    Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 3.dp)) {
+                        Text(text = line, color = textColor, fontSize = 11.sp, fontFamily = FontFamily.Monospace, lineHeight = 14.sp)
+                    }
                 }
             }
+        }
+    }
+}
 
-            LaunchedEffect(logLines.size) {
-                if (logLines.isNotEmpty()) {
-                    listState.animateScrollToItem(logLines.lastIndex)
-                }
-            }
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color(0xF2121212)) 
-                ) {
-                    // 无分栏纯混合舱
-                    Box(modifier = Modifier.weight(1f).fillMaxWidth().padding(4.dp)) {
-                        if (mixedLogLines.isEmpty()) {
-                            Text("等待总线日志流输出...", color = Color.DarkGray, fontSize = 11.sp, modifier = Modifier.align(Alignment.Center))
-                        } else {
-                            LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-                                items(mixedLogLines) { line ->
-                                    val isWear = line.contains("[WEAR]")
-                                    val isError = line.contains(" E/") || line.contains("Error")
-                                    
-                                    val color = when {
-                                        isError -> Color(0xFFFF5252)
-                                        isWear -> Color(0xFF00B0FF)
-                                        else -> Color(0xFF00E676)
-                                    }
-                                    
-                                    Text(
-                                        text = line, 
-                                        color = color, 
-                                        fontSize = 11.sp, 
-                                        fontFamily = FontFamily.Monospace,
-                                        lineHeight = 14.sp
-                                    )
-                                }
-                            }
-                        }
                         Text("📱⌚ 混合时间流", color = Color.White.copy(alpha = 0.2f), fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.TopEnd).padding(4.dp))
                     }
 
