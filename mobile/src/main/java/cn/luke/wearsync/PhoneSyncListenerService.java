@@ -287,78 +287,34 @@ public class PhoneSyncListenerService extends WearableListenerService {
     // ============================================================
     // 🚀 核心独立追加：大流通道生命周期监控（用于对接手表的无线日志流）
     // ============================================================
-@Override
-    public void onChannelOpened(@NonNull com.google.android.gms.wearable.ChannelClient.Channel channel) {
-        Log.d("WearSync_Tunnel", "🔗 收到 Channel 建立请求，Path 为: " + channel.getPath());
-        String path = channel.getPath();
-        Log.d("PhoneLog_Trace", "🛰️ [手机雷达] 检测到有人建立了 Channel 管道! Path 是: " + path);
-        
-        if ("/wear_log_path".equals(path)) {
-            Log.d("PhoneLog_Trace", "🎯 [暗号吻合] 确认是手表日志管道！正在尝试强力扭开手机端水龙头获取 InputStream...");
-            
-            com.google.android.gms.wearable.Wearable.getChannelClient(this)
-                .getInputStream(channel)
-                .addOnSuccessListener(inputStream -> {
-                    Log.d("PhoneLog_Trace", "🟢 [水管畅通] 成功拿到 InputStream 输入流！开启后台无线轮询接收线程...");
-                    new Thread(() -> readLogStream(inputStream)).start();
-                })
-                .addOnFailureListener(e -> {
-                    Log.e("PhoneLog_Trace", "❌ [水管炸裂] 拿到 InputStream 失败!", e);
-                });
-        }
-    }
-
-    // 🚀 完美修复 2：将此方法参数修正为标准的 3 参数，契合最新 Wearable SDK 签名
-    @Override
-    public void onInputClosed(@NonNull ChannelClient.Channel channel, int closeReason, int appSpecificErrorCode) {
-        super.onInputClosed(channel, closeReason, appSpecificErrorCode);
-        if (channel.getPath().equals(WEAR_LOG_CHANNEL_PATH)) {
-            PhoneLog.w(TAG, "🔌 手表端主动断开或熔断了日志大流通道。原因代码: " + closeReason + ", 错误码: " + appSpecificErrorCode);
-        }
-    }
-
-    /**
-     * 📥 后台无线日志连续行读取器
-     */
-    /**
-     * 📥 后台无线日志连续行读取器
-     */
-    private void readLogStream(java.io.InputStream inputStream) {
-        Log.d("PhoneLog_Trace", "🔄 [线程激活] readLogStream 轮询读取线程已正式进入工作状态。");
-        java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", java.util.Locale.getDefault());
-        
-        try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(inputStream, java.nio.charset.StandardCharsets.UTF_8))) {
-            String line;
-            // 🔬 如果卡死在下面这一句，说明手表没有发送换行符 \n 或者压根没有往流里写东西
-            while ((line = reader.readLine()) != null) {
-                if (line.startsWith("[WEAR]") && !line.contains("] [20")) {
-                    String timeStr = sdf.format(new java.util.Date());
-                    line = "[WEAR] [" + timeStr + "]" + line.substring(6);
-                }
-                PhoneLog.appendFromRemote(line); 
-            }
-            Log.d("PhoneLog_Trace", "🛑 [流结束] readLine() 返回了 null，说明手表端主动关闭了输出流。");
-        } catch (Exception e) {
-            Log.e("PhoneLog_Trace", "❌ [流读取异常] 管道崩塌或读取被动中断", e);
-        }
-    }
-    // 請將這段代碼直接塞進手機端的 PhoneSyncListenerService.java 中
-
-// 手机端接收大包的优化逻辑
-
-private static final String TEST_CHANNEL_PATH = "/channel_test_path";
+@Overrideprivate static final String TEST_CHANNEL_PATH = "/channel_test_path";
 
 @Override
 public void onChannelOpened(@NonNull com.google.android.gms.wearable.ChannelClient.Channel channel) {
     String path = channel.getPath();
+    Log.d("PhoneLog_Trace", "🛰️ [手機雷達] 偵測到 Channel 管道握手! Path: " + path);
     
+    // 1. 原有的普通日誌管道
+    if ("/wear_log_path".equals(path)) {
+        Log.d("PhoneLog_Trace", "🎯 [暗號吻合] 正在建立手錶日誌接收流...");
+        com.google.android.gms.wearable.Wearable.getChannelClient(this)
+            .getInputStream(channel)
+            .addOnSuccessListener(inputStream -> {
+                Log.d("PhoneLog_Trace", "🟢 [日誌流就緒] 啟動背景讀取執行緒...");
+                new Thread(() -> readLogStream(inputStream)).start();
+            })
+            .addOnFailureListener(e -> Log.e("PhoneLog_Trace", "❌ [日誌流獲取失敗]", e));
+        return;
+    }
+
+    // 2. 🔬 新增的大包高壓傳輸測試通道
     if (TEST_CHANNEL_PATH.equals(path)) {
-        Log.d("Channel_Test_Trace", "🛰️ [手机接收端] 侦测到手表测试管道接入！准备接收高压大包...");
+        Log.d("Channel_Test_Trace", "🛰️ [手機測試端] 偵測到手錶高壓大包測試管道接入！");
         
         com.google.android.gms.wearable.Wearable.getChannelClient(this)
             .getInputStream(channel)
             .addOnSuccessListener(inputStream -> {
-                Log.d("Channel_Test_Trace", "🟢 [手机接收端] 成功拿到 InputStream，大流量接收就绪。");
+                Log.d("Channel_Test_Trace", "🟢 [手機測試端] InputStream 獲取成功，開始接收大包流量...");
                 
                 new Thread(() -> {
                     long totalReceivedBytes = 0;
@@ -372,11 +328,10 @@ public void onChannelOpened(@NonNull com.google.android.gms.wearable.ChannelClie
                             int lineSize = line.getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
                             totalReceivedBytes += lineSize;
                             
-                            // 提取大包编号
-                            String packetInfo = "普通大包";
-                            if (line.contains("[PAYLOAD_START_PACKET_1]")) packetInfo = "第 1 个大包";
-                            else if (line.contains("[PAYLOAD_START_PACKET_2]")) packetInfo = "第 2 个大包";
-                            else if (line.contains("[PAYLOAD_START_PACKET_3]")) packetInfo = "第 3 个大包";
+                            String packetInfo = "普通包";
+                            if (line.contains("[PAYLOAD_START_PACKET_1]")) packetInfo = "第 1 個大包";
+                            else if (line.contains("[PAYLOAD_START_PACKET_2]")) packetInfo = "第 2 個大包";
+                            else if (line.contains("[PAYLOAD_START_PACKET_3]")) packetInfo = "第 3 個大包";
                             
                             double sizeKb = lineSize / 1024.0;
                             String summary = String.format(java.util.Locale.getDefault(),
@@ -385,7 +340,7 @@ public void onChannelOpened(@NonNull com.google.android.gms.wearable.ChannelClie
                             
                             Log.i("Channel_Test_Trace", "📥 [接收成功] " + summary);
                             
-                            // 极为关键：只把优雅的“摘要”送进 PhoneLog，保护界面不卡顿！
+                            // 💡 關鍵：只將摘要送進 PhoneLog，防止大文本重繪導致介面卡死
                             PhoneLog.appendFromRemote("[TEST] " + summary);
                         }
                         
@@ -394,20 +349,39 @@ public void onChannelOpened(@NonNull com.google.android.gms.wearable.ChannelClie
                         double speed = totalMb / totalTimeSec;
                         
                         String finalSummary = String.format(java.util.Locale.getDefault(),
-                                "🏆 [测试完成] 共接收 %.2f MB 数据 | 总耗时: %.2f 秒 | 平均速度: %.2f MB/s",
+                                "🏆 [測試完成] 共接收 %.2f MB 數據 | 總耗時: %.2f 秒 | 平均速度: %.2f MB/s",
                                 totalMb, totalTimeSec, speed);
                         
                         Log.i("Channel_Test_Trace", finalSummary);
                         PhoneLog.appendFromRemote("[TEST] " + finalSummary);
                         
                     } catch (Exception e) {
-                        Log.e("Channel_Test_Trace", "❌ [手机接收端] 读取大流时发生中断异常: " + e.getMessage());
-                        PhoneLog.appendFromRemote("[TEST] ❌ 读取高压流中断: " + e.getMessage());
+                        Log.e("Channel_Test_Trace", "❌ [手機測試端] 讀取大流時發生異常: " + e.getMessage());
+                        PhoneLog.appendFromRemote("[TEST] ❌ 讀取高壓流中斷: " + e.getMessage());
                     }
                 }).start();
             })
-            .addOnFailureListener(e -> Log.e("Channel_Test_Trace", "❌ [手机接收端] 获取 InputStream 失败", e));
+            .addOnFailureListener(e -> Log.e("Channel_Test_Trace", "❌ [手機接收端] 獲取 InputStream 失敗", e));
     }
+}
+    /**
+     * 📥 后台无线日志连续行读取器
+     */
+    private void readLogStream(java.io.InputStream inputStream) {
+    java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", java.util.Locale.getDefault());
+    try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(inputStream, java.nio.charset.StandardCharsets.UTF_8))) {
+        String line;
+        while ((line = reader.readLine()) != null) {
+            if (line.startsWith("[WEAR]") && !line.contains("] [20")) {
+                String timeStr = sdf.format(new java.util.Date());
+                line = "[WEAR] [" + timeStr + "]" + line.substring(6);
+            }
+            PhoneLog.appendFromRemote(line); 
+        }
+    } catch (Exception e) {
+        Log.e("PhoneLog_Trace", "❌ [流讀取異常] 管道中斷", e);
+    }
+}
 }
 
 
