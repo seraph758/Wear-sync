@@ -368,21 +368,20 @@ public void onChannelOpened(@NonNull com.google.android.gms.wearable.ChannelClie
      * 📥 后台无线日志连续行读取器
      */
     private void readLogStream(java.io.InputStream inputStream) {
-    java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", java.util.Locale.getDefault());
-    try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(inputStream, java.nio.charset.StandardCharsets.UTF_8))) {
-        String line;
-        while ((line = reader.readLine()) != null) {
-            if (line.startsWith("[WEAR]") && !line.contains("] [20")) {
-                String timeStr = sdf.format(new java.util.Date());
-                line = "[WEAR] [" + timeStr + "]" + line.substring(6);
+        java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", java.util.Locale.getDefault());
+        try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(inputStream, java.nio.charset.StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.startsWith("[WEAR]") && !line.contains("] [20")) {
+                    String timeStr = sdf.format(new java.util.Date());
+                    line = "[WEAR] [" + timeStr + "]" + line.substring(6);
+                }
+                PhoneLog.appendFromRemote(line); 
             }
-            PhoneLog.appendFromRemote(line); 
+        } catch (Exception e) {
+            Log.e("PhoneLog_Trace", "❌ [流讀取異常] 管道中斷", e);
         }
-    } catch (Exception e) {
-        Log.e("PhoneLog_Trace", "❌ [流讀取異常] 管道中斷", e);
     }
-}
-}
 
 
 }
