@@ -176,7 +176,7 @@ class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(40.dp)
-                            .background(Color(0xFF151518))
+                            .background(Color(0xFF1F1F23))
                             .padding(horizontal = 4.dp),
                         horizontalArrangement = Arrangement.End,
                         verticalAlignment = Alignment.CenterVertically
@@ -207,7 +207,8 @@ class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
 
                             Button(
                                 onClick = {
-                                    val file: File? = PhoneLog.exportBackupFile(this@PhoneLogFloatingService)
+                                    // 🟢 完美修復：移除了錯誤傳入的 this@PhoneLogFloatingService 參數
+                                    val file: File? = PhoneLog.exportBackupFile()
                                     if (file != null && file.exists()) {
                                         Toast.makeText(this@PhoneLogFloatingService, "保存成功！", Toast.LENGTH_LONG).show()
                                     }
