@@ -30,42 +30,17 @@ class PhoneLogActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         PhoneLog.initDirectories()
-
-        setContent {
+  setContent {
             val context = LocalContext.current
             var logLines by remember { mutableStateOf(listOf<String>()) }
             val listState = rememberLazyListState()
 
-            // 🎯 核心改动 1：每 400 毫秒刷新时，自动过滤掉 10 分钟之前的日志
+            // 定时去底层统一池子里同步 10 分钟数据即可，不需要自己再算逻辑
             LaunchedEffect(Unit) {
-                val timeFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault())
                 while (true) {
-                    val rawLogs = PhoneLog.getLogBuffer()
-                    val currentTime = System.currentTimeMillis()
-                    val tenMinutesAgo = currentTime - 10 * 60 * 1000 // 10分钟前的毫秒数
-
-                    // 过滤出 10 分钟内的日志
-                    val filteredLogs = rawLogs.filter { line ->
-                        try {
-                            // 你的日志格式类似：[PHONE] [2026-07-13 23:45:01.123] D/TAG: msg
-                            // 或者手表端：[WEAR] D/TAG: msg (如果没有带时间戳，默认保留)
-                            if (line.contains("[") && line.contains("]")) {
-                                val firstBracket = line.indexOf('[', 1)
-                                val firstCloseBracket = line.indexOf(']', firstBracket)
-                                if (firstBracket != -1 && firstCloseBracket != -1) {
-                                    val timeStr = line.substring(firstBracket + 1, firstCloseBracket)
-                                    val logTime = timeFormat.parse(timeStr)?.time ?: currentTime
-                                    return@filter logTime >= tenMinutesAgo
-                                }
-                            }
-                        } catch (_: Exception) {
-                            // 解析失败的异常行默认保留，防止误删
-                        }
-                        true
-                    }
-
-                    if (logLines.size != filteredLogs.size) {
-                        logLines = filteredLogs
+                    val freshLogs = PhoneLog.getLatestTenMinutesLogs()
+                    if (logLines.size != freshLogs.size) {
+                        logLines = freshLogs
                     }
                     delay(400)
                 }
@@ -78,10 +53,6 @@ class PhoneLogActivity : ComponentActivity() {
             }
 
             Box(modifier = Modifier.fillMaxSize().background(Color(0xFF101012))) {
-
-                // 🎯 核心改动 2：采用 SelectionContainer 整体包裹 LazyColumn
-                // 彻底移除了原先消费手势的 combinedClickable，使得用户可以自由地像网页一样跨行滑动抹选
-                // 手指抬起时，会自动弹出 Android 系统自带的“复制/全选”小气泡菜单
                 androidx.compose.foundation.text.selection.SelectionContainer {
                     LazyColumn(
                         state = listState,
@@ -90,28 +61,15 @@ class PhoneLogActivity : ComponentActivity() {
                     ) {
                         items(logLines.size) { index ->
                             val line = logLines[index]
-
                             val isWear = line.contains("[WEAR]")
                             val isError = line.contains(" E/") || line.contains("Error")
-
                             val textColor = when {
-                                isError -> Color(0xFFFF5252) // 错误爆红
-                                isWear -> Color(0xFF00B0FF)  // 手表科技蓝
-                                else -> Color(0xFF00E676)    // 手机荧光绿
+                                isError -> Color(0xFFFF5252)
+                                isWear -> Color(0xFF00B0FF)
+                                else -> Color(0xFF00E676)
                             }
-
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 10.dp, vertical = 3.dp)
-                            ) {
-                                Text(
-                                    text = line,
-                                    color = textColor,
-                                    fontSize = 11.sp,
-                                    fontFamily = FontFamily.Monospace,
-                                    lineHeight = 14.sp
-                                )
+                            Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 3.dp)) {
+                                Text(text = line, color = textColor, fontSize = 11.sp, fontFamily = FontFamily.Monospace, lineHeight = 14.sp)
                             }
                         }
                     }
