@@ -33,6 +33,38 @@ public class WearSyncAccessService extends AccessibilityService {
 
     @Override
     public void onInterrupt() {}
+public void dumpCurrentWindow() {
+    AccessibilityNodeInfo root = getRootInActiveWindow();
+    if (root == null) {
+        WearLog.d(TAG, "❌ Root == null");
+        return;
+    }
+
+    WearLog.d(TAG, "================ NODE TREE ================");
+    dumpNode(root, 0);
+    WearLog.d(TAG, "============== END NODE TREE ==============");
+}
+
+private void dumpNode(AccessibilityNodeInfo node, int level) {
+    if (node == null) return;
+
+    StringBuilder prefix = new StringBuilder();
+    for (int i = 0; i < level; i++) {
+        prefix.append("  ");
+    }
+
+    WearLog.d(TAG,
+            prefix +
+            "class=" + node.getClassName() +
+            " text=" + node.getText() +
+            " desc=" + node.getContentDescription() +
+            " id=" + node.getViewIdResourceName() +
+            " clickable=" + node.isClickable());
+
+    for (int i = 0; i < node.getChildCount(); i++) {
+        dumpNode(node.getChild(i), level + 1);
+    }
+}
 
     public boolean isQuickPanelReady() {
     AccessibilityNodeInfo root = getRootInActiveWindow();
