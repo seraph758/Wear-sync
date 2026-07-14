@@ -62,6 +62,20 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
             });
         }
         // ========================================================================
+        // 测试channel通道按键
+        // ========================================================================
+        androidx.preference.Preference testPref = findPreference("channel_test_key");
+    if (testPref != null) {
+        testPref.setOnPreferenceClickListener(preference -> {
+            // 调用 Java 压力测试测试器
+            WearChannelTester.sendLargeChannelTestSignal(getContext());
+            
+            android.widget.Toast.makeText(getContext(), "🚀 压力测试数据已送出...", android.widget.Toast.LENGTH_SHORT).show();
+            return true;
+        });
+    }
+    }
+        // ========================================================================
         // 📸 远端相机控制入口
         // ========================================================================
         Preference cameraPref = findPreference("camera_control_key");
