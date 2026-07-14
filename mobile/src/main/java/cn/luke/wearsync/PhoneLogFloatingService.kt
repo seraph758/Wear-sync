@@ -12,7 +12,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -21,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -80,58 +80,27 @@ class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
             setViewTreeSavedStateRegistryOwner(this@PhoneLogFloatingService)
 
             setContent {
-    val context = LocalContext.current
-    var logLines by remember { mutableStateOf(listOf<String>()) }
-    val listState = rememberLazyListState()
+                val context = LocalContext.current
+                var logLines by remember { mutableStateOf(listOf<String>()) }
+                val listState = rememberLazyListState()
 
-    // 🎯 核心簡化：每 400ms 直接向大艙獲取過濾後的 10 分鐘純淨日誌
-    LaunchedEffect(Unit) {
-        while (true) {
-            val freshLogs = PhoneLog.getLatestTenMinutesLogs()
-            if (logLines.size != freshLogs.size) {
-                logLines = freshLogs
-            }
-            delay(400)
-        }
-    }
-
-    LaunchedEffect(logLines.size) {
-        if (logLines.isNotEmpty()) {
-            listState.animateScrollToItem(logLines.lastIndex)
-        }
-    }
-
-    Box(modifier = Modifier.fillMaxSize().background(Color(0xFF101012))) {
-        androidx.compose.foundation.text.selection.SelectionContainer {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 80.dp)
-            ) {
-                items(logLines.size) { index ->
-                    val line = logLines[index]
-                    val isWear = line.contains("[WEAR]")
-                    val isTest = line.contains("[TEST]") // 新增測試高亮
-                    val isError = line.contains(" E/") || line.contains("Error")
-                    
-                    val textColor = when {
-                        isError -> Color(0xFFFF5252) // 紅色
-                        isTest -> Color(0xFFE040FB)  // 紫色（高壓大包測試專屬高亮）
-                        isWear -> Color(0xFF00B0FF)  // 藍色
-                        else -> Color(0xFF00E676)    // 綠色
-                    }
-                    Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 3.dp)) {
-                        Text(text = line, color = textColor, fontSize = 11.sp, fontFamily = FontFamily.Monospace, lineHeight = 14.sp)
+                LaunchedEffect(Unit) {
+                    while (true) {
+                        val freshLogs = PhoneLog.getLatestTenMinutesLogs()
+                        if (logLines.size != freshLogs.size) {
+                            logLines = freshLogs
+                        }
+                        delay(400)
                     }
                 }
-            }
-        }
-    }
-}
 
-                        Text("📱⌚ 混合时间流", color = Color.White.copy(alpha = 0.2f), fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.TopEnd).padding(4.dp))
+                LaunchedEffect(logLines.size) {
+                    if (logLines.isNotEmpty()) {
+                        listState.animateScrollToItem(logLines.lastIndex)
                     }
+                }
 
+                Column(modifier = Modifier.fillMaxSize()) {
                     // 拖动栏
                     Row(
                         modifier = Modifier
@@ -143,7 +112,7 @@ class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
                                     change.consume()
                                     windowParams.x += dragAmount.x.toInt()
                                     windowParams.y += dragAmount.y.toInt()
-                                    try { windowManager.updateViewLayout(floatingView, windowParams) } catch (_: Exception) {}
+                                    try { windowManager.updateViewLayout(this@apply, windowParams) } catch (_: Exception) {}
                                 }
                             }
                             .padding(horizontal = 8.dp),
@@ -163,14 +132,43 @@ class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
                                     detectDragGestures { change, dragAmount ->
                                         change.consume()
                                         if (windowParams.width == WindowManager.LayoutParams.MATCH_PARENT) {
-                                            windowParams.width = floatingView?.width ?: 1000
+                                            windowParams.width = this@apply.width
                                         }
                                         windowParams.width = max(500, windowParams.width + dragAmount.x.toInt())
                                         windowParams.height = max(400, windowParams.height + dragAmount.y.toInt())
-                                        try { windowManager.updateViewLayout(floatingView, windowParams) } catch (_: Exception) {}
+                                        try { windowManager.updateViewLayout(this@apply, windowParams) } catch (_: Exception) {}
                                     }
                                 }
                         )
+                    }
+
+                    // 日志内容区
+                    Box(modifier = Modifier.weight(1f).background(Color(0xFF101012))) {
+                        androidx.compose.foundation.text.selection.SelectionContainer {
+                            LazyColumn(
+                                state = listState,
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(bottom = 10.dp)
+                            ) {
+                                items(logLines.size) { index ->
+                                    val line = logLines[index]
+                                    val isWear = line.contains("[WEAR]")
+                                    val isTest = line.contains("[TEST]") 
+                                    val isError = line.contains(" E/") || line.contains("Error")
+                                    
+                                    val textColor = when {
+                                        isError -> Color(0xFFFF5252) 
+                                        isTest -> Color(0xFFE040FB)  
+                                        isWear -> Color(0xFF00B0FF)  
+                                        else -> Color(0xFF00E676)    
+                                    }
+                                    Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 3.dp)) {
+                                        Text(text = line, color = textColor, fontSize = 11.sp, fontFamily = FontFamily.Monospace, lineHeight = 14.sp)
+                                    }
+                                }
+                            }
+                        }
+                        Text("📱⌚ 混合时间流", color = Color.White.copy(alpha = 0.2f), fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.TopEnd).padding(4.dp))
                     }
 
                     // 底部面板
@@ -187,7 +185,7 @@ class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
                             Button(
                                 onClick = { 
                                     PhoneLog.clear()
-                                    mixedLogLines = emptyList()
+                                    logLines = emptyList()
                                 },
                                 contentPadding = PaddingValues(horizontal = 8.dp),
                                 modifier = Modifier.height(28.dp),
