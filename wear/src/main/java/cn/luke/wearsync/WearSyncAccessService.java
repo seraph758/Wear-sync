@@ -34,7 +34,10 @@ protected void onServiceConnected() {
     }
 
     @Override
-    public void onAccessibilityEvent(AccessibilityEvent accessibilityEvent) {}
+    public void onAccessibilityEvent(AccessibilityEvent accessibilityEvent) {
+            dumpCurrentWindow();
+
+    }
 
     @Override
     public void onInterrupt() {}
@@ -80,6 +83,7 @@ private void dumpNode(AccessibilityNodeInfo node, int level) {
 }
     
 public void openQuickSettings() {
+
     WearLog.d(TAG, "⚙️ 打开快捷面板");
 
     performGlobalAction(GLOBAL_ACTION_QUICK_SETTINGS);
