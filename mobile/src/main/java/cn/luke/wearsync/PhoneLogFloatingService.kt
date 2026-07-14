@@ -83,21 +83,22 @@ class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
                 var mixedLogLines by remember { mutableStateOf(listOf<String>()) }
                 val listState = rememberLazyListState()
 
-                LaunchedEffect(Unit) {
-                    while (true) {
-                        val rawLogs = PhoneLog.getLogBuffer()
-                        if (mixedLogLines.size != rawLogs.size) {
-                            mixedLogLines = rawLogs
-                        }
-                        delay(400)
+                     // 定时去底层统一池子里同步 10 分钟数据即可，不需要自己再算逻辑
+            LaunchedEffect(Unit) {
+                while (true) {
+                    val freshLogs = PhoneLog.getLatestTenMinutesLogs()
+                    if (logLines.size != freshLogs.size) {
+                        logLines = freshLogs
                     }
+                    delay(400)
                 }
+            }
 
-                LaunchedEffect(mixedLogLines.size) {
-                    if (mixedLogLines.isNotEmpty()) {
-                        listState.animateScrollToItem(mixedLogLines.lastIndex)
-                    }
+            LaunchedEffect(logLines.size) {
+                if (logLines.isNotEmpty()) {
+                    listState.animateScrollToItem(logLines.lastIndex)
                 }
+            }
 
                 Column(
                     modifier = Modifier
