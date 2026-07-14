@@ -35,16 +35,19 @@ protected void onServiceConnected() {
         return super.onUnbind(intent);
     }
 
-    @Override
-    public void onAccessibilityEvent(AccessibilityEvent accessibilityEvent) {
-        WearLog.d(TAG,
+ @Override
+public void onAccessibilityEvent(AccessibilityEvent event) {
+
+    WearLog.d(TAG,
             "AccessibilityEvent type="
                     + event.getEventType()
                     + " package="
-                    + event.getPackageName());
-            dumpCurrentWindow();
+                    + event.getPackageName()
+                    + " class="
+                    + event.getClassName());
 
-    }
+    dumpCurrentWindow();
+}
 
     @Override
     public void onInterrupt() {}
