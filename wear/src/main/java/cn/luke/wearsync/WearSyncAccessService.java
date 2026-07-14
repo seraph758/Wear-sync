@@ -37,6 +37,11 @@ protected void onServiceConnected() {
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent accessibilityEvent) {
+        WearLog.d(TAG,
+            "AccessibilityEvent type="
+                    + event.getEventType()
+                    + " package="
+                    + event.getPackageName());
             dumpCurrentWindow();
 
     }
