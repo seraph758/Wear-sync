@@ -2,85 +2,68 @@ package cn.luke.wearsync;
 
 import android.content.Context;
 import android.util.Log;
+import com.google.android.gms.tasks.Tasks;
 import com.google.android.gms.wearable.ChannelClient;
+import com.google.android.gms.wearable.Node;
 import com.google.android.gms.wearable.Wearable;
-import java.io.BufferedWriter;
 import java.io.OutputStream;
-import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
+import java.util.List;
 
 public class WearChannelTester {
-    private static final String TAG = "Channel_Test_Trace";
+    private static final String TAG = "WearChannelTester";
     private static final String TEST_CHANNEL_PATH = "/channel_test_path";
 
     public static void sendLargeChannelTestSignal(Context context) {
-        Log.d(TAG, "🚀 [手表测试端] 开始寻找手机配对节点...");
-
-        Wearable.getNodeClient(context)
-            .getConnectedNodes()
-            .addOnSuccessListener(nodes -> {
+        // 🚀 啟動異步背景線程，先尋找配對的手機節點
+        new Thread(() -> {
+            try {
+                Log.d(TAG, "🛰️ [測試端] 開始掃描配對的手機節點...");
+                List<Node> nodes = Tasks.await(Wearable.getNodeClient(context).getConnectedNodes());
+                
                 if (nodes == null || nodes.isEmpty()) {
-                    Log.e(TAG, "❌ [手表测试端] 未找到配对手机！请确认蓝牙已连接。");
+                    Log.e(TAG, "❌ [測試端] 失敗：未找到任何在線的手機配對節點！請檢查藍牙連線。");
                     return;
                 }
 
-                String phoneNodeId = nodes.get(0).getId();
-                String phoneNodeName = nodes.get(0).getDisplayName();
-                Log.d(TAG, "📱 [手表测试端] 已定位手机: " + phoneNodeName + " (ID: " + phoneNodeId + ")");
+                // 獲取當前相連的手機節點 ID
+                String targetNodeId = nodes.get(0).getId();
+                Log.d(TAG, "🎯 [測試端] 成功鎖定手機目標節點 ID: " + targetNodeId);
 
-                // 打开测试管道
-                Wearable.getChannelClient(context)
-                    .openChannel(phoneNodeId, TEST_CHANNEL_PATH)
-                    .addOnSuccessListener(channel -> {
-                        Log.d(TAG, "🤝 [手表测试端] Channel 管道已成功创建，正在获取 OutputStream...");
+                // 2. 正式向該手機節點發起 Channel 管道握手
+                ChannelClient channelClient = Wearable.getChannelClient(context);
+                ChannelClient.Channel channel = Tasks.await(
+                        channelClient.openChannel(targetNodeId, TEST_CHANNEL_PATH)
+                );
 
-                        Wearable.getChannelClient(context)
-                            .getOutputStream(channel)
-                            .addOnSuccessListener(outputStream -> {
-                                // 开启后台线程进行高压传输，避免阻塞手表的 UI 线程
-                                new Thread(() -> doHighLoadTransmission(outputStream)).start();
-                            })
-                            .addOnFailureListener(e -> Log.e(TAG, "❌ [手表测试端] 获取 OutputStream 失败", e));
-                    })
-                    .addOnFailureListener(e -> Log.e(TAG, "❌ [手表测试端] openChannel 失败", e));
-            })
-            .addOnFailureListener(e -> Log.e(TAG, "❌ [手表测试端] 获取连接节点失败", e));
-    }
+                Log.d(TAG, "🟢 [測試端] 管道開闢成功！準備獲取 OutputStream 寫入高壓數據流...");
+                OutputStream outputStream = Tasks.await(channelClient.getOutputStream(channel));
 
-    private static void doHighLoadTransmission(OutputStream outputStream) {
-        Log.d(TAG, "🟢 [手表测试端] 线程启动，准备生成 3 个 512KB 的媒体级大包...");
+                // 3. 開始灌入大包測試數據
+                String payload1 = "[PAYLOAD_START_PACKET_1]" + "A".repeat(50 * 1024) + "\n"; // 50KB 數據
+                String payload2 = "[PAYLOAD_START_PACKET_2]" + "B".repeat(50 * 1024) + "\n"; // 50KB 數據
+                String payload3 = "[PAYLOAD_START_PACKET_3]" + "C".repeat(50 * 1024) + "\n"; // 50KB 數據
 
-        try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(outputStream, StandardCharsets.UTF_8))) {
-            // 1. 生成 512 KB (约 524,288 字符) 的模拟数据缓冲区
-            char[] mockChunk = new char[512 * 1024];
-            Arrays.fill(mockChunk, 'A'); // 填充测试字符 'A'
-            String mockPayload = new String(mockChunk);
+                Log.d(TAG, "🚀 [測試端] 正在發送第 1 個大包...");
+                outputStream.write(payload1.getBytes(StandardCharsets.UTF_8));
+                outputStream.flush();
 
-            for (int i = 1; i <= 3; i++) {
-                Log.d(TAG, "📤 [手表测试端] 正在强力推送第 " + i + " 个大包 (512 KB)...");
-                long startTime = System.currentTimeMillis();
+                Log.d(TAG, "🚀 [測試端] 正在發送第 2 個大包...");
+                outputStream.write(payload2.getBytes(StandardCharsets.UTF_8));
+                outputStream.flush();
 
-                // 写入数据头，方便手机识别大包序列
-                writer.write("[PAYLOAD_START_PACKET_" + i + "]");
-                // 写入 512KB 载荷
-                writer.write(mockPayload);
-                // 写入结束换行符（让手机端的 readLine 顺利截断）
-                writer.write("\n");
-                // 强行冲刷缓冲区，把数据推入蓝牙/Wi-Fi物理管道
-                writer.flush();
+                Log.d(TAG, "🚀 [測試端] 正在發送第 3 個大包...");
+                outputStream.write(payload3.getBytes(StandardCharsets.UTF_8));
+                outputStream.flush();
 
-                long duration = System.currentTimeMillis() - startTime;
-                Log.d(TAG, "✨ [手表测试端] 第 " + i + " 个大包发送完毕，耗时: " + duration + " ms");
-                
-                // 间隔 1.5 秒再发下一个，给蓝牙硬件预留喘息时间
-                Thread.sleep(1500);
+                // 關閉流與通道，觸發手機端的測試完成報告
+                outputStream.close();
+                Tasks.await(channelClient.closeChannel(channel));
+                Log.d(TAG, "🏆 [測試端] 所有數據包發送完畢，通道已安全關閉。");
+
+            } catch (Exception e) {
+                Log.e(TAG, "❌ [測試端] 發送高壓大包流時發生異常崩潰: " + e.getMessage(), e);
             }
-
-            Log.d(TAG, "🎉 [手表测试端] 1.5 MB 压力测试数据全部投递完毕！");
-        } catch (Exception e) {
-            Log.e(TAG, "❌ [手表测试端] 高压传输期间发生崩溃: " + e.getMessage());
-        }
+        }).start();
     }
 }
-
