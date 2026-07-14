@@ -16,6 +16,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
+import android.util.Log;
 
 /**
  * 📡 手机端监听核心（Camera + DND + Alarm + 🚀安全追加：无线日志大流接收舱）
@@ -287,7 +288,8 @@ public class PhoneSyncListenerService extends WearableListenerService {
     // ============================================================
     // 🚀 核心独立追加：大流通道生命周期监控（用于对接手表的无线日志流）
     // ============================================================
-@Overrideprivate static final String TEST_CHANNEL_PATH = "/channel_test_path";
+@Override
+private static final String TEST_CHANNEL_PATH = "/channel_test_path";
 
 @Override
 public void onChannelOpened(@NonNull com.google.android.gms.wearable.ChannelClient.Channel channel) {
