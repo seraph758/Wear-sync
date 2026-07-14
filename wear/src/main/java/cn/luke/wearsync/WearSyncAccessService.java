@@ -7,6 +7,8 @@ import android.graphics.Path;
 import android.util.DisplayMetrics;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
+import android.os.Handler;
+import android.os.Looper;
 public class WearSyncAccessService extends AccessibilityService {
     private static final String TAG = "WearSync_AccessService";
     private static WearSyncAccessService instance;
