@@ -201,7 +201,6 @@ public class WearSyncDndManager {
         wakeLock.acquire(10 * 1000L);
 
         Toast.makeText(context.getApplicationContext(), "正在同步睡眠模式...", Toast.LENGTH_SHORT).show();
-serv.dumpCurrentWindow();
 
         new Handler(Looper.getMainLooper()).post(() -> {
             // 🎯 修复点：重新梳理了嵌套的回调层级，保证 try-catch-finally 能够安全回收锁，同时恢复全局方法的正常边界
