@@ -344,45 +344,71 @@ public class PhoneSyncListenerService extends WearableListenerService {
     }
     // 請將這段代碼直接塞進手機端的 PhoneSyncListenerService.java 中
 
+// 手机端接收大包的优化逻辑
+
 private static final String TEST_CHANNEL_PATH = "/channel_test_path";
 
 @Override
 public void onChannelOpened(@NonNull com.google.android.gms.wearable.ChannelClient.Channel channel) {
     String path = channel.getPath();
     
-    // 🎯 這是原有的日誌通道
-    if ("/wear_log_path".equals(path)) {
-        // ...你原有的日誌流讀取邏輯...
-        return;
-    }
-
-    // 🔬 這是新增的 Channel Client 專屬純淨測試通道
     if (TEST_CHANNEL_PATH.equals(path)) {
-        Log.d("Channel_Test_Trace", "🛰️ [手機測試端] 偵測到手錶發起了測試 Channel 管道握手！");
+        Log.d("Channel_Test_Trace", "🛰️ [手机接收端] 侦测到手表测试管道接入！准备接收高压大包...");
         
         com.google.android.gms.wearable.Wearable.getChannelClient(this)
             .getInputStream(channel)
             .addOnSuccessListener(inputStream -> {
-                Log.d("Channel_Test_Trace", "🟢 [手機測試端] 成功拿到 InputStream 輸入流，開始監聽數據...");
+                Log.d("Channel_Test_Trace", "🟢 [手机接收端] 成功拿到 InputStream，大流量接收就绪。");
+                
                 new Thread(() -> {
+                    long totalReceivedBytes = 0;
+                    long testStartTime = System.currentTimeMillis();
+                    
                     try (java.io.BufferedReader reader = new java.io.BufferedReader(
                             new java.io.InputStreamReader(inputStream, java.nio.charset.StandardCharsets.UTF_8))) {
+                        
                         String line;
                         while ((line = reader.readLine()) != null) {
-                            Log.i("Channel_Test_Trace", "📥 [測試數據抵達] 收到手錶發來的測試包 ➔ " + line);
-                            // 同步寫入 PhoneLog 方便在 Activity 和懸浮窗界面直接肉眼觀察
-                            PhoneLog.appendFromRemote("[TEST] 手錶 Channel 測試包: " + line);
+                            int lineSize = line.getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+                            totalReceivedBytes += lineSize;
+                            
+                            // 提取大包编号
+                            String packetInfo = "普通大包";
+                            if (line.contains("[PAYLOAD_START_PACKET_1]")) packetInfo = "第 1 个大包";
+                            else if (line.contains("[PAYLOAD_START_PACKET_2]")) packetInfo = "第 2 个大包";
+                            else if (line.contains("[PAYLOAD_START_PACKET_3]")) packetInfo = "第 3 个大包";
+                            
+                            double sizeKb = lineSize / 1024.0;
+                            String summary = String.format(java.util.Locale.getDefault(),
+                                    "🟢 成功接收 %s | 大小: %.2f KB (%d 字节)", 
+                                    packetInfo, sizeKb, lineSize);
+                            
+                            Log.i("Channel_Test_Trace", "📥 [接收成功] " + summary);
+                            
+                            // 极为关键：只把优雅的“摘要”送进 PhoneLog，保护界面不卡顿！
+                            PhoneLog.appendFromRemote("[TEST] " + summary);
                         }
-                        Log.d("Channel_Test_Trace", "🛑 [手機測試端] 手錶關閉了測試流。");
+                        
+                        double totalMb = totalReceivedBytes / (1024.0 * 1024.0);
+                        double totalTimeSec = (System.currentTimeMillis() - testStartTime) / 1000.0;
+                        double speed = totalMb / totalTimeSec;
+                        
+                        String finalSummary = String.format(java.util.Locale.getDefault(),
+                                "🏆 [测试完成] 共接收 %.2f MB 数据 | 总耗时: %.2f 秒 | 平均速度: %.2f MB/s",
+                                totalMb, totalTimeSec, speed);
+                        
+                        Log.i("Channel_Test_Trace", finalSummary);
+                        PhoneLog.appendFromRemote("[TEST] " + finalSummary);
+                        
                     } catch (Exception e) {
-                        Log.e("Channel_Test_Trace", "❌ [手機測試端] 讀取測試流過程中發生異常: " + e.getMessage());
+                        Log.e("Channel_Test_Trace", "❌ [手机接收端] 读取大流时发生中断异常: " + e.getMessage());
+                        PhoneLog.appendFromRemote("[TEST] ❌ 读取高压流中断: " + e.getMessage());
                     }
                 }).start();
             })
-            .addOnFailureListener(e -> {
-                Log.e("Channel_Test_Trace", "❌ [手機測試端] 獲取 InputStream 失敗", e);
-            });
+            .addOnFailureListener(e -> Log.e("Channel_Test_Trace", "❌ [手机接收端] 获取 InputStream 失败", e));
     }
 }
+
 
 }
