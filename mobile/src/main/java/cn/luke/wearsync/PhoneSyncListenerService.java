@@ -287,19 +287,23 @@ public class PhoneSyncListenerService extends WearableListenerService {
     // ============================================================
     // 🚀 核心独立追加：大流通道生命周期监控（用于对接手表的无线日志流）
     // ============================================================
-    @Override
-    public void onChannelOpened(@NonNull ChannelClient.Channel channel) {
-        super.onChannelOpened(channel);
+@Override
+    public void onChannelOpened(@NonNull com.google.android.gms.wearable.ChannelClient.Channel channel) {
+        Log.d("WearSync_Tunnel", "🔗 收到 Channel 建立请求，Path 为: " + channel.getPath());
+        String path = channel.getPath();
+        Log.d("PhoneLog_Trace", "🛰️ [手机雷达] 检测到有人建立了 Channel 管道! Path 是: " + path);
         
-        if (channel.getPath().equals(WEAR_LOG_CHANNEL_PATH)) {
-            PhoneLog.d(TAG, "🔌 成功捕获到手表端建立的无线日志大流通道，开始接通水管...");
-
-            Wearable.getChannelClient(this).getInputStream(channel)
+        if ("/wear_log_path".equals(path)) {
+            Log.d("PhoneLog_Trace", "🎯 [暗号吻合] 确认是手表日志管道！正在尝试强力扭开手机端水龙头获取 InputStream...");
+            
+            com.google.android.gms.wearable.Wearable.getChannelClient(this)
+                .getInputStream(channel)
                 .addOnSuccessListener(inputStream -> {
-                    REMOTE_EXECUTOR.execute(() -> readLogStream(inputStream));
+                    Log.d("PhoneLog_Trace", "🟢 [水管畅通] 成功拿到 InputStream 输入流！开启后台无线轮询接收线程...");
+                    new Thread(() -> readLogStream(inputStream)).start();
                 })
                 .addOnFailureListener(e -> {
-                    PhoneLog.e(TAG, "❌ 获取手表无线日志输入流失败", e);
+                    Log.e("PhoneLog_Trace", "❌ [水管炸裂] 拿到 InputStream 失败!", e);
                 });
         }
     }
@@ -319,25 +323,66 @@ public class PhoneSyncListenerService extends WearableListenerService {
     /**
      * 📥 后台无线日志连续行读取器
      */
-    private void readLogStream(InputStream inputStream) {
-        // 创建一个用于过滤处理的时间格式工具
+    private void readLogStream(java.io.InputStream inputStream) {
+        Log.d("PhoneLog_Trace", "🔄 [线程激活] readLogStream 轮询读取线程已正式进入工作状态。");
         java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", java.util.Locale.getDefault());
-
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
+        
+        try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(inputStream, java.nio.charset.StandardCharsets.UTF_8))) {
             String line;
+            // 🔬 如果卡死在下面这一句，说明手表没有发送换行符 \n 或者压根没有往流里写东西
             while ((line = reader.readLine()) != null) {
-                // 🎯 核心微调：如果手表发过来的日志没有带具体时间戳，我们在这里强行为其注入当前时间戳
-                // 这样前面的 10 分钟自动过期过滤器就能稳定解析并把它移出屏幕了！
                 if (line.startsWith("[WEAR]") && !line.contains("] [20")) {
                     String timeStr = sdf.format(new java.util.Date());
                     line = "[WEAR] [" + timeStr + "]" + line.substring(6);
                 }
-
-                // 将日志喂入内存池及本地 current_log.txt
-                PhoneLog.appendFromRemote(line);
+                PhoneLog.appendFromRemote(line); 
             }
+            Log.d("PhoneLog_Trace", "🛑 [流结束] readLine() 返回了 null，说明手表端主动关闭了输出流。");
         } catch (Exception e) {
-            PhoneLog.e(TAG, "无线日志流读取中断（手表可能熔断或离远了）");
+            Log.e("PhoneLog_Trace", "❌ [流读取异常] 管道崩塌或读取被动中断", e);
         }
     }
+    // 請將這段代碼直接塞進手機端的 PhoneSyncListenerService.java 中
+
+private static final String TEST_CHANNEL_PATH = "/channel_test_path";
+
+@Override
+public void onChannelOpened(@NonNull com.google.android.gms.wearable.ChannelClient.Channel channel) {
+    String path = channel.getPath();
+    
+    // 🎯 這是原有的日誌通道
+    if ("/wear_log_path".equals(path)) {
+        // ...你原有的日誌流讀取邏輯...
+        return;
+    }
+
+    // 🔬 這是新增的 Channel Client 專屬純淨測試通道
+    if (TEST_CHANNEL_PATH.equals(path)) {
+        Log.d("Channel_Test_Trace", "🛰️ [手機測試端] 偵測到手錶發起了測試 Channel 管道握手！");
+        
+        com.google.android.gms.wearable.Wearable.getChannelClient(this)
+            .getInputStream(channel)
+            .addOnSuccessListener(inputStream -> {
+                Log.d("Channel_Test_Trace", "🟢 [手機測試端] 成功拿到 InputStream 輸入流，開始監聽數據...");
+                new Thread(() -> {
+                    try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                            new java.io.InputStreamReader(inputStream, java.nio.charset.StandardCharsets.UTF_8))) {
+                        String line;
+                        while ((line = reader.readLine()) != null) {
+                            Log.i("Channel_Test_Trace", "📥 [測試數據抵達] 收到手錶發來的測試包 ➔ " + line);
+                            // 同步寫入 PhoneLog 方便在 Activity 和懸浮窗界面直接肉眼觀察
+                            PhoneLog.appendFromRemote("[TEST] 手錶 Channel 測試包: " + line);
+                        }
+                        Log.d("Channel_Test_Trace", "🛑 [手機測試端] 手錶關閉了測試流。");
+                    } catch (Exception e) {
+                        Log.e("Channel_Test_Trace", "❌ [手機測試端] 讀取測試流過程中發生異常: " + e.getMessage());
+                    }
+                }).start();
+            })
+            .addOnFailureListener(e -> {
+                Log.e("Channel_Test_Trace", "❌ [手機測試端] 獲取 InputStream 失敗", e);
+            });
+    }
+}
+
 }
