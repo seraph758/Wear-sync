@@ -78,11 +78,17 @@ private void dumpNode(AccessibilityNodeInfo node, int level) {
     }
     return root.getChildCount() > 0;
 }
-    public void openQuickSettings() {
-        WearLog.d(TAG, "⚙️ 触发执行模拟动作 ➔ 打开系统快捷控制中心");
-        performGlobalAction(GLOBAL_ACTION_QUICK_SETTINGS);
-    }
+    
+public void openQuickSettings() {
+    WearLog.d(TAG, "⚙️ 打开快捷面板");
 
+    performGlobalAction(GLOBAL_ACTION_QUICK_SETTINGS);
+
+    new Handler(Looper.getMainLooper()).postDelayed(() -> {
+        WearLog.e(TAG, "★★★★★ DUMP AFTER OPEN ★★★★★");
+        dumpCurrentWindow();
+    }, 500);
+}
     public void goHome() {
         WearLog.d(TAG, "⚙️ 触发执行模拟动作 ➔ 返回表盘桌面");
         performGlobalAction(GLOBAL_ACTION_HOME);
