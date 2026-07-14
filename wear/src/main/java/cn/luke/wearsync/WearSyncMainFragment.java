@@ -51,7 +51,6 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
                 WearLog.d(TAG, "🔘 [交互触发] 用户点击了无障碍辅助功能 Preference 项，准备穿透调起系统设置页面...");
                 try {
                     Intent accIntent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
-// 🚀 直接把原本的 accIntent.addFlags(...) 这一行整行删掉！
                     WearLog.d(TAG, "🚀 [物理跳转] 正在呼叫 startActivity -> ACTION_ACCESSIBILITY_SETTINGS");
                     startActivity(accIntent);
                 } catch (Exception e) {
@@ -61,22 +60,22 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
                 return true;
             });
         }
+        
         // ========================================================================
         // 测试channel通道按键
         // ========================================================================
         androidx.preference.Preference testPref = findPreference("channel_test_key");
-    if (testPref != null) {
-        testPref.setOnPreferenceClickListener(preference -> {
-            // 调用 Java 压力测试测试器
-            WearChannelTester.sendLargeChannelTestSignal(getContext());
-            
-            android.widget.Toast.makeText(getContext(), "🚀 压力测试数据已送出...", android.widget.Toast.LENGTH_SHORT).show();
-            return true;
-        });
-    }
-    }
+        if (testPref != null) {
+            testPref.setOnPreferenceClickListener(preference -> {
+                // 调用 Java 压力测试测试器
+                WearChannelTester.sendLargeChannelTestSignal(getContext());
+                android.widget.Toast.makeText(getContext(), "🚀 压力测试数据已送出...", android.widget.Toast.LENGTH_SHORT).show();
+                return true;
+            });
+        }
+
         // ========================================================================
-        // 📸 远端相机控制入口
+        // 📸 远端相机控制入口 (🟢 完美修復：已正確將其納入 onCreatePreferences 方法體內)
         // ========================================================================
         Preference cameraPref = findPreference("camera_control_key");
         if (cameraPref != null) {
@@ -89,44 +88,34 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
                 WearLog.w(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         
                 try {
-                        WearLog.d(TAG, "① 正在准备启动本地 WearCameraActivity...");
-
-                    // 🎯 干净清爽！直接把那行 addFlags 删掉即可
-                        Intent intent = new Intent(requireContext(), WearCameraActivity.class);
-                        startActivity(intent);
-                    
-                        WearLog.d(TAG, "✅ 本地 WearCameraActivity 启动请求已发出。");
-                    
-                    } catch (Exception e) {
-                        WearLog.e(TAG, "❌ 本地 WearCameraActivity 启动失败：" + e.getMessage(), e);
-                    }
-                    
-                    
-                    try {
-                        WearLog.d(TAG, "② 正在调用 WearSyncRemoteCameraHandler.openPhoneCamera()...");
-                    
-                        new WearSyncRemoteCameraHandler(requireContext())
-                                .openPhoneCamera();
-                    
-                        WearLog.d(TAG, "✅ openPhoneCamera() 已调用完成");
-                    
-                    } catch (Exception e) {
-                        WearLog.e(TAG, "❌ openPhoneCamera调用失败：" + e.getMessage(), e);
-                    }
-        
-                        WearLog.w(TAG, "📸 [远端相机入口] 点击事件处理结束。");
-        
-                        return true;
-                    });
-                
-                } else {
-                    WearLog.e(TAG, "❌ [交互挂载失败] 未找到 Preference：camera_control_key");
+                    WearLog.d(TAG, "① 正在准备启动本地 WearCameraActivity...");
+                    Intent intent = new Intent(requireContext(), WearCameraActivity.class);
+                    startActivity(intent);
+                    WearLog.d(TAG, "✅ 本地 WearCameraActivity 启动请求已发出。");
+                } catch (Exception e) {
+                    WearLog.e(TAG, "❌ 本地 WearCameraActivity 启动失败：" + e.getMessage(), e);
                 }
+                    
+                try {
+                    WearLog.d(TAG, "② 正在调用 WearSyncRemoteCameraHandler.openPhoneCamera()...");
+                    new WearSyncRemoteCameraHandler(requireContext()).openPhoneCamera();
+                    WearLog.d(TAG, "✅ openPhoneCamera() 已调用完成");
+                } catch (Exception e) {
+                    WearLog.e(TAG, "❌ openPhoneCamera调用失败：" + e.getMessage(), e);
+                }
+        
+                WearLog.w(TAG, "📸 [远端相机入口] 点击事件处理结束。");
+                return true;
+            });
                 
-                WearLog.d(TAG, "⚙️ [底层初始化] 正在引导加载谷歌微端物理链路异步探针...");
-                setupConnectionCheck();
-                WearLog.d(TAG, "① [生命周期] onCreatePreferences 配置完毕。");
-            }
+        } else {
+            WearLog.e(TAG, "❌ [交互挂载失败] 未找到 Preference：camera_control_key");
+        }
+                
+        WearLog.d(TAG, "⚙️ [底层初始化] 正在引导加载谷歌微端物理链路异步探针...");
+        setupConnectionCheck();
+        WearLog.d(TAG, "① [生命周期] onCreatePreferences 配置完毕。");
+    } // 🟢 onCreatePreferences 在這裡正確閉合
 
     @Override
     public void onResume() {
