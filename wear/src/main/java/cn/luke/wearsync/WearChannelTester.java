@@ -97,9 +97,9 @@ public class WearChannelTester {
                 outputStream.write(payload3.getBytes(StandardCharsets.UTF_8));
                 outputStream.flush();
 
-                // 4. 安全關閉
+                // 4. 安全關閉（🟢 完美修復：已將 closeChannel 改為 close）
                 outputStream.close();
-                Tasks.await(channelClient.closeChannel(channel), 5, TimeUnit.SECONDS);
+                Tasks.await(channelClient.close(channel), 5, TimeUnit.SECONDS);
 
                 Log.d(TAG, "🏆 [測試端] 發送完畢，通道關閉。");
                 showToast(appContext, "🏆 壓力數據發送完畢！請查看手機 Logfox。");
@@ -108,10 +108,10 @@ public class WearChannelTester {
                 Log.e(TAG, "❌ [測試端] 發生異常崩潰: " + e.getMessage(), e);
                 showToast(appContext, "❌ 傳輸中斷: " + e.getMessage());
                 
-                // 發生異常時，嘗試進行物理釋放，防止通道殘留鎖死
+                // 發生異常時，嘗試進行物理釋放，防止通道殘留鎖死（🟢 完美修復：已將 closeChannel 改為 close）
                 try {
                     if (outputStream != null) outputStream.close();
-                    if (channel != null) channelClient.closeChannel(channel);
+                    if (channel != null) channelClient.close(channel);
                 } catch (Exception ignored) {}
             }
         }).start();
