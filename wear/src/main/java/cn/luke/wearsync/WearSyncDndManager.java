@@ -179,58 +179,83 @@ public class WearSyncDndManager {
     /**
      * 🛌 透過無障礙模擬點擊切換手錶系統的就寢模式（睡眠模式）
      */
-    private static void toggleBedtimeMode(Context context) {
-        WearSyncAccessService serv = WearSyncAccessService.getSharedInstance();
-        if (serv == null) {
-            Toast.makeText(context.getApplicationContext(),
-                    "無障礙服務未連接，無法同步睡眠模式", Toast.LENGTH_LONG).show();
-            return;
-        }
+private static void toggleBedtimeMode(Context context) {
+    WearSyncAccessService serv = WearSyncAccessService.getSharedInstance();
+    if (serv == null) {
+        WearLog.d(TAG, "❌ accessibility not connected");
 
-        PowerManager pm = (PowerManager) context.getApplicationContext().getSystemService(Context.POWER_SERVICE);
-        if (pm == null) return;
+        new Handler(Looper.getMainLooper()).post(() ->
+                Toast.makeText(
+                        context.getApplicationContext(),
+                        "無障礙服務未連接，無法同步睡眠模式",
+                        Toast.LENGTH_LONG
+                ).show());
 
-        final PowerManager.WakeLock wakeLock = pm.newWakeLock(
-                PowerManager.SCREEN_BRIGHT_WAKE_LOCK
-                        | PowerManager.ACQUIRE_CAUSES_WAKEUP
-                        | PowerManager.ON_AFTER_RELEASE,
-                "dndsync:BedtimeAutomation"
-        );
-
-        // 10秒安全兜底
-        wakeLock.acquire(10 * 1000L);
-
-        Toast.makeText(context.getApplicationContext(), "正在同步睡眠模式...", Toast.LENGTH_SHORT).show();
-
-        new Handler(Looper.getMainLooper()).post(() -> {
-            // 🎯 修复点：重新梳理了嵌套的回调层级，保证 try-catch-finally 能够安全回收锁，同时恢复全局方法的正常边界
-            waitScreenReady(pm, () -> {
-                try {
-                    waitQuickPanelReady(serv, () -> {
-                        try {
-                            WearLog.d(TAG, "👆 快捷面板已就緒，點擊就寢模式");
-                            serv.clickIcon1_1();
-                            serv.goBack();
-                            WearLog.d(TAG, "✨ [無障礙聯動] 就寢模式自動化執行完畢");
-                        } catch (Exception e) {
-                            WearLog.e(TAG, "❌ 點擊就寢模式失敗", e);
-                        } finally {
-                            if (wakeLock.isHeld()) {
-                                wakeLock.release();
-                                WearLog.d(TAG, "🔒 Wakelock 提前釋放成功");
-                            }
-                        }
-                    });
-                } catch (Exception e) {
-                    WearLog.e(TAG, "❌ 自动下推面板流异常", e);
-                    if (wakeLock.isHeld()) {
-                        wakeLock.release();
-                    }
-                }
-            });
-        });
+        return;
     }
 
+    WearLog.d(TAG, "✅ accessibility connected. Perform bedtime toggle.");
+
+    PowerManager pm = (PowerManager) context.getApplicationContext()
+            .getSystemService(Context.POWER_SERVICE);
+
+    if (pm == null) {
+        WearLog.e(TAG, "❌ PowerManager == null");
+        return;
+    }
+
+    final PowerManager.WakeLock wakeLock = pm.newWakeLock(
+            PowerManager.SCREEN_BRIGHT_WAKE_LOCK
+                    | PowerManager.ACQUIRE_CAUSES_WAKEUP
+                    | PowerManager.ON_AFTER_RELEASE,
+            "dndsync:BedtimeAutomation"
+    );
+
+    // 安全兜底
+    wakeLock.acquire(10 * 1000L);
+
+    new Handler(Looper.getMainLooper()).post(() -> {
+
+        Toast.makeText(
+                context.getApplicationContext(),
+                "正在同步睡眠模式...",
+                Toast.LENGTH_SHORT
+        ).show();
+
+        // ========= 第一步：等待亮屏 =========
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+
+            WearLog.d(TAG, "🖥️ 屏幕亮起，开始下拉快捷菜单");
+
+            serv.swipeDown();
+
+            // ========= 第二步：等待快捷菜单动画 =========
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+
+                WearLog.d(TAG, "👆 点击就寝模式");
+
+                serv.clickIcon1_1();
+
+                // ========= 第三步：等待点击动画 =========
+                new Handler(Looper.getMainLooper()).postDelayed(() -> {
+
+                    WearLog.d(TAG, "↩️ 返回");
+
+                    serv.goBack();
+
+                    if (wakeLock.isHeld()) {
+                        wakeLock.release();
+                        WearLog.d(TAG, "🔒 WakeLock released");
+                    }
+
+                }, 1000);
+
+            }, 1000);
+
+        }, 1000);
+
+    });
+}
     private static void waitQuickPanelReady(WearSyncAccessService serv, Runnable next) {
         Handler handler = new Handler(Looper.getMainLooper());
         final int[] retry = {0};
