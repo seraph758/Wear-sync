@@ -84,10 +84,11 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
         try {
             PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
             if (pm != null) {
-                wakeLock = pm.newWakeLock(
-                        PowerManager.SCREEN_BRIGHT_WAKE_LOCK
-                                | PowerManager.ACQUIRE_CAUSES_WAKEUP,
-                        TAG + ":CameraWake");
+                // 使用 FULL_WAKE_LOCK 替代 SCREEN_BRIGHT_WAKE_LOCK
+wakeLock = pm.newWakeLock(
+    PowerManager.FULL_WAKE_LOCK |
+    PowerManager.ACQUIRE_CAUSES_WAKEUP,
+    TAG + ":CameraWake");
                 wakeLock.acquire(10 * 60 * 1000L);
                 WearLog.d(TAG, "💡 WakeLock 已获取，强制点亮屏幕并保持唤醒");
             }
@@ -278,7 +279,6 @@ public class WearCameraActivity extends Activity implements SurfaceHolder.Callba
     @Override
     public void onBackPressed() {
         cleanExit(true);
-        super.onBackPressed();
     }
 
     @Override

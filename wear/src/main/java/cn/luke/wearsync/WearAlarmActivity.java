@@ -13,7 +13,8 @@ import android.widget.TextView;
 import com.google.android.gms.tasks.Tasks;
 import com.google.android.gms.wearable.Node;
 import com.google.android.gms.wearable.Wearable;
-
+import android.app.KeyguardManager;
+import android.os.VibratorManager;
 import org.json.JSONObject;
 
 import java.lang.ref.WeakReference;
@@ -45,10 +46,15 @@ public class WearAlarmActivity extends Activity {
 
         WearLog.d(TAG, "🎬 onCreate: 手表闹钟接管界面全屏顶屏中...");
 
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
-                | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
-                | WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
-                | WindowManager.LayoutParams.FLAG_ALLOW_LOCK_WHILE_SCREEN_ON);
+// 1. 保留 FLAG_KEEP_SCREEN_ON 来保持屏幕常亮
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        
+        // 2. 使用 KeyguardManager 来解锁屏幕，替代 FLAG_SHOW_WHEN_LOCKED 和 FLAG_TURN_SCREEN_ON
+        KeyguardManager keyguardManager = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
+        if (keyguardManager != null) {
+            keyguardManager.requestDismissKeyguard(this, null);
+        }
+        
 
         setContentView(R.layout.activity_wear_alarm);
 
@@ -114,8 +120,12 @@ public class WearAlarmActivity extends Activity {
     }
 
     private void startWatchVibration() {
-        if (vibrator == null) {
-            vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+        // 使用新的 VibratorManager 来获取 Vibrator
+VibratorManager vm = (VibratorManager) getSystemService(Context.VIBRATOR_MANAGER_SERVICE);
+if (vm != null) {
+    vibrator = vm.getVibrator();
+}
+
         }
         if (vibrator != null && vibrator.hasVibrator()) {
             long[] pattern = {0, 500, 500};

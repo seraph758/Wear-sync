@@ -11,6 +11,7 @@ import android.os.Vibrator;
 import android.provider.Settings;
 import android.widget.Toast;
 import org.json.JSONObject;
+import android.os.VibratorManager;
 
 /**
  * 🌓 手錶端勿擾、掩碼解讀與無障礙自動化聯控核心管理器 (致敬舊代碼・終極完美閉跨版)
@@ -204,10 +205,9 @@ private static void toggleBedtimeMode(Context context) {
         return;
     }
 
-    final PowerManager.WakeLock wakeLock = pm.newWakeLock(
-            PowerManager.SCREEN_BRIGHT_WAKE_LOCK
-                    | PowerManager.ACQUIRE_CAUSES_WAKEUP
-                    | PowerManager.ON_AFTER_RELEASE,
+    final PowerManager.WakeLockwakeLock = pm.newWakeLock(
+    PowerManager.FULL_WAKE_LOCK |
+    PowerManager.ACQUIRE_CAUSES_WAKEUP,
             "dndsync:BedtimeAutomation"
     );
 
@@ -256,10 +256,10 @@ private static void toggleBedtimeMode(Context context) {
 
     });
 }
-
-
     private static void vibrate(Context context) {
-        Vibrator v = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
+        VibratorManager vm = (VibratorManager) context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE);
+Vibrator v = (vm != null) ? vm.getVibrator() : null;
+
 
         if (v == null) {
             WearLog.e(TAG, "❌ Vibrator==null");
