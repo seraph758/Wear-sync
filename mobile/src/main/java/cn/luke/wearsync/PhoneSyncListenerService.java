@@ -296,8 +296,8 @@ public class PhoneSyncListenerService extends WearableListenerService {
         String path = channel.getPath();
         Log.d("PhoneLog_Trace", "🛰️ [手機雷達] 偵測到 Channel 管道握手! Path: " + path);
         
-        // 1. 原有的普通日誌管道
-        if ("/wear_log_path".equals(path)) {
+        // 统一在主日志管道中接收数据
+        if (WEAR_LOG_CHANNEL_PATH.equals(path)) {
             Log.d("PhoneLog_Trace", "🎯 [暗號吻合] 正在建立手錶日誌接收流...");
             com.google.android.gms.wearable.Wearable.getChannelClient(this)
                 .getInputStream(channel)
@@ -306,83 +306,69 @@ public class PhoneSyncListenerService extends WearableListenerService {
                     new Thread(() -> readLogStream(inputStream)).start();
                 })
                 .addOnFailureListener(e -> Log.e("PhoneLog_Trace", "❌ [日誌流獲取失敗]", e));
-            return;
-        }
-
-        // 2. 🔬 新增的大包高壓傳輸測試通道
-        if (TEST_CHANNEL_PATH.equals(path)) {
-            Log.d("Channel_Test_Trace", "🛰️ [手機測試端] 偵測到手錶高壓大包測試管道接入！");
-            
-            com.google.android.gms.wearable.Wearable.getChannelClient(this)
-                .getInputStream(channel)
-                .addOnSuccessListener(inputStream -> {
-                    Log.d("Channel_Test_Trace", "🟢 [手機測試端] InputStream 獲取成功，開始接收大包流量...");
-                    
-                    new Thread(() -> {
-                        long totalReceivedBytes = 0;
-                        long testStartTime = System.currentTimeMillis();
-                        
-                        try (java.io.BufferedReader reader = new java.io.BufferedReader(
-                                new java.io.InputStreamReader(inputStream, java.nio.charset.StandardCharsets.UTF_8))) {
-                            
-                            String line;
-                            while ((line = reader.readLine()) != null) {
-                                int lineSize = line.getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
-                                totalReceivedBytes += lineSize;
-                                
-                                String packetInfo = "普通包";
-                                if (line.contains("[PAYLOAD_START_PACKET_1]")) packetInfo = "第 1 個大包";
-                                else if (line.contains("[PAYLOAD_START_PACKET_2]")) packetInfo = "第 2 個大包";
-                                else if (line.contains("[PAYLOAD_START_PACKET_3]")) packetInfo = "第 3 個大包";
-                                
-                                double sizeKb = lineSize / 1024.0;
-                                String summary = String.format(java.util.Locale.getDefault(),
-                                        "🟢 成功接收 %s | 大小: %.2f KB (%d 字节)", 
-                                        packetInfo, sizeKb, lineSize);
-                                
-                                Log.i("Channel_Test_Trace", "📥 [接收成功] " + summary);
-                                
-                                // 💡 關鍵：只將摘要送進 PhoneLog，防止大文本重繪導致介面卡死
-                                PhoneLog.appendFromRemote("[TEST] " + summary);
-                            }
-                            
-                            double totalMb = totalReceivedBytes / (1024.0 * 1024.0);
-                            double totalTimeSec = (System.currentTimeMillis() - testStartTime) / 1000.0;
-                            double speed = totalMb / totalTimeSec;
-                            
-                            String finalSummary = String.format(java.util.Locale.getDefault(),
-                                    "🏆 [測試完成] 共接收 %.2f MB 數據 | 總耗時: %.2f 秒 | 平均速度: %.2f MB/s",
-                                    totalMb, totalTimeSec, speed);
-                            
-                            Log.i("Channel_Test_Trace", finalSummary);
-                            PhoneLog.appendFromRemote("[TEST] " + finalSummary);
-                            
-                        } catch (Exception e) {
-                            Log.e("Channel_Test_Trace", "❌ [手機測試端] 讀取大流時發生異常: " + e.getMessage());
-                            PhoneLog.appendFromRemote("[TEST] ❌ 讀取高壓流中斷: " + e.getMessage());
-                        }
-                    }).start();
-                })
-                .addOnFailureListener(e -> Log.e("Channel_Test_Trace", "❌ [手機接收端] 獲取 InputStream 失敗", e));
         }
     }
 
     /**
-     * 📥 后台无线日志连续行读取器
+     * 📥 统一的无线日志与大包测试流读取器（带线程同步保护）
      */
     private void readLogStream(java.io.InputStream inputStream) {
         java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", java.util.Locale.getDefault());
+        long testStartTime = System.currentTimeMillis();
+        long totalReceivedBytes = 0;
+
         try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(inputStream, java.nio.charset.StandardCharsets.UTF_8))) {
             String line;
             while ((line = reader.readLine()) != null) {
-                if (line.startsWith("[WEAR]") && !line.contains("] [20")) {
-                    String timeStr = sdf.format(new java.util.Date());
-                    line = "[WEAR] [" + timeStr + "]" + line.substring(6);
+                // 🔬 分流检测：如果这一行是压力测试大包
+                if (line.contains("[PAYLOAD_START_PACKET_")) {
+                    int lineSize = line.getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+                    totalReceivedBytes += lineSize;
+                    
+                    String packetNum = "1";
+                    if (line.contains("[PAYLOAD_START_PACKET_2]")) packetNum = "2";
+                    else if (line.contains("[PAYLOAD_START_PACKET_3]")) packetNum = "3";
+                    
+                    double sizeKb = lineSize / 1024.0;
+                    String summary = String.format(java.util.Locale.getDefault(),
+                            "🟢 成功接收第 %s 個大包 | 大小: %.2f KB (%d 字节)", 
+                            packetNum, sizeKb, lineSize);
+                    
+                    Log.i("Channel_Test_Trace", "📥 [接收成功] " + summary);
+                    synchronized (PhoneLog.class) { // 🔒 加锁防止高频并发写入冲突
+                        PhoneLog.appendFromRemote("[TEST] " + summary);
+                    }
+
+                    // 如果三个大包都收齐了，打印跑分报告
+                    if ("3".equals(packetNum)) {
+                        double totalMb = totalReceivedBytes / (1024.0 * 1024.0);
+                        double totalTimeSec = (System.currentTimeMillis() - testStartTime) / 1000.0;
+                        if (totalTimeSec <= 0) totalTimeSec = 0.1; // 防止除零
+                        double speed = totalMb / totalTimeSec;
+                        
+                        String finalSummary = String.format(java.util.Locale.getDefault(),
+                                "🏆 [測試完成] 共接收 %.2f MB 數據 | 總耗時: %.2f 秒 | 平均速度: %.2f MB/s",
+                                totalMb, totalTimeSec, speed);
+                        
+                        Log.i("Channel_Test_Trace", finalSummary);
+                        synchronized (PhoneLog.class) {
+                            PhoneLog.appendFromRemote("[TEST] " + finalSummary);
+                        }
+                    }
+                } else {
+                    // 2. 普通日志包处理
+                    if (line.startsWith("[WEAR]") && !line.contains("] [20")) {
+                        String timeStr = sdf.format(new java.util.Date());
+                        line = "[WEAR] [" + timeStr + "]" + line.substring(6);
+                    }
+                    synchronized (PhoneLog.class) { // 🔒 加锁防止高频并发写入冲突
+                        PhoneLog.appendFromRemote(line);
+                    }
                 }
-                PhoneLog.appendFromRemote(line); 
             }
         } catch (Exception e) {
             Log.e("PhoneLog_Trace", "❌ [流讀取異常] 管道中斷", e);
         }
     }
+
 } // 🟢 修复：去掉了原本末尾多余的一个右大括号
