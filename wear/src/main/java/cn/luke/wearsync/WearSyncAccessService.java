@@ -19,6 +19,7 @@ public class WearSyncAccessService extends AccessibilityService {
 
     @Override
 protected void onServiceConnected() {
+WearLog.d(TAG, "===== Accessibility Connected =====");
     WearLog.d(TAG, "♿ 恭喜！手表无障碍高级交互接管服务成功绑定启动！");
     instance = this;
 
