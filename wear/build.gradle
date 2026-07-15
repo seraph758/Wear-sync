@@ -78,6 +78,12 @@ android {
         kotlinCompilerExtensionVersion '1.5.14'
     }
 }
+// wear/build.gradle
+
+tasks.withType(JavaCompile).configureEach {
+    options.compilerArgs += ['-Xlint:deprecation', '-Xlint:unchecked']
+    options.deprecation = true
+}
 
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.6.1'
