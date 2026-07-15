@@ -256,53 +256,7 @@ private static void toggleBedtimeMode(Context context) {
 
     });
 }
-    private static void waitQuickPanelReady(WearSyncAccessService serv, Runnable next) {
-        Handler handler = new Handler(Looper.getMainLooper());
-        final int[] retry = {0};
-        Runnable[] task = new Runnable[1];
 
-        task[0] = new Runnable() {
-            @Override
-            public void run() {
-                if (serv.isQuickPanelReady()) {
-                    WearLog.d(TAG, "✅ QuickPanel Ready");
-                    next.run();
-                    return;
-                }
-
-                retry[0]++;
-                if (retry[0] > 30) {
-                    WearLog.e(TAG, "❌ QuickPanel 打開超時");
-                    return;
-                }
-
-                WearLog.d(TAG, "⬇️ QuickPanel 未打開，第 " + retry[0] + " 次重新下拉");
-                serv.swipeDown();
-                handler.postDelayed(this, 100);
-            }
-        };
-
-        handler.post(task[0]);
-    }
-
-    private static void waitScreenReady(PowerManager pm, Runnable next) {
-        Handler handler = new Handler(Looper.getMainLooper());
-        Runnable[] task = new Runnable[1];
-
-        task[0] = new Runnable() {
-            @Override
-            public void run() {
-                if (pm.isInteractive()) {
-                    WearLog.d(TAG, "✅ Screen Interactive");
-                    next.run();
-                    return;
-                }
-                handler.postDelayed(this, 50);
-            }
-        };
-
-        handler.post(task[0]);
-    }
 
     private static void vibrate(Context context) {
         Vibrator v = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
