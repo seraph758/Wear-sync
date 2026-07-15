@@ -53,15 +53,24 @@ public void onAccessibilityEvent(AccessibilityEvent event) {
     @Override
     public void onInterrupt() {}
 public void dumpCurrentWindow() {
-    AccessibilityNodeInfo root = getRootInActiveWindow();
-    if (root == null) {
-        WearLog.d(TAG, "❌ Root == null");
-        return;
+    try {
+        WearLog.d(TAG, "===== dumpCurrentWindow begin =====");
+
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+
+        if (root == null) {
+            WearLog.d(TAG, "❌ Root == null");
+            return;
+        }
+
+        WearLog.d(TAG, "================ NODE TREE ================");
+        dumpNode(root, 0);
+        WearLog.d(TAG, "============== END NODE TREE ==============");
+
+    } catch (Exception e) {
+        WearLog.e(TAG, "dumpCurrentWindow error", e);
     }
 
-    WearLog.d(TAG, "================ NODE TREE ================");
-    dumpNode(root, 0);
-    WearLog.d(TAG, "============== END NODE TREE ==============");
 }
 
 private void dumpNode(AccessibilityNodeInfo node, int level) {
