@@ -149,13 +149,9 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
         setState(CameraState.STOPPING);
         releaseAll();
         
-        // ✅ 修复废弃 API
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            stopForeground(Service.STOP_FOREGROUND_REMOVE);
-        } else {
-            stopForeground(true);
-        }
-        
+        // minSdk=26，无需版本判断，直接使用新API
+stopForeground(Service.STOP_FOREGROUND_REMOVE);
+
         stopSelf();
     }
 
