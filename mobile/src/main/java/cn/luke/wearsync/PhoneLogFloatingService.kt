@@ -80,7 +80,7 @@ class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
             setViewTreeSavedStateRegistryOwner(this@PhoneLogFloatingService)
 
             setContent {
-                val context = LocalContext.current
+                
                 var logLines by remember { mutableStateOf(listOf<String>()) }
                 val listState = rememberLazyListState()
 
