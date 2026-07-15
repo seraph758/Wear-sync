@@ -31,6 +31,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
+import android.os.Build; 
 
 /**
  * 📹 PhoneSyncCameraService - StateMachine 终极稳定版
