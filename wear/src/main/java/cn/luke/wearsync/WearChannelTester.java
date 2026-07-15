@@ -18,7 +18,8 @@ import java.util.concurrent.TimeUnit;
 
 public class WearChannelTester {
     private static final String TAG = "WearChannelTester";
-    private static final String TEST_CHANNEL_PATH = "/channel_test_path";
+    private static final String TEST_CHANNEL_PATH = "/wear_log_path"; // 👈 修改为一致的物理通道！
+
     private static final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     private static void showToast(Context context, String msg) {
