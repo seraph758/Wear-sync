@@ -148,7 +148,14 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
         PhoneLog.d(TAG, "CAM-P997 stopFlow");
         setState(CameraState.STOPPING);
         releaseAll();
-        stopForeground(true);
+        
+        // ✅ 修复废弃 API
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            stopForeground(Service.STOP_FOREGROUND_REMOVE);
+        } else {
+            stopForeground(true);
+        }
+        
         stopSelf();
     }
 
