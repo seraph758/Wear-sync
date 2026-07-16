@@ -205,11 +205,12 @@ private static void toggleBedtimeMode(Context context) {
         return;
     }
 
-    final PowerManager.WakeLockwakeLock = pm.newWakeLock(
-    PowerManager.FULL_WAKE_LOCK |
-    PowerManager.ACQUIRE_CAUSES_WAKEUP,
+        // ✅ 在类型和变量名之间加上空格
+        final PowerManager.WakeLock wakeLock = pm.newWakeLock(
+            PowerManager.FULL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP,
             "dndsync:BedtimeAutomation"
-    );
+        );
+
 
     // 安全兜底
     wakeLock.acquire(10 * 1000L);
