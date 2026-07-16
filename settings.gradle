@@ -1,23 +1,39 @@
 pluginManagement {
     repositories {
-        // 🚀 优先从国内阿里云和腾讯镜像源拉取插件，完美解决拉取失败和 TLS 握手断开问题
-        maven { url 'https://maven.aliyun.com/repository/google' }
-        maven { url 'https://maven.aliyun.com/repository/public' }
-        maven { url 'https://mirrors.cloud.tencent.com/nexus/repository/maven-public/' }
-        gradlePluginPortal()
-        google()
-        mavenCentral()
+        // 🤖 智能判斷：如果是 GitHub Actions 雲端編譯，優先使用官方源；否則本地編譯優先使用國內鏡像
+        if (System.getenv("GITHUB_ACTIONS") == "true") {
+            gradlePluginPortal()
+            google()
+            mavenCentral()
+            maven { url 'https://maven.aliyun.com/repository/google' }
+            maven { url 'https://maven.aliyun.com/repository/public' }
+        } else {
+            maven { url 'https://maven.aliyun.com/repository/google' }
+            maven { url 'https://maven.aliyun.com/repository/public' }
+            maven { url 'https://mirrors.cloud.tencent.com/nexus/repository/maven-public/' }
+            gradlePluginPortal()
+            google()
+            mavenCentral()
+        }
     }
 }
+
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
-        // 🚀 优先从国内镜像源拉取项目依赖库
-        maven { url 'https://maven.aliyun.com/repository/google' }
-        maven { url 'https://maven.aliyun.com/repository/public' }
-        maven { url 'https://mirrors.cloud.tencent.com/nexus/repository/maven-public/' }
-        google()
-        mavenCentral()
+        // 🤖 同理，動態調整項目依賴庫的拉取優先級
+        if (System.getenv("GITHUB_ACTIONS") == "true") {
+            google()
+            mavenCentral()
+            maven { url 'https://maven.aliyun.com/repository/google' }
+            maven { url 'https://maven.aliyun.com/repository/public' }
+        } else {
+            maven { url 'https://maven.aliyun.com/repository/google' }
+            maven { url 'https://maven.aliyun.com/repository/public' }
+            maven { url 'https://mirrors.cloud.tencent.com/nexus/repository/maven-public/' }
+            google()
+            mavenCentral()
+        }
     }
 }
 
