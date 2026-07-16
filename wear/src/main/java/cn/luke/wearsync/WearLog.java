@@ -23,6 +23,13 @@ public class WearLog {
             sendToPhone("D", tag, msg);
         }
     }
+public static void i(String tag, String msg) {
+        // 只有 DEBUG 为 true 时才进行原生打印和无线传输
+        if (DEBUG) {
+            Log.i(tag, msg); 
+            sendToPhone("I", tag, msg);
+        }
+    }
 
     public static void w(String tag, String msg) {
         if (DEBUG) {
