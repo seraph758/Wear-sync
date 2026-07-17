@@ -257,32 +257,7 @@ private static void toggleBedtimeMode(Context context) {
 
     });
 }
-        private static void vibrate(Context context) {
-        VibratorManager vm = (VibratorManager) context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE);
-        Vibrator v = null;
-        if (vm != null) {
-            // 修改点：传入 VibratorManager.DEFAULT_ID
-            v = vm.getVibrator(VibratorManager.DEFAULT_ID);
-        }
-        
-        if (v == null) {
-            WearLog.e(TAG, "❌ Vibrator==null");
-            return;
-        }
-        // ... 后面的代码保持不变 ...
+ // 直接一行搞定，不再需要手动获取 Vibrator
+WearVibratorHelper.vibratePredefined(context, VibrationEffect.EFFECT_TICK);
 
-        if (!v.hasVibrator()) {
-            WearLog.e(TAG, "❌ 设备没有振动器");
-            return;
-        }
-
-        WearLog.d(TAG, "📳 真正执行系统震动");
-
-        v.vibrate(
-                VibrationEffect.createOneShot(
-                        50,
-                        VibrationEffect.DEFAULT_AMPLITUDE
-                )
-        );
-    }
 }
