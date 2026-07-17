@@ -18,7 +18,7 @@ import android.widget.Toast;
  */
 public class PhoneSyncRemoteCameraActivity extends Activity {
 
-    private static final String TAG = "WearSync_RemoteActivity";
+    private static final String TAG = "PhoneSync_RemoteActivity";
     private boolean isServiceBound = false;
 
     // 🤝 异步连接接线员：通过 BIND 机制辅助，确保 Service 拥有合法的 Activity 上下文豁免权
