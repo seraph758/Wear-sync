@@ -120,19 +120,11 @@ public class WearAlarmActivity extends Activity {
     }
 
      private void startWatchVibration() {
-        VibratorManager vm = (VibratorManager) getSystemService(Context.VIBRATOR_MANAGER_SERVICE);
-        if (vm != null) {
-            // 修改点：传入 Vibrator.DEFAULT_ID
-            vibrator = vm.getVibrator(VibratorManager.DEFAULT_ID); 
-        }
-        
-        if (vibrator != null && vibrator.hasVibrator()) {
-            long[] pattern = {0, 500, 500};
-            vibrator.cancel();
-            WearLog.d(TAG, "📳 激活/刷新手表硬件独立震动环...");
-            vibrator.vibrate(VibrationEffect.createWaveform(pattern, 0));
-        }
-    }
+    long[] pattern = {0, 500, 500};
+    WearLog.d(TAG, "📳 激活/刷新手表硬件独立震动环...");
+    WearVibratorHelper.vibratePattern(this, pattern, 0);
+}
+
 
 
 
