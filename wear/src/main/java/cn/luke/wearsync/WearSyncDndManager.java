@@ -257,7 +257,9 @@ private static void toggleBedtimeMode(Context context) {
 
     });
 }
- // 直接一行搞定，不再需要手动获取 Vibrator
-WearVibratorHelper.vibratePredefined(context, VibrationEffect.EFFECT_TICK);
+ private static void vibrate(Context context) {
+    WearVibratorHelper.vibratePredefined(context, VibrationEffect.EFFECT_TICK);
+}
+
 
 }
