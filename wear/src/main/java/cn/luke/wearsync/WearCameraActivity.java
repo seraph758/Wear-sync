@@ -254,7 +254,10 @@ public void onChannelReady() {
         }
         releaseDecoder();
     }
-
+    private void onCallConnected() {
+    // 使用预定义的"双击"效果，比自定义波形更符合 Wear OS 设计语言
+    WearVibratorHelper.vibratePredefined(this, VibrationEffect.EFFECT_DOUBLE_CLICK);
+}
     private void sendControlSignalToPhone(String actionCommand) {
         new Thread(() -> {
             try {
@@ -281,6 +284,7 @@ public void onChannelReady() {
         if (isUserExiting) return; // 👈 完美防線：攔截任何二次釋放
         isUserExiting = true;
         isSurfaceReady = false;
+        WearVibratorHelper.cancel(this); // 👈 防止残留震动
 
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         if (wakeLock != null) {
