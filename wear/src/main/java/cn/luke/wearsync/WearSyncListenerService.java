@@ -144,23 +144,34 @@ if ("alarm".equalsIgnoreCase(type)) {
             WearLog.e(TAG, "🔴 解析手机发往手表的指令崩溃: " + e.getMessage(), e);
         }
     }
-
-    @Override
+    
+      @Override
     public void onChannelOpened(
             @NonNull ChannelClient.Channel channel) {
     
-        WearLog.d(
-                TAG,
-                "CAM-W004 path="
-                        + channel.getPath());
+        String path = channel.getPath();
+    
+        WearLog.d(TAG,
+                "CAM-W004 Channel opened path="
+                        + path);
     
         super.onChannelOpened(channel);
     
-        if (CAMERA_PREVIEW_STREAM_PATH.equals(channel.getPath())) {
     
-            WearLog.d(TAG, "CAM-W005");
+        if (CAMERA_PREVIEW_STREAM_PATH.equals(path)) {
+    
+            WearLog.d(TAG,
+                    "CAM-W005 Camera stream channel matched");
+    
     
             readH264ChannelStream(channel);
+    
+    
+        } else {
+    
+            WearLog.d(TAG,
+                    "CAM-W006 Ignore channel "
+                            + path);
     
         }
     }
@@ -180,40 +191,117 @@ if ("alarm".equalsIgnoreCase(type)) {
     }
 
     private void readH264ChannelStream(ChannelClient.Channel channel) {
-        new Thread(() -> {
-            WearLog.d(TAG, "CAM-W007 start read thread");
-            try (InputStream is = Tasks.await(
-                    Wearable.getChannelClient(this).getInputStream(channel))) {
     
-                WearLog.d(TAG, "CAM-W006 InputStream ready");
-                WearLog.d(TAG, "CAM-W008 reading...");
+        new Thread(() -> {
+    
+            WearLog.d(TAG,
+                    "CAM-W010 Start H264 reader thread");
+    
+    
+            try {
+    
+                InputStream is =
+                        Tasks.await(
+                                Wearable.getChannelClient(this)
+                                        .getInputStream(channel)
+                        );
+    
+    
+                WearLog.d(TAG,
+                        "CAM-W011 InputStream ready");
+    
     
                 byte[] buffer = new byte[40960];
-                int length;
-                boolean firstFrame = true;
     
-                while ((length = is.read(buffer)) != -1) {
-                    if (firstFrame) {
-                        firstFrame = false;
-                        WearLog.d(TAG, "CAM-W009 len=" + length);
-                    }
     
-                    if (WearCameraActivity.sActivityRef == null) {
+                long totalBytes = 0;
+    
+                int frameCount = 0;
+    
+    
+                while (true) {
+    
+    
+                    int length = is.read(buffer);
+    
+    
+                    if(length <= 0){
                         continue;
                     }
-                    
-                    WearCameraActivity activity = WearCameraActivity.sActivityRef.get();
-                    if (activity != null) {
-                        byte[] frame = new byte[length];
-                        System.arraycopy(buffer, 0, frame, 0, length);
-                        activity.feedH264Data(frame, length);
+    
+    
+                    totalBytes += length;
+    
+                    frameCount++;
+    
+    
+                    if(frameCount == 1){
+    
+                        WearLog.d(TAG,
+                                "CAM-W012 FIRST DATA length="
+                                        + length);
+    
                     }
+    
+    
+                    if(frameCount % 50 == 0){
+    
+                        WearLog.d(TAG,
+                                "CAM-W013 frames="
+                                        + frameCount
+                                        +" bytes="
+                                        + totalBytes);
+    
+                    }
+    
+    
+    
+                    WearCameraActivity activity =
+                            WearCameraActivity.sActivityRef.get();
+    
+    
+                    if(activity == null){
+    
+                        WearLog.w(TAG,
+                                "CAM-W014 Activity null");
+    
+                        continue;
+                    }
+    
+    
+    
+                    byte[] frame =
+                            new byte[length];
+    
+    
+                    System.arraycopy(
+                            buffer,
+                            0,
+                            frame,
+                            0,
+                            length
+                    );
+    
+    
+                    activity.feedH264Data(
+                            frame,
+                            length
+                    );
+    
                 }
     
-            } catch (Exception e) {
-                WearLog.e(TAG, "⚠️ 视频流高频泵送遭遇通道闭合熔断: " + e.getMessage(), e);
+    
+            } catch(Exception e){
+    
+                WearLog.e(TAG,
+                        "CAM-W015 H264 reader error",
+                        e);
+    
             }
+    
+    
         }).start();
+    
     }
     // 🎯 全新粘贴在文件最底部的大括号上方
     private void openLogChannelToPhone(String phoneNodeId) {

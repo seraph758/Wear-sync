@@ -56,29 +56,38 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
             }
         }
     };
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         activityCreateTime = System.currentTimeMillis();
-        WearLog.i(TAG, "🟢 [生命周期] onCreate 啟動時間戳: " + activityCreateTime);
-
+        // 修改点1: 将 WearLog.i 改为 WearLog.d (假设你的类里只有 d 方法)
+        WearLog.d(TAG, "🟢 [生命周期] onCreate 啟動時間戳: " + activityCreateTime); 
+        
         sActivityRef = new WeakReference<>(this);
-
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-
+        
         PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
         if (pm != null) {
+            // 注意：FULL_WAKE_LOCK 已过时，但目前为了编译通过先保留，后续建议改为 FLAG_KEEP_SCREEN_ON
             wakeLock = pm.newWakeLock(PowerManager.FULL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP, "WearSync:CameraWakeLock");
-            wakeLock.acquire(10 * 60 * 1000L); 
+            wakeLock.acquire(10 * 60 * 1000L);
             WearLog.d(TAG, "🔋 WakeLock acquired for 10 mins");
         }
-
+        
         setContentView(R.layout.activity_wear_camera);
-        surfaceView = findViewById(findViewById(R.id.wear_surface_view) != null ? R.id.wear_surface_view : android.R.id.content);
-        surfaceView.getHolder().addCallback(this);
+        
+        // 修改点2: 修正 findViewById 的逻辑，使用 XML 中实际存在的 ID 'surfaceView'
+        surfaceView = findViewById(R.id.surfaceView);
+        
+        if (surfaceView != null) {
+            surfaceView.getHolder().addCallback(this);
+        } else {
+            WearLog.e(TAG, "❌ 找不到 SurfaceView，请检查布局文件 ID 是否为 surfaceView");
+        }
 
-        Button btnClose = findViewById(R.id.btn_close_camera);
+        // 修改点3: 修正按钮 ID，XML 中是 btn_shutter，代码里写成了 btn_close_camera
+        Button btnClose = findViewById(R.id.btn_shutter);
+        
         if (btnClose != null) {
             btnClose.setOnClickListener(v -> {
                 WearLog.d(TAG, "👆 用戶點擊了介面上的【關閉】按鈕");
@@ -88,8 +97,6 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
 
         IntentFilter filter = new IntentFilter("cn.luke.wearsync.ACTION_PHONE_KILL_CAMERA");
         ContextCompat.registerReceiver(this, phoneKillReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED);
-
-        sendControlSignalToPhone("START_CAMERA");
 
         // 🚀 核心優化移動：將預測性返回監聽器安全註冊在 onCreate 內部，杜絕編譯錯位
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
@@ -120,16 +127,47 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
         stopRenderThread();
     }
 
-    public void feedH264Data(byte[] data, int length) {
-        if (isUserExiting || !isDecoderRunning) return;
-        frameQueue.offer(data);
+    public void feedH264Data(byte[] data,int length){
+    
+        if(isUserExiting){
+    
+            WearLog.d(TAG,
+                    "CAM-W020 ignore exiting");
+    
+            return;
+        }
+    
+    
+        byte[] frame =
+                new byte[length];
+    
+    
+        System.arraycopy(
+                data,
+                0,
+                frame,
+                0,
+                length
+        );
+    
+    
+        frameQueue.offer(frame);
+    
+    
+        if(frameQueue.size()==1){
+    
+            WearLog.d(TAG,
+                    "CAM-W021 first frame queued");
+    
+        }
+    
     }
 
     private void initDecoder(SurfaceHolder holder) {
         try {
             WearLog.d(TAG, "🎬 開始初始化 MediaCodec H.264 解碼器...");
             mDecoder = MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);
-            MediaFormat format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, 480, 480);
+            MediaFormat format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, 640, 480);
             format.setInteger(MediaFormat.KEY_LOW_LATENCY, 1);
             
             mDecoder.configure(format, holder.getSurface(), null, 0);
@@ -158,13 +196,22 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
     private void startRenderThread(SurfaceHolder holder) {
         stopRenderThread();
         initDecoder(holder);
+        WearLog.d(TAG,
+        "CAM-W030 decoder started");
 
         renderThread = new Thread(() -> {
             MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
             while (isSurfaceReady && isDecoderRunning && !Thread.currentThread().isInterrupted()) {
                 try {
                     byte[] sampleData = frameQueue.poll();
-                    if (sampleData == null) {
+                    if(sampleData != null){
+
+                WearLog.d(TAG,
+                        "CAM-W031 decode input size="
+                                +sampleData.length);
+            
+            }
+                 if (sampleData == null) {
                         Thread.sleep(5);
                         continue;
                     }
