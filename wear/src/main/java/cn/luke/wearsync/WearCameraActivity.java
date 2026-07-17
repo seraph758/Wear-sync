@@ -240,7 +240,12 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
         }, "WearCameraRenderThread");
         renderThread.start();
     }
+public void onChannelReady() {
 
+    WearLog.d(TAG,
+            "CAM-W011 Channel ready callback");
+
+}
     private void stopRenderThread() {
         if (renderThread != null) {
             renderThread.interrupt();
