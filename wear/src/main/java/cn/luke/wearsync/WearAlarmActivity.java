@@ -119,14 +119,13 @@ public class WearAlarmActivity extends Activity {
         }
     }
 
-    private void startWatchVibration() {
-        // 使用新的 VibratorManager 来获取 Vibrator
+     private void startWatchVibration() {
         VibratorManager vm = (VibratorManager) getSystemService(Context.VIBRATOR_MANAGER_SERVICE);
         if (vm != null) {
-            vibrator = vm.getVibrator();
-        } // ✅ 补上这个右大括号，结束 if (vm != null) 块
+            // 修改点：传入 Vibrator.DEFAULT_ID
+            vibrator = vm.getVibrator(VibratorManager.DEFAULT_ID); 
+        }
         
-        // 下面的代码现在就在方法内部了
         if (vibrator != null && vibrator.hasVibrator()) {
             long[] pattern = {0, 500, 500};
             vibrator.cancel();
@@ -134,6 +133,7 @@ public class WearAlarmActivity extends Activity {
             vibrator.vibrate(VibrationEffect.createWaveform(pattern, 0));
         }
     }
+
 
 
     private void sendControlSignalToPhone(String actionCommand) {

@@ -257,15 +257,19 @@ private static void toggleBedtimeMode(Context context) {
 
     });
 }
-    private static void vibrate(Context context) {
+        private static void vibrate(Context context) {
         VibratorManager vm = (VibratorManager) context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE);
-Vibrator v = (vm != null) ? vm.getVibrator() : null;
-
-
+        Vibrator v = null;
+        if (vm != null) {
+            // 修改点：传入 VibratorManager.DEFAULT_ID
+            v = vm.getVibrator(VibratorManager.DEFAULT_ID);
+        }
+        
         if (v == null) {
             WearLog.e(TAG, "❌ Vibrator==null");
             return;
         }
+        // ... 后面的代码保持不变 ...
 
         if (!v.hasVibrator()) {
             WearLog.e(TAG, "❌ 设备没有振动器");
