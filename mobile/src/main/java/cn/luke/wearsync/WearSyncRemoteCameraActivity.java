@@ -16,7 +16,7 @@ import android.widget.Toast;
  * 🎬 远程拍照全透明/跳板 Activity（高版本 Android 兼容优化版）
  * 极致动态日志全步进版：微秒级追踪跳板点火、双轨绑定与延时解绑自我熔断流。
  */
-public class WearSyncRemoteCameraActivity extends Activity {
+public class PhoneSyncRemoteCameraActivity extends Activity {
 
     private static final String TAG = "WearSync_RemoteActivity";
     private boolean isServiceBound = false;
