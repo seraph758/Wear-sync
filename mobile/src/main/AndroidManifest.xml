@@ -49,7 +49,7 @@
         </activity>
 
         <activity
-           android:name="cn.luke.wearsync.WearSyncRemoteCameraActivity"
+           android:name="cn.luke.wearsync.PhoneSyncRemoteCameraActivity"
            android:exported="true"
            android:excludeFromRecents="true"
            android:theme="@style/Theme.Transparent">
