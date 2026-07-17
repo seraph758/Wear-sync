@@ -32,6 +32,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import android.os.Build;
+
 /**
  * 📹 PhoneSyncCameraService - StateMachine 终极稳定版
  * 单状态源 + 串行事件 + 可恢复流媒体管线
@@ -108,50 +109,73 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
         } else if (ACTION_STOP_CAMERA.equals(action)) {
             stopFlow();
         }
-        return START_NOT_STICKY;
+        return START_STICKY;
     }
 
     /* ========================= FLOW CONTROL ========================= */
     private void startFlow() {
-        if (!transition(CameraState.IDLE, CameraState.STARTING)) return;
-        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START);
-        totalFrames = 0;
-        firstFrame = false;
-        setupOrientation();
-        setupEncoderAndCamera();
-    }
-
-    public void startStreaming(String nodeId) {
-        PhoneLog.d(TAG, "startStreaming node=" + nodeId + " state=" + getState());
-        if (nodeId == null || nodeId.isEmpty()) {
-            PhoneLog.d(TAG, "nodeId invalid");
+        PhoneLog.d(TAG, "CAM-P000 ===== START FLOW =====");
+    
+        if (!transition(CameraState.IDLE, CameraState.STARTING)) {
+            PhoneLog.d(TAG, "CAM-P000 already running state=" + getState());
             return;
         }
-        CameraState currentState = getState();
-        PhoneLog.d(TAG, "STREAM REQUEST state=" + currentState);
-        if (currentState == CameraState.CAMERA_READY) {
-            PhoneLog.d(TAG, "准备进入 openChannel");
-            if (!transition(CameraState.CAMERA_READY, CameraState.CHANNEL_OPENING)) {
-                PhoneLog.d(TAG, "transition failed");
+    
+        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START);
+    
+        totalFrames = 0;
+        firstFrame = false;
+    
+        PhoneLog.d(TAG, "CAM-P001 setupOrientation()");
+        setupOrientation();
+    
+        PhoneLog.d(TAG, "CAM-P002 setupEncoderAndCamera()");
+        setupEncoderAndCamera();
+    }
+        
+        public void startStreaming(String nodeId) {
+        
+            PhoneLog.d(TAG,"CAM-P020 startStreaming");
+        
+            PhoneLog.d(TAG,"CAM-P021 node="+nodeId);
+        
+            PhoneLog.d(TAG,"CAM-P022 state="+getState());
+        
+            if(nodeId==null||nodeId.isEmpty()){
+                PhoneLog.e(TAG,"CAM-P023 node empty");
                 return;
             }
-            PhoneLog.d(TAG, "transition success");
-            openChannel(nodeId);
-        } else {
-            // ✅ 保存到积压队列，等待相机初始化完成后自动处理
-            mPendingStreamingNodeId = nodeId;
-            PhoneLog.d(TAG, "⏳ 状态非 CAMERA_READY，保存请求待处理");
+        
+            if(getState()==CameraState.CAMERA_READY){
+        
+                PhoneLog.d(TAG,"CAM-P024 begin openChannel");
+        
+                if(!transition(CameraState.CAMERA_READY,CameraState.CHANNEL_OPENING)){
+                    PhoneLog.e(TAG,"CAM-P025 transition failed");
+                    return;
+                }
+        
+                openChannel(nodeId);
+        
+            }else{
+        
+                PhoneLog.d(TAG,"CAM-P026 save pending");
+        
+                mPendingStreamingNodeId=nodeId;
+            }
         }
-    }
-
     private void stopFlow() {
         PhoneLog.d(TAG, "CAM-P997 stopFlow");
         setState(CameraState.STOPPING);
         releaseAll();
         
-        // minSdk=26，无需版本判断，直接使用新API
-stopForeground(Service.STOP_FOREGROUND_REMOVE);
-
+        // ✅ 修复废弃 API
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            stopForeground(Service.STOP_FOREGROUND_REMOVE);
+        } else {
+            stopForeground(true);
+        }
+        
         stopSelf();
     }
 
@@ -195,6 +219,10 @@ stopForeground(Service.STOP_FOREGROUND_REMOVE);
                         mOutputStream.flush();
                         totalFrames++;
                         if (!firstFrame) {
+            firstFrame = true;
+            PhoneLog.d(TAG,"CAM-P040 FIRST FRAME SENT size="+data.length);
+        }
+ {
                             firstFrame = true;
                             PhoneLog.d(TAG, "FIRST FRAME SENT");
                         }
@@ -254,13 +282,22 @@ stopForeground(Service.STOP_FOREGROUND_REMOVE);
                             CameraSelector.DEFAULT_BACK_CAMERA,
                             mPreviewUseCase
                     );
-                    setState(CameraState.CAMERA_READY);
-                    sendCameraReady();
-                    if (mPendingStreamingNodeId != null) {
-                        PhoneLog.d(TAG, "🚀 檢測到積壓請求，開始推流...");
-                        startStreaming(mPendingStreamingNodeId);
-                        mPendingStreamingNodeId = null;
-                    }
+        PhoneLog.d(TAG,"CAM-P010 Camera bind success");
+        
+        setState(CameraState.CAMERA_READY);
+        
+        PhoneLog.d(TAG,"CAM-P011 send CAMERA_READY");
+        
+        sendCameraReady();
+        
+        if (mPendingStreamingNodeId != null) {
+        
+            PhoneLog.d(TAG,"CAM-P012 pending node=" + mPendingStreamingNodeId);
+        
+            startStreaming(mPendingStreamingNodeId);
+        
+            mPendingStreamingNodeId = null;
+        }
                 } catch (Exception e) {
                     PhoneLog.e(TAG, "Camera target binding failed", e);
                     setState(CameraState.ERROR);
@@ -297,6 +334,7 @@ stopForeground(Service.STOP_FOREGROUND_REMOVE);
     /* ========================= CHANNEL ========================= */
     private void openChannel(String nodeId) {
         if (channelOpening.getAndSet(true)) {
+        PhoneLog.d(TAG,"CAM-P030 openChannel()");
             return;
         }
         new Thread(() -> {
@@ -305,12 +343,12 @@ stopForeground(Service.STOP_FOREGROUND_REMOVE);
                 ChannelClient.Channel channel = Tasks.await(
                         Wearable.getChannelClient(this)
                                 .openChannel(nodeId, "/camera-preview-stream"));
-                PhoneLog.d(TAG, "CAM-P002 channel opened");
-                PhoneLog.d(TAG, "CAM-P002 path=" + channel.getPath());
+                PhoneLog.d(TAG,"CAM-P031 channel opened");
+                PhoneLog.d(TAG, "CAM-P031 path=" + channel.getPath());
                 mOutputStream = Tasks.await(
                         Wearable.getChannelClient(this)
                                 .getOutputStream(channel));
-                PhoneLog.d(TAG, "CAM-P003 output stream ready");
+                PhoneLog.d(TAG,"CAM-P032 output stream ready");
                 JSONObject json = new JSONObject();
                 json.put("sender", "phone");
                 json.put("type", "camera_control");
@@ -320,10 +358,10 @@ stopForeground(Service.STOP_FOREGROUND_REMOVE);
                         UNIVERSAL_SYNC_PATH,
                         json.toString().getBytes(StandardCharsets.UTF_8));
                 setState(CameraState.STREAMING);
-                PhoneLog.d(TAG, "CAM-P004 streaming");
+                PhoneLog.d(TAG,"CAM-P034 STREAMING");
             } catch (Exception e) {
                 channelOpening.set(false);
-                PhoneLog.e(TAG, "CHANNEL ERROR", e);
+                PhoneLog.e(TAG,"CAM-P035 channel failed",e);
                 setState(CameraState.CAMERA_READY);
             }
         }).start();
