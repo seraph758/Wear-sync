@@ -57,6 +57,11 @@ import com.google.android.gms.wearable.Wearable
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.nio.charset.StandardCharsets
+import androidx.compose.material3.Slider
+import androidx.compose.material3.OutlinedButton
+import cn.luke.wearsync.PhoneLog
+
+
 
 class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListener {
 
@@ -64,6 +69,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
     private val isCameraAllowedState = mutableStateOf(false)
     private val isConnectedState = mutableStateOf(false)
     private var capabilityChangedListener: CapabilityClient.OnCapabilityChangedListener? = null
+    private val UNIVERSAL_SYNC_PATH = "/wear-universal-sync"
 
     private val watchWearState = mutableStateOf("未知 (等待手表上报...)")
     var isVibrationExpanded by remember { mutableStateOf(false) }
@@ -762,7 +768,8 @@ Button(
             putInt("repeat_index", repeatIndex)
         }
 
-        PhoneLog.d("WearSync_Main", "💾 震动参数已保存到手机端: on=\( {patternOnDuration}ms, off= \){patternOffDuration}ms, repeat=${repeatIndex}")
+        PhoneLog.d("WearSync_Main", "💾 震动参数已保存到手机端: on=${patternOnDuration}ms, off=${patternOffDuration}ms, repeat=${repeatIndex}")
+
 
         // 🚀 可选：同时发送给手表端（推荐你打开）
         sendVibrationCommand("save", patternOnDuration, patternOffDuration, repeatIndex)
