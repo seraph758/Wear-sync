@@ -9,6 +9,7 @@ import com.google.android.gms.wearable.Wearable;
 import com.google.android.gms.wearable.WearableListenerService;
 import org.json.JSONObject;
 import java.io.InputStream;
+import android.content.Context;
 import java.nio.charset.StandardCharsets;
 
 public class WearSyncListenerService extends WearableListenerService {
