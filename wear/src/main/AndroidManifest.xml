@@ -48,17 +48,13 @@
             android:theme="@style/Theme.WearSync.Alarm"
             android:taskAffinity="cn.luke.wearsync.alarm" >
         <activity
-    android:name=".WearSyncBedtimeAutomationActivity"
-    android:theme="@android:style/Theme.Translucent.NoTitleBar.Fullscreen"
-    android:excludeFromRecents="true"
-    android:noHistory="true"
-    android:taskAffinity=""
-    android:launchMode="singleInstance"
-    android:exported="false" />
-
-
-            <meta-data android:name="android.wear.resume_to_app" android:value="true" />
-        </activity>
+            android:name=".WearSyncBedtimeAutomationActivity"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar.Fullscreen"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:launchMode="singleInstance"
+            android:exported="false" />
 
         <activity
             android:name="cn.luke.wearsync.WearCameraActivity"
