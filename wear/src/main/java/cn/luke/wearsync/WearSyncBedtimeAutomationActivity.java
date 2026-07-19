@@ -11,7 +11,7 @@ import cn.luke.wearsync.WearSyncScreenManager;
 import cn.luke.wearsync.WearSyncAccessService;
 import cn.luke.wearsync.WearLog;
 
-public class WearSyncBedtimeAutomationActivity extends Activity {
+public class WearSyncBedtimeAutomationActivity extends androidx.activity.ComponentActivity {
 
     private static final String TAG = "BedtimeAuto";
     private WearSyncScreenManager screenManager;
