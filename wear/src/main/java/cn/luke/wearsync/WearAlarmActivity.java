@@ -122,20 +122,8 @@ public class WearAlarmActivity extends Activity {
     }
 
      private void startWatchVibration() {
-    // 从 SharedPreferences 读取你手机端设置的震动参数
-    long[] pattern = {
-        0,                              // 必须以 0 开头
-        patternOnDuration,              // 你的手机端 on 时长
-        patternOffDuration,             // 你的手机端 off 时长
-        patternOnDuration               // 第二轮 on 时长
-    };
-    int repeatIndex = (repeatIndex == 0) ? 4 : -1;   // 开启循环
-
-    // 关键：创建 VibrationEffect 对象（Wear OS 会缓存）
-    currentEffect = VibrationEffect.createWaveform(pattern, repeatIndex);
-
-    WearLog.d(TAG, "📳 激活闹钟界面震动 pattern=" + patternOnDuration + "ms");
-    WearVibratorHelper.vibrateEffect(this, currentEffect);
+    WearVibratorHelper.vibratePattern(this);   // <--- 只要这一行！（自动读取参数）
+    // 注意：vibratePattern 内部已经做了 initFromPhone
 }
 
 
@@ -167,7 +155,7 @@ public class WearAlarmActivity extends Activity {
     private void cleanExit() {
     try {
         if (currentEffect != null) {
-            WearVibratorHelper.cancelVibration(this);   // 立即停止震动
+            WearVibratorHelper.cancelVibration(this);
         }
     } catch (Exception ignored) {}
     finishAndRemoveTask();
