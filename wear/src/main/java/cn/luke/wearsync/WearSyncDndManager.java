@@ -11,6 +11,9 @@ import android.os.Vibrator;
 import android.provider.Settings;
 import android.widget.Toast;
 import org.json.JSONObject;
+import cn.luke.wearsync.WearSyncBedtimeAutomationActivity;
+
+
 
 /**
  * 🌓 手錶端勿擾、掩碼解讀與無障礙自動化聯控核心管理器
@@ -110,19 +113,24 @@ public class WearSyncDndManager {
     }
 
     private static void toggleBedtimeMode(Context context) {
-        // 💡 注意：根据你的 WearSyncBedtimeAutomationActivity.java，它的包名依然是下面的导入位置
-        // 如果 WearSyncAccessService 的 sharedInstance 为空，直接主线程弹窗
+    // 🚀 修正：真正加上無障礙服務的狀態檢查判斷
+    // (注意：請確保你的項目中存在 WearSyncAccessService 類別，如果它在同一個包下則無需額外 import)
+    WearSyncAccessService serv = WearSyncAccessService.getSharedInstance();
+    if (serv == null) {
         new Handler(Looper.getMainLooper()).post(() -> {
-            // 这里我们改用原生的 Toast 解决 showToast 缺失的问题
             Toast.makeText(context, "無障礙服務未連接", Toast.LENGTH_SHORT).show();
         });
-
-        Intent intent = new Intent(context, WearSyncBedtimeAutomationActivity.class);
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-        context.startActivity(intent);
-        
-        WearLog.d(TAG, "🛌 [就寝模式] 已启动透明自动化页面");
+        return; // 未連接時直接攔截，不再啟動透明 Activity
     }
+
+    // 只有在無障礙連接成功時，才啟動透明自動化頁面
+    Intent intent = new Intent(context, WearSyncBedtimeAutomationActivity.class);
+    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+    context.startActivity(intent);
+    
+    WearLog.d(TAG, "🛌 [就寢模式] 已成功啟動透明自動化頁面");
+}
+
 
     private static void vibrate(Context context) {
         WearVibratorHelper.vibratePredefined(context, VibrationEffect.EFFECT_TICK);
