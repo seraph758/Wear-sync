@@ -71,7 +71,7 @@ jobs:
         ls -l $KEY_PATH
 
     - name: Build Release APKs
-      run: ./gradlew clean assembleRelease
+      run: ./gradlew clean assembleRelease --warning-mode all
 
     - name: Copy APKs to root directory
       run: |
