@@ -61,8 +61,6 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.OutlinedButton
 import cn.luke.wearsync.PhoneLog
 
-
-
 class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListener {
     companion object {
         private const val TAG = "PhoneSyncMainFragment"
@@ -74,10 +72,9 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
     private val UNIVERSAL_SYNC_PATH = "/wear-universal-sync"
 
     private val watchWearState = mutableStateOf("未知 (等待手表上报...)")
-    var isVibrationExpanded by remember { mutableStateOf(false) }
-    var patternOnDuration by remember { mutableIntStateOf(500) }
-    var patternOffDuration by remember { mutableIntStateOf(200) }
-    var repeatIndex by remember { mutableIntStateOf(-1) }
+    
+    // 💡 修复提示：原先在这里的 4 个由 remember 委托的变量已被成功移至下方的 setContent 块内。
+    
     private val uiLogDebugSwitch = mutableStateOf(false)
     private val uiWearLogDebugSwitch = mutableStateOf(false)
     private val alarmPickerLauncher =
@@ -94,6 +91,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                 }
         }
     }
+
     private fun sendVibrationCommand(action: String, onDuration: Int, offDuration: Int, repeat: Int) {
         val nodeId = WearSyncState.getNodeId(requireContext())
         if (nodeId.isNullOrEmpty()) {
@@ -126,6 +124,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
             }
         }.start()
     }
+
     private val requestCameraPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
@@ -170,6 +169,12 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                     val textColor = if (isDark) Color.White else Color(0xFF1C1C1E)
                     val subTextColor = if (isDark) Color.Gray else Color(0xFF757575)
                     val dividerColor = if (isDark) Color(0xFF2C2C2C) else Color(0xFFE5E5EA)
+
+                    // 🛠️ 修复：将这 4 个变量正确放入了 Composable 上下文
+                    var isVibrationExpanded by remember { mutableStateOf(false) }
+                    var patternOnDuration by remember { mutableIntStateOf(500) }
+                    var patternOffDuration by remember { mutableIntStateOf(200) }
+                    var repeatIndex by remember { mutableIntStateOf(-1) }
 
                     var isDndExpanded by remember { mutableStateOf(false) }
                     var isAlarmExpanded by remember { mutableStateOf(false) }
@@ -717,72 +722,67 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                     }
                                 }
                             }
-                // ========== 震动反馈设置（新增） ==========
-            Card(
-                onClick = { isVibrationExpanded = !isVibrationExpanded },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = cardBgColor)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text("震动反馈设置", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = textColor)
-                            Text("自定义手表端提醒震动波形与频率", fontSize = 12.sp, color = subTextColor)
-                        }
-                        Text(text = if (isVibrationExpanded) "▲" else "▼", fontSize = 14.sp, color = subTextColor)
-                    }
+                            
+                            // ========== 震动反馈设置 ==========
+                            Card(
+                                onClick = { isVibrationExpanded = !isVibrationExpanded },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = cardBgColor)
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column {
+                                            Text("震动反馈设置", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = textColor)
+                                            Text("自定义手表端提醒震动波形与频率", fontSize = 12.sp, color = subTextColor)
+                                        }
+                                        Text(text = if (isVibrationExpanded) "▲" else "▼", fontSize = 14.sp, color = subTextColor)
+                                    }
 
-                    AnimatedVisibility(visible = isVibrationExpanded) {
-                        Column(modifier = Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            HorizontalDivider(color = dividerColor)
+                                    AnimatedVisibility(visible = isVibrationExpanded) {
+                                        Column(modifier = Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                            HorizontalDivider(color = dividerColor)
 
-                            Text("震动时长: ${patternOnDuration}ms", fontSize = 13.sp, color = textColor)
-                            Slider(value = patternOnDuration.toFloat(), onValueChange = { patternOnDuration = it.toInt() }, valueRange = 100f..2000f, steps = 19, modifier = Modifier.fillMaxWidth())
+                                            Text("震动时长: ${patternOnDuration}ms", fontSize = 13.sp, color = textColor)
+                                            Slider(value = patternOnDuration.toFloat(), onValueChange = { patternOnDuration = it.toInt() }, valueRange = 100f..2000f, steps = 19, modifier = Modifier.fillMaxWidth())
 
-                            Text("间隔时长: ${patternOffDuration}ms", fontSize = 13.sp, color = textColor)
-                            Slider(value = patternOffDuration.toFloat(), onValueChange = { patternOffDuration = it.toInt() }, valueRange = 100f..1000f, steps = 8, modifier = Modifier.fillMaxWidth())
+                                            Text("间隔时长: ${patternOffDuration}ms", fontSize = 13.sp, color = textColor)
+                                            Slider(value = patternOffDuration.toFloat(), onValueChange = { patternOffDuration = it.toInt() }, valueRange = 100f..1000f, steps = 8, modifier = Modifier.fillMaxWidth())
 
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("循环震动", fontSize = 13.sp, color = textColor)
-                                Spacer(Modifier.weight(1f))
-                                Switch(checked = repeatIndex == 0, onCheckedChange = { repeatIndex = if (it) 0 else -1 })
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text("循环震动", fontSize = 13.sp, color = textColor)
+                                                Spacer(Modifier.weight(1f))
+                                                Switch(checked = repeatIndex == 0, onCheckedChange = { repeatIndex = if (it) 0 else -1 })
+                                            }
+
+                                            HorizontalDivider(color = dividerColor)
+
+                                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                OutlinedButton(onClick = { sendVibrationCommand("preview", patternOnDuration, patternOffDuration, repeatIndex) }, modifier = Modifier.weight(1f)) { Text("📳 预览") }
+                                                
+                                                Button(
+                                                    modifier = Modifier.weight(1f),
+                                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
+                                                    onClick = {
+                                                        val prefs = requireContext().getSharedPreferences("wear_vibration_prefs", Context.MODE_PRIVATE)
+                                                        prefs.edit {
+                                                            putInt("on_duration", patternOnDuration)
+                                                            putInt("off_duration", patternOffDuration)
+                                                            putInt("repeat_index", repeatIndex)
+                                                        }
+                                                        PhoneLog.d("WearSync_Main", "💾 震动参数已保存到手机端: on=${patternOnDuration}ms, off=${patternOffDuration}ms, repeat=${repeatIndex}")
+                                                        sendVibrationCommand("save", patternOnDuration, patternOffDuration, repeatIndex)
+                                                    }
+                                                ) { Text("💾 保存") }
+                                            }
+                                        }
+                                    }
+                                }
                             }
-
-                            HorizontalDivider(color = dividerColor)
-
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinedButton(onClick = { sendVibrationCommand("preview", patternOnDuration, patternOffDuration, repeatIndex) }, modifier = Modifier.weight(1f)) { Text("📳 预览") }
-// ====================== 震动面板的 "💾 保存" 按钮（推荐写法） ======================
-Button(
-    modifier = Modifier.weight(1f),
-    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
-    onClick = {
-        // ====================== 保存参数到手机端（核心代码） ======================
-        val sp = requireContext().getSharedPreferences("wear_vibration_prefs", Context.MODE_PRIVATE)
-        sp.edit {
-            putInt("on_duration", patternOnDuration)
-            putInt("off_duration", patternOffDuration)
-            putInt("repeat_index", repeatIndex)
-        }
-
-        PhoneLog.d("WearSync_Main", "💾 震动参数已保存到手机端: on=${patternOnDuration}ms, off=${patternOffDuration}ms, repeat=${repeatIndex}")
-
-
-        // 🚀 可选：同时发送给手表端（推荐你打开）
-        sendVibrationCommand("save", patternOnDuration, patternOffDuration, repeatIndex)
-    }
-) { Text("💾 保存") }
-                            }
-                        }
-                    }
-                }
-            }
-
                         } 
                     } 
                 } 
