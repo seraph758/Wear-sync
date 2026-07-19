@@ -1,57 +1,68 @@
 package cn.luke.wearsync;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.os.VibratorManager;
 
 /**
  * Wear OS 统一震动管理器（API 31+ 推荐写法）
- * 解决：统一创建/取消 VibrationEffect、防止内存泄漏、兼容多个调用方
+ * 统一处理：读取手机端设置 + 播放震动 + 停止震动
  */
 public final class WearVibratorHelper {
 
     private static final String TAG = "WearVibratorHelper";
+    private static final String PREFS_NAME = "wear_vibration_prefs";
 
-    // 缓存默认振动器（懒加载 + 线程安全）
     private static volatile Vibrator sDefaultVibrator;
+    private static int sOnDuration = 500;
+    private static int sOffDuration = 200;
+    private static int sRepeatIndex = -1;
 
     private WearVibratorHelper() {} // 禁止实例化
 
-    // ====================== 核心公共方法（推荐所有地方使用） ======================
+    // ====================== 核心公共方法（所有模块都用这个） ======================
 
     /**
-     * 获取默认振动器（Wear OS 推荐写法）
+     * 从手机端 SharedPreferences 读取用户设置（手表端统一调用）
      */
-    public static Vibrator getDefaultVibrator(Context context) {
-        if (sDefaultVibrator == null) {
-            synchronized (WearVibratorHelper.class) {
-                if (sDefaultVibrator == null) {
-                    VibratorManager vm = (VibratorManager)
-                            context.getApplicationContext()
-                                   .getSystemService(Context.VIBRATOR_MANAGER_SERVICE);
+    public static void initFromPhone(Context context) {
+        SharedPreferences sp = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
 
-                    if (vm == null) {
-                        WearLog.e(TAG, "❌ VibratorManager 服务不可用");
-                        return null;
-                    }
+        sOnDuration = sp.getInt("on_duration", 500);
+        sOffDuration = sp.getInt("off_duration", 200);
+        sRepeatIndex = sp.getInt("repeat_index", -1);
 
-                    int[] ids = vm.getVibratorIds();
-                    if (ids.length > 0) {
-                        sDefaultVibrator = vm.getVibrator(ids[0]);
-                        WearLog.i(TAG, "✅ 默认振动器初始化成功 (ID=" + ids[0] + ")");
-                    }
-                }
-            }
-        }
-        return sDefaultVibrator;
+        WearLog.d(TAG, "📥 [WearVibrationConfig] 从手机读取震动参数: on=" + sOnDuration + "ms, off=" + sOffDuration + "ms, repeat=" + sRepeatIndex);
     }
 
     /**
-     * 🎯 播放自定义波形震动（带重复控制）—— 所有地方推荐使用这个
+     * 获取当前配置的波形数组（直接用于 createWaveform）
      */
-    public static void vibratePattern(Context context, long[] pattern, int repeatIndex) {
-        WearLog.d(TAG, "📳 [Pattern] 请求触发波形震动 length=" + pattern.length + ", repeat=" + repeatIndex);
+    public static long[] getPattern() {
+        return new long[]{
+                0,                    // 必须以 0 开头
+                sOnDuration,
+                sOffDuration,
+                sOnDuration
+        };
+    }
+
+    /**
+     * 获取重复索引（-1 = 不循环）
+     */
+    public static int getRepeatIndex() {
+        return sRepeatIndex;
+    }
+
+    /**
+     * 🎯 播放自定义波形震动（所有模块推荐使用这个统一方法）
+     */
+    public static void vibratePattern(Context context) {
+        initFromPhone(context);   // 关键：每次震动前都先读取最新参数（支持动态更新）
+
+        WearLog.d(TAG, "📳 [Pattern] 请求触发波形震动 length=" + getPattern().length + ", repeat=" + getRepeatIndex());
 
         Vibrator v = getDefaultVibrator(context);
         if (v == null || !v.hasVibrator()) {
@@ -60,10 +71,9 @@ public final class WearVibratorHelper {
         }
 
         try {
-            v.cancel();                    // 先取消所有正在播放的震动
-            VibrationEffect effect = VibrationEffect.createWaveform(pattern, repeatIndex);
+            v.cancel();
+            VibrationEffect effect = VibrationEffect.createWaveform(getPattern(), getRepeatIndex());
             v.vibrate(effect);
-
             WearLog.i(TAG, "✅ 波形震动已成功触发");
         } catch (Exception e) {
             WearLog.e(TAG, "💥 触发震动异常: " + e.getMessage(), e);
@@ -71,7 +81,7 @@ public final class WearVibratorHelper {
     }
 
     /**
-     * 🛑 停止所有震动（所有地方推荐使用）
+     * 🛑 停止所有震动（所有模块都用这个）
      */
     public static void cancelVibration(Context context) {
         WearLog.d(TAG, "🛑 [Cancel] 请求停止所有震动");
