@@ -5,6 +5,7 @@ import android.content.SharedPreferences;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.os.VibratorManager;
+import android.os.Build;
 
 /**
  * Wear OS 统一震动管理器（API 31+ 推荐写法）
@@ -22,7 +23,30 @@ public final class WearVibratorHelper {
 
     private WearVibratorHelper() {} // 禁止实例化
 
-    // ====================== 核心公共方法（所有模块都用这个） ======================
+    // 💡 修复：补全缺失的 getDefaultVibrator 方法
+    private static Vibrator getDefaultVibrator(Context context) {
+        if (sDefaultVibrator == null) {
+            synchronized (WearVibratorHelper.class) {
+                if (sDefaultVibrator == null) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        VibratorManager vm = (VibratorManager) context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE);
+                        if (vm != null) {
+                            sDefaultVibrator = vm.getDefaultVibrator();
+                        }
+                    }
+                    if (sDefaultVibrator == null) {
+                        sDefaultVibrator = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
+                    }
+                }
+            }
+        }
+        return sDefaultVibrator;
+    }
+
+    // 💡 修复：补全 WearCameraActivity.java:289 行报错需要的 cancel(Context) 兼容方法
+    public static void cancel(Context context) {
+        cancelVibration(context);
+    }
 
     /**
      * 从手机端 SharedPreferences 读取用户设置（手表端统一调用）
@@ -97,7 +121,6 @@ public final class WearVibratorHelper {
     }
 
     // ====================== 老方法保留（兼容老代码） ======================
-
     public static void vibratePredefined(Context context, int effectId) {
         Vibrator v = getDefaultVibrator(context);
         if (v == null || !v.hasVibrator()) return;
