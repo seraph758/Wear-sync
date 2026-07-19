@@ -1,29 +1,23 @@
 package cn.luke.wearsync;
 
-import android.app.Activity;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.os.PowerManager;
 import android.util.Log;
 import android.view.WindowManager;
-
 import androidx.annotation.NonNull;
+import androidx.activity.ComponentActivity; // 💡 确保导入此包
 import androidx.lifecycle.DefaultLifecycleObserver;
 import androidx.lifecycle.LifecycleOwner;
-
 import java.lang.ref.WeakReference;
 
-/**
- * Wear OS 6+ 专用屏幕与CPU管理器
- * 仅支持 Android 15 (API 35) 及以上
- */
 public class WearSyncScreenManager implements DefaultLifecycleObserver {
 
     private static final String TAG = "WearSyncScreenMgr";
     private static final long MAX_CPU_WAKE_MS = 5 * 60 * 1000L; // 安全上限5分钟
 
     private final Context appContext;
-    private WeakReference<Activity> activityRef;
+    private WeakReference<ComponentActivity> activityRef; // 💡 修改为 ComponentActivity
     private PowerManager.WakeLock cpuWakeLock;
     private boolean isBound = false;
 
@@ -35,7 +29,7 @@ public class WearSyncScreenManager implements DefaultLifecycleObserver {
      * 绑定到 Activity 生命周期，自动清理资源
      * ⚠️ 必须在 onCreate 中调用
      */
-    public void bind(@NonNull Activity activity) {
+    public void bind(@NonNull ComponentActivity activity) { // 💡 修改为 ComponentActivity
         this.activityRef = new WeakReference<>(activity);
         activity.getLifecycle().addObserver(this);
         isBound = true;
@@ -44,10 +38,10 @@ public class WearSyncScreenManager implements DefaultLifecycleObserver {
 
     /**
      * 【Wear OS 6+ 推荐】唤醒屏幕并保持亮屏
-     * 替代了旧的 FLAG_TURN_SCREEN_ON
+     * 替代了旧 childhood 的 FLAG_TURN_SCREEN_ON
      */
     public void wakeScreen() {
-        Activity activity = getSafeActivity();
+        ComponentActivity activity = getSafeActivity(); // 💡 修改为 ComponentActivity
         if (activity == null) return;
 
         // Wear OS 6+ 标准 API
@@ -62,7 +56,7 @@ public class WearSyncScreenManager implements DefaultLifecycleObserver {
      * 仅保持屏幕常亮（不主动唤醒）
      */
     public void keepScreenOn() {
-        Activity activity = getSafeActivity();
+        ComponentActivity activity = getSafeActivity(); // 💡 修改为 ComponentActivity
         if (activity != null) {
             activity.getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
             Log.i(TAG, "Keep screen on set");
@@ -73,7 +67,7 @@ public class WearSyncScreenManager implements DefaultLifecycleObserver {
      * 释放屏幕控制，允许系统进入 Ambient Mode
      */
     public void releaseScreen() {
-        Activity activity = getSafeActivity();
+        ComponentActivity activity = getSafeActivity(); // 💡 修改为 ComponentActivity
         if (activity == null) return;
 
         activity.setTurnScreenOn(false);
@@ -140,12 +134,12 @@ public class WearSyncScreenManager implements DefaultLifecycleObserver {
         isBound = false;
     }
 
-    private Activity getSafeActivity() {
+    private ComponentActivity getSafeActivity() { // 💡 修改为 ComponentActivity
         if (!isBound || activityRef == null) {
             Log.w(TAG, "Manager not bound to any Activity!");
             return null;
         }
-        Activity activity = activityRef.get();
+        ComponentActivity activity = activityRef.get(); // 💡 修改为 ComponentActivity
         if (activity == null || activity.isFinishing() || activity.isDestroyed()) {
             Log.w(TAG, "Activity reference invalid");
             return null;
