@@ -66,7 +66,7 @@ public class WearAlarmActivity extends Activity {
         Button btnSnooze = findViewById(R.id.btn_snooze);
 
         handleIncomingIntent(getIntent());
-
+        startWatchVibration();
         btnDismiss.setOnClickListener(v -> {
             WearLog.d(TAG, "🔘 用户点击 [关闭] 按钮");
             sendControlSignalToPhone("DISMISS");
