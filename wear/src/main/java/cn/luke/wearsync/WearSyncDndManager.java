@@ -183,80 +183,18 @@ public class WearSyncDndManager {
 private static void toggleBedtimeMode(Context context) {
     WearSyncAccessService serv = WearSyncAccessService.getSharedInstance();
     if (serv == null) {
-        WearLog.d(TAG, "❌ accessibility not connected");
-
-        new Handler(Looper.getMainLooper()).post(() ->
-                Toast.makeText(
-                        context.getApplicationContext(),
-                        "無障礙服務未連接，無法同步睡眠模式",
-                        Toast.LENGTH_LONG
-                ).show());
-
+        showToast(context, "無障礙服務未連接");
         return;
     }
 
-    WearLog.d(TAG, "✅ accessibility connected. Perform bedtime toggle.");
-
-    PowerManager pm = (PowerManager) context.getApplicationContext()
-            .getSystemService(Context.POWER_SERVICE);
-
-    if (pm == null) {
-        WearLog.e(TAG, "❌ PowerManager == null");
-        return;
-    }
-
-        // ✅ 在类型和变量名之间加上空格
-        final PowerManager.WakeLock wakeLock = pm.newWakeLock(
-            PowerManager.FULL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP,
-            "dndsync:BedtimeAutomation"
-        );
-
-
-    // 安全兜底
-    wakeLock.acquire(10 * 1000L);
-
-    new Handler(Looper.getMainLooper()).post(() -> {
-
-        Toast.makeText(
-                context.getApplicationContext(),
-                "正在同步睡眠模式...",
-                Toast.LENGTH_SHORT
-        ).show();
-
-        // ========= 第一步：等待亮屏 =========
-        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-
-            WearLog.d(TAG, "🖥️ 屏幕亮起，开始下拉快捷菜单");
-
-            serv.swipeDown();
-
-            // ========= 第二步：等待快捷菜单动画 =========
-            new Handler(Looper.getMainLooper()).postDelayed(() -> {
-
-                WearLog.d(TAG, "👆 点击就寝模式");
-
-                serv.clickIcon1_1();
-
-                // ========= 第三步：等待点击动画 =========
-                new Handler(Looper.getMainLooper()).postDelayed(() -> {
-
-                    WearLog.d(TAG, "↩️ 返回");
-
-                    serv.goBack();
-
-                    if (wakeLock.isHeld()) {
-                        wakeLock.release();
-                        WearLog.d(TAG, "🔒 WakeLock released");
-                    }
-
-                }, 1000);
-
-            }, 1000);
-
-        }, 1000);
-
-    });
+    // 直接启动透明 Activity，无需判断前台状态
+    Intent intent = new Intent(context, WearSyncBedtimeAutomationActivity.class);
+    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+    context.startActivity(intent);
+    
+    WearLog.d(TAG, "🛌 [就寝模式] 已启动透明自动化页面");
 }
+
  private static void vibrate(Context context) {
     WearVibratorHelper.vibratePredefined(context, VibrationEffect.EFFECT_TICK);
 }
