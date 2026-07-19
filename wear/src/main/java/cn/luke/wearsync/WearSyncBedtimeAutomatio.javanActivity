@@ -7,9 +7,9 @@ import android.os.Handler;
 import android.os.Looper;
 
 // ✅ 你项目中已有的自定义类（确保路径正确）
-import de.rhaeus.wearsync.WearSyncScreenManager;
-import de.rhaeus.wearsync.WearSyncAccessService;
-import de.rhaeus.wearsync.WearLog;
+import cn.luke.wearsync.WearSyncScreenManager;
+import cn.luke.wearsync.WearSyncAccessService;
+import cn.luke.wearsync.WearLog;
 
 public class WearSyncBedtimeAutomationActivity extends Activity {
 
