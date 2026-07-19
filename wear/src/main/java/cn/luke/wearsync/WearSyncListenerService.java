@@ -51,27 +51,37 @@ public class WearSyncListenerService extends WearableListenerService {
 
             WearLog.d(TAG, "📥 [手表信令到港] ➔ type=[" + type + "], action=[" + action + "]");
 
-            // 2. 新增：震动控制逻辑
+                        // 2. 震动控制逻辑修复版
             if ("vibration".equalsIgnoreCase(type)) {
-                // 假设手机端会把震动配置序列化成JSON字符串放在 "config" 字段里
                 String configJsonStr = json.optString("config", "");
                 if (!configJsonStr.isEmpty()) {
                     JSONObject configJson = new JSONObject(configJsonStr);
-                    // 这里需要你实现一个从 JSONObject 创建 VibrationConfig 的方法
-                    VibrationConfig config = VibrationConfig.fromJson(configJson);
+                    
+                    // 从 JSON 中直接提取自定义参数
+                    int onDuration = configJson.optInt("onDuration", 500);
+                    int offDuration = configJson.optInt("offDuration", 200);
+                    int repeatIndex = configJson.optInt("repeatIndex", -1);
 
                     if ("preview".equalsIgnoreCase(action)) {
-                        // 📳 即时预览
-                        WearVibratorHelper.vibrate(this, config);
-                        WearLog.i(TAG, "🔄 收到预览指令，已触发即时震动");
+                        // 📳 即时波形预览（不更改配置直接播放）
+                        WearVibratorHelper.vibratePattern(this); 
+                        WearLog.i(TAG, "🔄 收到预览指令，已触发即时自定义震动");
                     } else if ("save".equalsIgnoreCase(action)) {
-                        // 💾 持久保存
-                        VibrationConfigStore.save(this, config);
-                        WearLog.i(TAG, "💾 收到保存指令，配置已持久化");
+                        // 💾 持久化到手表本地
+                        android.content.SharedPreferences sp = getSharedPreferences("wear_vibration_prefs", Context.MODE_PRIVATE);
+                        sp.edit().putInt("on_duration", onDuration)
+                                 .putInt("off_duration", offDuration)
+                                 .putInt("repeat_index", repeatIndex)
+                                 .apply();
+                        
+                        // 刷新内存配置
+                        WearVibratorHelper.initFromPhone(this);
+                        WearLog.i(TAG, "💾 收到保存指令，配置参数已更新持久化");
                     }
                 }
                 return; // 震动指令处理完毕，直接返回
             }
+
 
             // 3. 原有：勿扰同步包
             if ("dnd".equalsIgnoreCase(type)) {
