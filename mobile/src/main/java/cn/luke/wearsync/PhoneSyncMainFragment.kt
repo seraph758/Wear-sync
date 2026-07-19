@@ -64,7 +64,9 @@ import cn.luke.wearsync.PhoneLog
 
 
 class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListener {
-
+    companion object {
+        private const val TAG = "PhoneSyncMainFragment"
+    }
     private val isNotificationAllowedState = mutableStateOf(false)
     private val isCameraAllowedState = mutableStateOf(false)
     private val isConnectedState = mutableStateOf(false)
