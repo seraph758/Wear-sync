@@ -31,6 +31,8 @@ public class WearAlarmActivity extends Activity {
     private Vibrator vibrator;
     private TextView tvAlarmDay;
     private TextView tvAlarmTime;
+    private VibrationEffect currentEffect;
+
 
     // 🚀 安全提供给外部调用的单例获取器
     public static WearAlarmActivity getInstance() {
@@ -120,9 +122,20 @@ public class WearAlarmActivity extends Activity {
     }
 
      private void startWatchVibration() {
-    long[] pattern = {0, 500, 500};
-    WearLog.d(TAG, "📳 激活/刷新手表硬件独立震动环...");
-    WearVibratorHelper.vibratePattern(this, pattern, 0);
+    // 1. 从 SharedPreferences 读取用户设置（这里以你之前的 patternOnDuration 为例）
+    long[] pattern = {
+        0,                                   // 必须以 0 开头
+        patternOnDuration,                   // 你的手机端设置的 on 时长
+        patternOffDuration,                  // 你的手机端设置的 off 时长
+        patternOnDuration                    // 第二轮 on
+    };
+    int repeatIndex = (repeatIndex == 0) ? 4 : -1;   // 循环触发从第4个元素开始重复
+
+    // 2. 创建 Effect（关键！必须创建对象）
+    currentEffect = VibrationEffect.createWaveform(pattern, repeatIndex);
+
+    // 3. 触发震动（统一用 WearVibratorHelper）
+    WearVibratorHelper.vibrateEffect(this, currentEffect);
 }
 
 
@@ -152,11 +165,13 @@ public class WearAlarmActivity extends Activity {
     }
 
     private void cleanExit() {
-        try {
-            if (vibrator != null) vibrator.cancel();
-        } catch (Exception ignored) {}
-        finishAndRemoveTask();
-    }
+    try {
+        if (currentEffect != null) {
+            WearVibratorHelper.cancelVibration(this);   // 立即停止震动
+        }
+    } catch (Exception ignored) {}
+    finishAndRemoveTask();
+}
 
     @Override
     protected void onDestroy() {
