@@ -1,62 +1,59 @@
 package cn.luke.wearsync;
 
-import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
-import android.os.VibrationEffect;
-import android.os.Vibrator;
-import android.view.WindowManager;
+import android.util.Log;
 import android.widget.Button;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.lifecycle.ComponentActivity;
+
 import com.google.android.gms.tasks.Tasks;
+import com.google.android.gms.wearable.MessageClient;
 import com.google.android.gms.wearable.Node;
 import com.google.android.gms.wearable.Wearable;
-import android.app.KeyguardManager;
-import android.os.VibratorManager;
+
 import org.json.JSONObject;
 
 import java.lang.ref.WeakReference;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
-public class WearAlarmActivity extends Activity {
+public class WearAlarmActivity extends ComponentActivity {
+
     private static final String TAG = "WearSync_WearAlarmUI";
     private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
 
-    // 🚀 核心安全修改：用 WeakReference 代替原有的 static instance，彻底根治内存泄漏
-    private static WeakReference<WearAlarmActivity> instanceRef = null;
+    // 🚀 安全单例：使用 WeakReference 防止内存泄漏
+    private static WeakReference<WearAlarmActivity> instanceRef;
 
-    private Vibrator vibrator;
     private TextView tvAlarmDay;
     private TextView tvAlarmTime;
-    private VibrationEffect currentEffect;
+    private WearSyncScreenManager screenManager;
 
-
-    // 🚀 安全提供给外部调用的单例获取器
     public static WearAlarmActivity getInstance() {
         return (instanceRef != null) ? instanceRef.get() : null;
     }
 
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
+    protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // 🚀 核心注入：在第一步使用弱引用绑定当前上下文
+        // 🚀 绑定弱引用
         instanceRef = new WeakReference<>(this);
 
-        WearLog.d(TAG, "🎬 onCreate: 手表闹钟接管界面全屏顶屏中...");
+        // 🚀 初始化屏幕管理器（必须在 setContentView 之前或之后立即绑定）
+        screenManager = new WearSyncScreenManager(this);
+        screenManager.bind(this);
 
-// 1. 保留 FLAG_KEEP_SCREEN_ON 来保持屏幕常亮
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        
-        // 2. 使用 KeyguardManager 来解锁屏幕，替代 FLAG_SHOW_WHEN_LOCKED 和 FLAG_TURN_SCREEN_ON
-        KeyguardManager keyguardManager = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
-        if (keyguardManager != null) {
-            keyguardManager.requestDismissKeyguard(this, null);
-        }
-        
+        WearLog.d(TAG, "🎬 onCreate: 手表闹钟接管界面启动");
+
+        // 🚀 使用新 API 唤醒屏幕 + 保持常亮 + CPU 锁
+        // 5分钟安全上限，防止意外卡死导致电量耗尽
+        screenManager.wakeForSync(5 * 60 * 1000L);
 
         setContentView(R.layout.activity_wear_alarm);
 
@@ -67,32 +64,39 @@ public class WearAlarmActivity extends Activity {
 
         handleIncomingIntent(getIntent());
         startWatchVibration();
+
         btnDismiss.setOnClickListener(v -> {
-            WearLog.d(TAG, "🔘 用户点击 [关闭] 按钮");
+            WearLog.d(TAG, "🔘 用户点击 [关闭]");
             sendControlSignalToPhone("DISMISS");
             cleanExit();
         });
 
         btnSnooze.setOnClickListener(v -> {
-            WearLog.d(TAG, "🔘 用户点击 [延后] 按钮");
+            WearLog.d(TAG, "🔘 用户点击 [延后]");
             sendControlSignalToPhone("SNOOZE");
             cleanExit();
         });
     }
 
     @Override
-    protected void onNewIntent(Intent intent) {
+    protected void onNewIntent(@NonNull Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
-        WearLog.d(TAG, "⚡ onNewIntent: 收到热流转信令快件，立即执行现场判决...");
+        WearLog.d(TAG, "⚡ onNewIntent: 收到热流转信令");
+        
+        // 🚀 新意图到来时重新唤醒屏幕和震动
+        if (screenManager != null) {
+            screenManager.wakeForSync(5 * 60 * 1000L);
+        }
         handleIncomingIntent(intent);
     }
 
     private void handleIncomingIntent(Intent intent) {
         if (intent == null) return;
+
         String action = intent.getStringExtra("alarm_action");
         if ("FORCE_STOP_WEAR_ALARM".equalsIgnoreCase(action)) {
-            WearLog.d(TAG, "📥 [单包自毁成功] 现场捕获手机端强退信号，立即闭环安全退出界面...");
+            WearLog.d(TAG, "📥 捕获手机端强退信号，安全退出");
             cleanExit();
             return;
         }
@@ -113,21 +117,59 @@ public class WearAlarmActivity extends Activity {
                         tvAlarmDay.setText(week);
                     }
                 }
-                WearLog.d(TAG, "📦 业务现场解包成功 ➔ 时间:[" + time + "]");
+                WearLog.d(TAG, "📦 解包成功 ➔ 时间:[" + time + "]");
                 startWatchVibration();
             } catch (Exception e) {
-                WearLog.e(TAG, "🔴 现场解包 JSON 失败", e);
+                WearLog.e(TAG, "🔴 JSON 解包失败", e);
             }
         }
     }
 
-     private void startWatchVibration() {
-    WearVibratorHelper.vibratePattern(this);   // <--- 只要这一行！（自动读取参数）
-    // 注意：vibratePattern 内部已经做了 initFromPhone
-}
+    private void startWatchVibration() {
+        // 🚀 统一入口，Helper 内部自动读取最新参数
+        WearVibratorHelper.vibratePattern(this);
+    }
 
+    /**
+     * 🚀 核心修复：无条件停止震动 + 释放屏幕资源
+     */
+    private void cleanExit() {
+        try {
+            WearVibratorHelper.cancelVibration(this);
+        } catch (Exception e) {
+            WearLog.e(TAG, "❌ cleanExit 停止震动异常", e);
+        }
 
+        // 主动释放屏幕控制（LifecycleObserver 也会兜底释放）
+        if (screenManager != null) {
+            screenManager.releaseScreen();
+            screenManager.releaseCpu();
+        }
 
+        finishAndRemoveTask();
+    }
+
+    /**
+     * 🚀 关键兜底：防止非按钮退出（侧滑/电源键/系统回收）导致震动残留
+     */
+    @Override
+    protected void onStop() {
+        super.onStop();
+        WearVibratorHelper.cancelVibration(this);
+        WearLog.d(TAG, "🛡️ onStop: 界面不可见，兜底停止震动");
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (instanceRef != null) {
+            instanceRef.clear();
+            instanceRef = null;
+        }
+        // 双重保险停止震动
+        WearVibratorHelper.cancelVibration(this);
+        WearLog.d(TAG, "🏳️ onDestroy: 闹钟界面完全释放");
+        super.onDestroy();
+    }
 
     private void sendControlSignalToPhone(String actionCommand) {
         new Thread(() -> {
@@ -142,34 +184,14 @@ public class WearAlarmActivity extends Activity {
                 List<Node> nodes = Tasks.await(Wearable.getNodeClient(this).getConnectedNodes());
                 if (nodes != null) {
                     for (Node n : nodes) {
-                        Tasks.await(Wearable.getMessageClient(this).sendMessage(n.getId(), UNIVERSAL_SYNC_PATH, payload));
-                        WearLog.d(TAG, "🚀 [闹钟反向代点] 成功向手机投递口令: " + actionCommand);
+                        Tasks.await(Wearable.getMessageClient(this)
+                                .sendMessage(n.getId(), UNIVERSAL_SYNC_PATH, payload));
+                        WearLog.d(TAG, "🚀 反向推送成功: " + actionCommand);
                     }
                 }
             } catch (Exception e) {
-                WearLog.e(TAG, "❌ 手表向手机反向推送代点指令失败", e);
+                WearLog.e(TAG, "❌ 反向推送失败", e);
             }
         }).start();
-    }
-
-    private void cleanExit() {
-    try {
-        if (currentEffect != null) {
-            WearVibratorHelper.cancelVibration(this);
-        }
-    } catch (Exception ignored) {}
-    finishAndRemoveTask();
-}
-
-    @Override
-    protected void onDestroy() {
-        // 🚀 核心安全修改：在第一步完全清空弱引用，确保不留死角
-        if (instanceRef != null) {
-            instanceRef.clear();
-            instanceRef = null;
-        }
-        if (vibrator != null) vibrator.cancel();
-        WearLog.d(TAG, "🏳️ onDestroy: 闹钟接管界面完全释放、优雅退出");
-        super.onDestroy();
     }
 }
