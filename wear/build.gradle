@@ -56,7 +56,7 @@ android {
         release {
             signingConfig usePropertiesSigning ? signingConfigs.release : signingConfigs.debugging
             minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-rules.pro')
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt')
         }
     }
 
@@ -68,17 +68,9 @@ android {
     kotlinOptions {
         jvmTarget = '17'
     }
-
-    buildFeatures {
-        compose true
-        viewBinding true
-    }
-
-    composeOptions {
-        kotlinCompilerExtensionVersion '1.5.14'
-    }
 }
 
+// 全局 Java 编译配置（对所有模块生效）
 tasks.withType(JavaCompile).configureEach {
     options.compilerArgs += ['-Xlint:deprecation', '-Xlint:unchecked']
     options.deprecation = true
@@ -89,6 +81,7 @@ dependencies {
     implementation 'com.google.android.material:material:1.12.0'
     implementation 'androidx.preference:preference-ktx:1.2.1'
 
+    // 🔥 Wear OS 6 官方最新依赖
     implementation 'androidx.wear:wear:1.4.0'
     implementation "androidx.wear:wear-remote-interactions:1.2.0"
     implementation 'androidx.percentlayout:percentlayout:1.0.0'
