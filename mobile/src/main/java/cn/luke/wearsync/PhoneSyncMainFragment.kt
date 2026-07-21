@@ -407,20 +407,18 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-Slider(
-    value = screenPullDownInterval.toFloat(),
-    onValueChange = { newValue ->
-        val newInterval = newValue.toInt()
-        screenPullDownInterval = newInterval
-        sp.edit { putInt("screen_pull_down_interval", newInterval) }
-        
-        // ✅ 只传 context + 间隔值，不传 currentFilter
-        PhoneDndManager.syncDndToWear(requireContext(), newInterval)
-    },
-    valueRange = 0f..2000f,
-    steps = 19,
-    modifier = Modifier.weight(1f)
-)
+        Slider(
+            value = screenPullDownInterval.toFloat(),
+            onValueChange = { newValue ->
+                val newInterval = newValue.toInt()
+                screenPullDownInterval = newInterval
+                // ✅ 正确：只保存配置，不触发同步
+                sp.edit { putInt("screen_pull_down_interval", newInterval) }
+            },
+            valueRange = 0f..2000f,
+            steps = 19,
+            modifier = Modifier.weight(1f)
+        )
 
 
                         Text(
@@ -606,92 +604,99 @@ Slider(
                                     }
                                 }
 
-                                AnimatedVisibility(visible = isLogExpanded) {
-                                    Card(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(12.dp),
-                                        colors = CardDefaults.cardColors(containerColor = cardBgColor)
-                                    ) {
-                                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                                Text("开启手机端调试日志", color = textColor, fontSize = 14.sp)
-                                                Switch(
-                                                    checked = uiLogDebugSwitch.value,
-                                                    onCheckedChange = { isEnabled ->
-                                                        uiLogDebugSwitch.value = isEnabled
-                                                        cn.luke.wearsync.PhoneLog.DEBUG = isEnabled
-                                                        val context = requireContext()
-                                                        if (isEnabled) {
-                                                            context.startService(Intent(context, PhoneLogFloatingService::class.java))
-                                                        } else {
-                                                            context.stopService(Intent(context, PhoneLogFloatingService::class.java))
-                                                        }
-                                                    }
-                                                )
-                                            }
-                                            
-                                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                                Text("同步监听手表端核心日志", color = textColor, fontSize = 14.sp)
-                                                Switch(
-                                                    checked = uiWearLogDebugSwitch.value, 
-                                                    onCheckedChange = { isChecked -> 
-                                                        uiWearLogDebugSwitch.value = isChecked
-                                                        sp.edit { putBoolean("wear_log_debug_visible", isChecked)}
-                                                        PhoneLog.d("WearSync_Main", "用户切换同步监听手表端核心日志开关，当前状态: $isChecked")
-                                                        try {
-                                                            val msgJson = org.json.JSONObject().apply {
-                                                                put("type", "wear_data_channel/log ")      
-                                                                put("wear_log_debug", isChecked)     
-                                                                put("timestamp", System.currentTimeMillis())
-                                                            }
-                                                            PhoneLog.d("WearSync_Main", "准备向手表端发送日志控制信令: $msgJson")
-                                                            val context = requireContext()
-                                                            val nodeId = WearSyncState.getNodeId(context) 
-                                                            if (!nodeId.isNullOrEmpty()) {
-                                                                kotlinx.coroutines.MainScope().launch(kotlinx.coroutines.Dispatchers.IO) {
-                                                                    try {
-                                                                        com.google.android.gms.wearable.Wearable.getMessageClient(context)
-                                                                            .sendMessage(
-                                                                                nodeId,
-                                                                                "/wear-universal-sync", 
-                                                                                msgJson.toString().toByteArray(java.nio.charset.StandardCharsets.UTF_8)
-                                                                            )
-                                                                        PhoneLog.d("WearSync_Main", "日志控制信令已成功送出到消息队列")
-                                                                    } catch (sendError: Exception) {
-                                                                        PhoneLog.e("WearSync_Main", "通过MessageClient发送信令时遭遇物理失败", sendError)
-                                                                    }
-                                                                }
-                                                            } else {
-                                                                PhoneLog.w("WearSync_Main", "无法发送信令给手表：当前未捕获到有效的手表 NodeId")
-                                                            }
-                                                        } catch (e: Exception) {
-                                                            PhoneLog.e("WearSync_Main", "组装手表日志开关信令数据失败", e)
-                                                        }
-                                                    }
-                                                )
-                                            }
-                                            
-                                            HorizontalDivider(color = dividerColor)
+                                // ... 其他代码 ...
 
-                                            Button(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                onClick = {
-                                                    val context = requireContext()
-                                                    if (!android.provider.Settings.canDrawOverlays(context)) {
-                                                        val intent = Intent(
-                                                            android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                                            "package:${context.packageName}".toUri()
-                                                        )
-                                                        startActivity(intent)
-                                                    } else {
-                                                        val intent = Intent(context, PhoneLogFloatingService::class.java)
-                                                        context.startService(intent)
-                                                    }
-                                                }
-                                            ) { Text("开启实时悬浮监视器", fontSize = 13.sp) }
+            AnimatedVisibility(visible = isLogExpanded) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = cardBgColor)
+                ) {
+                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        // 1. 手机端日志开关（只控制本地日志）
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Text("开启手机端调试日志", color = textColor, fontSize = 14.sp)
+                            Switch(
+                                checked = uiLogDebugSwitch.value,
+                                onCheckedChange = { isEnabled ->
+                                    uiLogDebugSwitch.value = isEnabled
+                                    cn.luke.wearsync.PhoneLog.DEBUG = isEnabled
+                                    // ✅ 修复：这里只控制本地日志，不启动浮窗
+                                    // 如果需要浮窗，让用户点下面的按钮
+                                }
+                            )
+                        }
+            
+                        // 2. 手表端日志开关（控制手表日志回传）
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Text("同步监听手表端核心日志", color = textColor, fontSize = 14.sp)
+                            Switch(
+                                checked = uiWearLogDebugSwitch.value,
+                                onCheckedChange = { isChecked ->
+                                    uiWearLogDebugSwitch.value = isChecked
+                                    sp.edit { putBoolean("wear_log_debug_visible", isChecked)}
+                                    PhoneLog.d("WearSync_Main", "用户切换同步监听手表端核心日志开关，当前状态: $isChecked")
+                                    try {
+                                        val msgJson = org.json.JSONObject().apply {
+                                            put("type", "wear_log_control")
+                                            put("wear_log_debug", isChecked)
+                                            put("timestamp", System.currentTimeMillis())
                                         }
+                                        PhoneLog.d("WearSync_Main", "准备向手表端发送日志控制信令: $msgJson")
+                                        val context = requireContext()
+                                        val nodeId = WearSyncState.getNodeId(context)
+                                        if (!nodeId.isNullOrEmpty()) {
+                                            kotlinx.coroutines.MainScope().launch(kotlinx.coroutines.Dispatchers.IO) {
+                                                try {
+                                                    com.google.android.gms.wearable.Wearable.getMessageClient(context)
+                                                        .sendMessage(
+                                                            nodeId,
+                                                            "/wear-universal-sync",
+                                                            msgJson.toString().toByteArray(java.nio.charset.StandardCharsets.UTF_8)
+                                                        )
+                                                    PhoneLog.d("WearSync_Main", "日志控制信令已成功送出到消息队列")
+                                                } catch (sendError: Exception) {
+                                                    PhoneLog.e("WearSync_Main", "通过MessageClient发送信令时遭遇物理失败", sendError)
+                                                }
+                                            }
+                                        } else {
+                                            PhoneLog.w("WearSync_Main", "无法发送信令给手表：当前未捕获到有效的手表 NodeId")
+                                        }
+                                    } catch (e: Exception) {
+                                        PhoneLog.e("WearSync_Main", "组装手表日志开关信令数据失败", e)
                                     }
                                 }
+                            )
+                        }
+            
+                        HorizontalDivider(color = dividerColor)
+            
+                        // 3. 独立的浮窗按钮
+                        Button(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = {
+                                val context = requireContext()
+                                if (!android.provider.Settings.canDrawOverlays(context)) {
+                                    val intent = Intent(
+                                        android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                        "package:${context.packageName}".toUri()
+                                    )
+                                    startActivity(intent)
+                                } else {
+                                    // ✅ 修复：这里只负责启动浮窗，不依赖上面的开关
+                                    val intent = Intent(context, PhoneLogFloatingService::class.java)
+                                    context.startService(intent)
+                                }
+                            }
+                        ) {
+                            Text("开启实时悬浮监视器", fontSize = 13.sp)
+                        }
+                    }
+                }
+            }
+
+// ... 其他代码 ...
+
                             }
 
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
