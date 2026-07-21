@@ -418,11 +418,11 @@ Slider(
         // 2. 持久化到 SharedPreferences
         sp.edit { putInt("screen_pull_down_interval", newInterval) }
         
-        // 3. 同步到手表（直接使用 newInterval，避免读到旧状态）
+        // 3. 同步到手表
+        // ✅ 修改后：只传 context 和 间隔值，删掉 interruptionFilter 参数
         PhoneDndManager.syncDndToWear(
             context = requireContext(),
-            interruptionFilter = currentFilter, // 确保此变量已在外部定义
-            pullDownDelayMs = newInterval       // ✅ 用局部变量，而非状态变量
+            pullDownDelayMs = newInterval 
         )
     },
     valueRange = 0f..2000f,
