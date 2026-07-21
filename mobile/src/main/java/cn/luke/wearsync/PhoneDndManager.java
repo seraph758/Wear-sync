@@ -73,42 +73,6 @@ public class PhoneDndManager {
      * @param context 上下文
      * @param pullDownDelayMs UI 传入的最新间隔值
      */
-    public static void syncDndToWear(Context context, int pullDownDelayMs) {
-        new Thread(() -> {
-            try {
-                // 1. 在内部实时获取勿扰状态 (不要依赖外部传进来的值)
-                int interruptionFilter = NotificationManagerCompat.from(context).getCurrentInterruptionFilter();
-                
-                // 2. 打包数据
-                JSONObject json = new JSONObject();
-                json.put("sender", "phone");
-                json.put("type", "dnd");
-                json.put("dnd_state", interruptionFilter); // ✅ 使用内部获取的值
-                json.put("pullDownDelayMs", pullDownDelayMs); // ✅ 使用 UI 传进来的新值
-                
-                // 3. 读取掩码配置 (如果需要一并发送)
-                SharedPreferences sp = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-                int currentMask = sp.getInt(KEY_MASK, 15);
-                json.put("mask", currentMask);
-                
-                json.put("timestamp", System.currentTimeMillis());
-
-                byte[] data = json.toString().getBytes(StandardCharsets.UTF_8);
-                String nodeId = WearSyncState.getNodeId(context);
-                
-                if (nodeId == null || nodeId.isEmpty()) {
-                    PhoneLog.w(TAG, "⚠️ [DND发送失败] NodeId为空");
-                    return;
-                }
-                
-                PhoneLog.d(TAG, "📤 [UI触发发送] dnd_state=" + interruptionFilter + " delay=" + pullDownDelayMs);
-                Tasks.await(Wearable.getMessageClient(context).sendMessage(nodeId, UNIVERSAL_SYNC_PATH, data));
-                
-            } catch (Exception e) {
-                PhoneLog.e(TAG, "🔴 [DND发送异常]", e);
-            }
-        }).start();
-    }
 
     /**
      * 场景 B：系统监听器 (PhoneSyncNotificationService) 触发
@@ -117,40 +81,44 @@ public class PhoneDndManager {
      *
      * @param context 上下文
      */
+    /**
+     * 场景：系统监听器 (PhoneSyncNotificationService) 触发
+     * 仅在手机系统勿扰模式发生变化时调用
+     */
     public static void syncDndToWear(Context context) {
         new Thread(() -> {
             try {
                 // 1. 实时获取当前 DND 状态
                 int interruptionFilter = NotificationManagerCompat.from(context).getCurrentInterruptionFilter();
-                
-                // 2. 读取本地保存的间隔配置 (使用 PreferenceManager 读取 MainFragment 保存的值)
+
+                // 2. ✅ 实时读取用户刚滑动保存的最新延迟值
                 SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
-                int delay = sp.getInt(KEY_PULL_DOWN_DELAY, 500); // 默认 500ms
-                
+                int delay = sp.getInt(KEY_PULL_DOWN_DELAY, 500);
+
                 // 3. 读取掩码配置
                 SharedPreferences spPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
                 int currentMask = spPrefs.getInt(KEY_MASK, 15);
 
-                // 4. 打包发送
+                // 4. 打包发送（状态+最新延迟作为一个完整载荷）
                 JSONObject json = new JSONObject();
                 json.put("sender", "phone");
                 json.put("type", "dnd");
                 json.put("dnd_state", interruptionFilter);
                 json.put("mask", currentMask);
-                json.put("pullDownDelayMs", delay);
+                json.put("pullDownDelayMs", delay); // ✅ 新鲜数值
                 json.put("timestamp", System.currentTimeMillis());
 
                 byte[] data = json.toString().getBytes(StandardCharsets.UTF_8);
                 String nodeId = WearSyncState.getNodeId(context);
-                
+
                 if (nodeId == null || nodeId.isEmpty()) {
                     PhoneLog.w(TAG, "⚠️ [DND发送失败] NodeId为空");
                     return;
                 }
-                
+
                 PhoneLog.d(TAG, "📤 [系统触发发送] dnd_state=" + interruptionFilter + " delay=" + delay);
                 Tasks.await(Wearable.getMessageClient(context).sendMessage(nodeId, UNIVERSAL_SYNC_PATH, data));
-                
+
             } catch (Exception e) {
                 PhoneLog.e(TAG, "🔴 [DND发送异常]", e);
             }
