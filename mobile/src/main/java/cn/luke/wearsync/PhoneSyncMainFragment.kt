@@ -640,7 +640,7 @@ Slider(
                                                         PhoneLog.d("WearSync_Main", "用户切换同步监听手表端核心日志开关，当前状态: $isChecked")
                                                         try {
                                                             val msgJson = org.json.JSONObject().apply {
-                                                                put("type", "wear_log_control")      
+                                                                put("type", "wear_data_channel/log ")      
                                                                 put("wear_log_debug", isChecked)     
                                                                 put("timestamp", System.currentTimeMillis())
                                                             }

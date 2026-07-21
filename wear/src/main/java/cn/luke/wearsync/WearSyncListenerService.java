@@ -1,15 +1,19 @@
 package cn.luke.wearsync;
 
+import android.content.Context;
 import android.content.Intent;
+
 import androidx.annotation.NonNull;
+
 import com.google.android.gms.tasks.Tasks;
 import com.google.android.gms.wearable.ChannelClient;
 import com.google.android.gms.wearable.MessageEvent;
 import com.google.android.gms.wearable.Wearable;
 import com.google.android.gms.wearable.WearableListenerService;
+
 import org.json.JSONObject;
+
 import java.io.InputStream;
-import android.content.Context;
 import java.nio.charset.StandardCharsets;
 
 public class WearSyncListenerService extends WearableListenerService {
@@ -23,8 +27,9 @@ public class WearSyncListenerService extends WearableListenerService {
 
     private static final String TAG = "WearSync_WearListener";
     private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
-    private static final String CAMERA_PREVIEW_STREAM_PATH = "/camera-preview-stream";
+    private static final String DATA_CHANNEL_BASE_PATH = "/wear_data_channel";
 
+    private static final String CAMERA_PREVIEW_STREAM_PATH = DATA_CHANNEL_BASE_PATH + "/camera";
     @Override
     public void onMessageReceived(@NonNull MessageEvent messageEvent) {
         WearLog.e(TAG, "========== MESSAGE RECEIVED ==========");
@@ -38,121 +43,117 @@ public class WearSyncListenerService extends WearableListenerService {
         }
 
         byte[] data = messageEvent.getData();
-        if (data == null) return;
+            if (data == null) return;
 
-        try {
-            String jsonStr = new String(data, StandardCharsets.UTF_8);
-            JSONObject json = new JSONObject(jsonStr);
-            String sender = json.optString("sender", "");
-            String type = json.optString("type", "");
-            String action = json.optString("action", "");
+            try {
+                String jsonStr = new String(data, StandardCharsets.UTF_8);
+                JSONObject json = new JSONObject(jsonStr);
+                String sender = json.optString("sender", "");
+                String type = json.optString("type", "");
+                String action = json.optString("action", "");
 
-            // 防止手表自己发的消息循环处理
-            if ("wear".equalsIgnoreCase(sender)) return;
+                // 防止手表自己发的消息循环处理
+                if ("wear".equalsIgnoreCase(sender)) return;
 
-            WearLog.d(TAG, "📥 [手表信令到港] ➔ type=[" + type + "], action=[" + action + "]");
+                WearLog.d(TAG, "📥 [手表信令到港] ➔ type=[" + type + "], action=[" + action + "]");
 
-                        // 2. 震动控制逻辑修复版
-            if ("vibration".equalsIgnoreCase(type)) {
-                String configJsonStr = json.optString("config", "");
-                if (!configJsonStr.isEmpty()) {
-                    JSONObject configJson = new JSONObject(configJsonStr);
-                    
-                    // 从 JSON 中直接提取自定义参数
-                    int onDuration = configJson.optInt("onDuration", 500);
-                    int offDuration = configJson.optInt("offDuration", 200);
-                    int repeatIndex = configJson.optInt("repeatIndex", -1);
+                // 2. 震动控制逻辑修复版
+                if ("vibration".equalsIgnoreCase(type)) {
+                    String configJsonStr = json.optString("config", "");
+                    if (!configJsonStr.isEmpty()) {
+                        JSONObject configJson = new JSONObject(configJsonStr);
 
-                    if ("preview".equalsIgnoreCase(action)) {
-                        // 📳 即时波形预览（不更改配置直接播放）
-                        WearVibratorHelper.vibratePattern(this); 
-                        WearLog.i(TAG, "🔄 收到预览指令，已触发即时自定义震动");
-                    } else if ("save".equalsIgnoreCase(action)) {
-                        // 💾 持久化到手表本地
-                        android.content.SharedPreferences sp = getSharedPreferences("wear_vibration_prefs", Context.MODE_PRIVATE);
-                        sp.edit().putInt("on_duration", onDuration)
-                                 .putInt("off_duration", offDuration)
-                                 .putInt("repeat_index", repeatIndex)
-                                 .apply();
-                        
-                        // 刷新内存配置
-                        WearVibratorHelper.initFromPhone(this);
-                        WearLog.i(TAG, "💾 收到保存指令，配置参数已更新持久化");
+                        // 从 JSON 中直接提取自定义参数
+                        int onDuration = configJson.optInt("onDuration", 500);
+                        int offDuration = configJson.optInt("offDuration", 200);
+                        int repeatIndex = configJson.optInt("repeatIndex", -1);
+
+                        if ("preview".equalsIgnoreCase(action)) {
+                            // 📳 即时波形预览（不更改配置直接播放）
+                            WearVibratorHelper.vibratePattern(this);
+                            WearLog.i(TAG, "🔄 收到预览指令，已触发即时自定义震动");
+                        } else if ("save".equalsIgnoreCase(action)) {
+                            // 💾 持久化到手表本地
+                            android.content.SharedPreferences sp = getSharedPreferences("wear_vibration_prefs", Context.MODE_PRIVATE);
+                            sp.edit().putInt("on_duration", onDuration)
+                                     .putInt("off_duration", offDuration)
+                                     .putInt("repeat_index", repeatIndex)
+                                     .apply();
+
+                            // 刷新内存配置
+                            WearVibratorHelper.initFromPhone(this);
+                            WearLog.i(TAG, "💾 收到保存指令，配置参数已更新持久化");
+                        }
                     }
+                    return; // 震动指令处理完毕，直接返回
                 }
-                return; // 震动指令处理完毕，直接返回
-            }
-
-
-            // 3. 原有：勿扰同步包
-            if ("dnd".equalsIgnoreCase(type)) {
-                int dndStatePhone = json.optInt("dnd_state", -1);
-                if (dndStatePhone == -1) {
-                    WearLog.w(TAG, "⚠️ [DND同步] 收到勿擾包但缺少 dnd_state");
+                // 3. 原有：勿扰同步包
+                if ("dnd".equalsIgnoreCase(type)) {
+                    int dndStatePhone = json.optInt("dnd_state", -1);
+                    if (dndStatePhone == -1) {
+                        WearLog.w(TAG, "⚠️ [DND同步] 收到勿擾包但缺少 dnd_state");
+                        return;
+                    }
+                    WearLog.d(TAG, "📥 [DND同步] 收到手機勿擾狀態=" + dndStatePhone + " mask=" + json.optInt("mask",-1));
+                    WearSyncDndManager.updateConfigs(json);
+                    WearSyncDndManager.executeDndSync(this, dndStatePhone);
                     return;
                 }
-                WearLog.d(TAG, "📥 [DND同步] 收到手機勿擾狀態=" + dndStatePhone + " mask=" + json.optInt("mask",-1));
-                WearSyncDndManager.updateConfigs(json);
-                WearSyncDndManager.executeDndSync(this, dndStatePhone);
+                // 4. 原有：闹钟拦截控制模组（推荐最终版，纯启动，不提前震动）
+                if ("alarm".equalsIgnoreCase(type)) {
+                WearLog.d(TAG, "⏰ 收到手机闹钟信令，正在将其无损打包并直发 WearAlarmActivity ➔ " + action);
+
+                Intent alarmIntent = new Intent(this, WearAlarmActivity.class);
+
+                // === 关键优化（解决 3\~4 秒延迟）===
+                alarmIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                alarmIntent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                alarmIntent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                alarmIntent.putExtra("raw_alarm_json", json.toString());
+                alarmIntent.putExtra("alarm_action", action);
+
+                WearLog.d(TAG, "⏰ 准备启动 WearAlarmActivity...");
+                startActivity(alarmIntent);
                 return;
             }
-
-        // 4. 原有：闹钟拦截控制模组（推荐最终版，纯启动，不提前震动）
-        if ("alarm".equalsIgnoreCase(type)) {
-            WearLog.d(TAG, "⏰ 收到手机闹钟信令，正在将其无损打包并直发 WearAlarmActivity ➔ " + action);
-        
-            Intent alarmIntent = new Intent(this, WearAlarmActivity.class);
-        
-            // === 关键优化（解决 3\~4 秒延迟）===
-            alarmIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            alarmIntent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            alarmIntent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
-            alarmIntent.putExtra("raw_alarm_json", json.toString());
-            alarmIntent.putExtra("alarm_action", action);
-        
-            WearLog.d(TAG, "⏰ 准备启动 WearAlarmActivity...");
-            startActivity(alarmIntent);
-            return;
-        }
-        
-            // 5. 原有：相机穿透控制模组
-            if ("camera_control".equalsIgnoreCase(type)) {
-                if ("CAMERA_HANDSHAKE".equalsIgnoreCase(action)) {
-                    WearLog.d(TAG, "CAM-W001 收到 CAMERA_HANDSHAKE");
-                    return;
+                // 5. 原有：相机穿透控制模组
+                if ("camera_control".equalsIgnoreCase(type)) {
+                    if ("CAMERA_HANDSHAKE".equalsIgnoreCase(action)) {
+                        WearLog.d(TAG, "CAM-W001 收到 CAMERA_HANDSHAKE");
+                        return;
+                    }
+                    if ("STREAM_START".equalsIgnoreCase(action)) {
+                        WearLog.d(TAG, "CAM-W003 STREAM_START");
+                        WearCameraActivity activity = WearCameraActivity.sActivityRef.get();
+                        WearLog.d(TAG, "CAM-W003 activity=" + activity);
+                        if (activity != null) {
+                            activity.onChannelReady();
+                        }
+                        return;
+                    }
+                    if ("STOP_CAMERA".equalsIgnoreCase(action) || "FORCE_QUIT_CAMERA".equalsIgnoreCase(action)) {
+                        sendBroadcast(new Intent("cn.luke.wearsync.ACTION_FORCE_QUIT_WEAR_CAMERA"));
+                        return;
+                    }
                 }
-                if ("STREAM_START".equalsIgnoreCase(action)) {
-                    WearLog.d(TAG, "CAM-W003 STREAM_START");
-                    WearCameraActivity activity = WearCameraActivity.sActivityRef.get();
-                    WearLog.d(TAG, "CAM-W003 activity=" + activity);
-                    if (activity != null) {
-                        activity.onChannelReady();
+                // 6. 原有：手飙日志无线远程联控模组
+                if ("wearlog".equalsIgnoreCase(type)) { // ✅ 修正1: 匹配正确的信令类型 "wearlog"
+                    boolean wearDebug = json.optBoolean("wear_log_debug", true);
+                    WearLog.DEBUG = wearDebug;
+                    WearLog.d(TAG, "🎛️ [远程同步] 接收到手机端远程控场，手表日志开闭状态同步修改为 ➔ " + wearDebug);
+                    if (wearDebug) {
+                        // ✅ 修正2: 使用新的数据通道路径
+                        openLogChannelToPhone(messageEvent.getSourceNodeId(), DATA_CHANNEL_BASE_PATH + "/log");
+                    } else {
+                        WearLog.setLogOutputStream(null);
                     }
                     return;
                 }
-                if ("STOP_CAMERA".equalsIgnoreCase(action) || "FORCE_QUIT_CAMERA".equalsIgnoreCase(action)) {
-                    sendBroadcast(new Intent("cn.luke.wearsync.ACTION_FORCE_QUIT_WEAR_CAMERA"));
-                    return;
-                }
-            }
 
-            // 6. 原有：手飙日志无线远程联控模组
-            if ("wear_log_control".equalsIgnoreCase(type)) {
-                boolean wearDebug = json.optBoolean("wear_log_debug", true);
-                WearLog.DEBUG = wearDebug;
-                WearLog.d(TAG, "🎛️ [远程同步] 接收到手机端远程控场，手表日志开闭状态同步修改为 ➔ " + wearDebug);
-                if (wearDebug) {
-                    openLogChannelToPhone(messageEvent.getSourceNodeId());
-                } else {
-                    WearLog.setLogOutputStream(null);
-                }
-                return;
+            } catch (Exception e) {
+                WearLog.e(TAG, "🔴 解析手机发往手表的指令崩溃: " + e.getMessage(), e);
             }
-
-        } catch (Exception e) {
-            WearLog.e(TAG, "🔴 解析手机发往手表的指令崩溃: " + e.getMessage(), e);
         }
-    }
 
     @Override
     public void onChannelOpened(@NonNull ChannelClient.Channel channel) {
@@ -200,10 +201,11 @@ public class WearSyncListenerService extends WearableListenerService {
         }).start();
     }
 
-    private void openLogChannelToPhone(String phoneNodeId) {
-        WearLog.d(TAG, "🔌 正在尝试与手机建立日志专属 Channel 管道...");
+    // 修改方法签名，增加 path 参数
+    private void openLogChannelToPhone(String phoneNodeId, String path) {
+        WearLog.d(TAG, "🔌 正在尝试与手机建立日志专属 Channel 管道: " + path);
         Wearable.getChannelClient(this)
-                .openChannel(phoneNodeId, "/wear_log_path")
+                .openChannel(phoneNodeId, path) // ✅ 使用传入的 path 参数
                 .addOnSuccessListener(channel -> Wearable.getChannelClient(this)
                         .getOutputStream(channel)
                         .addOnSuccessListener(outputStream -> {

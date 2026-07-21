@@ -1,22 +1,21 @@
 package cn.luke.wearsync;
 
 import android.content.Intent;
-import androidx.annotation.NonNull; 
+
+import androidx.annotation.NonNull;
+
 import com.google.android.gms.tasks.Tasks;
-import com.google.android.gms.wearable.ChannelClient;
 import com.google.android.gms.wearable.MessageEvent;
 import com.google.android.gms.wearable.Node;
 import com.google.android.gms.wearable.Wearable;
 import com.google.android.gms.wearable.WearableListenerService;
+
 import org.json.JSONObject;
-import java.io.BufferedReader;
-import java.io.InputStream;
-import java.io.InputStreamReader;
+
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
-import android.util.Log;
 
 /**
  * 📡 手机端监听核心（Camera + DND + Alarm + 🚀安全追加：无线日志大流接收舱）
@@ -27,8 +26,7 @@ public class PhoneSyncListenerService extends WearableListenerService {
     private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
     
     // 🚀 追加：用于识别流传输的通道路径（保持与手表端定义一致）
-    private static final String WEAR_LOG_CHANNEL_PATH = "/wear_log_path";
-
+    private static final String WEAR_LOG_CHANNEL_PATH = "/wear_data_channel/log";
     private static final Executor REMOTE_EXECUTOR = Executors.newSingleThreadExecutor();
 
     public static boolean isInternalUpdate = false;
@@ -289,23 +287,22 @@ public class PhoneSyncListenerService extends WearableListenerService {
     // 🚀 核心独立追加：大流通道生命周期监控（用于对接手表的无线日志流）
     // ============================================================
     // 🟢 修复：彻底删除了错误的 @Override 注解
-   private static final String TEST_CHANNEL_PATH = "/channel_test_path";
 
     @Override
     public void onChannelOpened(@NonNull com.google.android.gms.wearable.ChannelClient.Channel channel) {
         String path = channel.getPath();
-        Log.d("PhoneLog_Trace", "🛰️ [手機雷達] 偵測到 Channel 管道握手! Path: " + path);
-        
+        PhoneLog.d(TAG, "🛰️ [手機雷達] 偵測到 Channel 管道握手! Path: " + path);
+
         // 统一在主日志管道中接收数据
         if (WEAR_LOG_CHANNEL_PATH.equals(path)) {
-            Log.d("PhoneLog_Trace", "🎯 [暗號吻合] 正在建立手錶日誌接收流...");
+            PhoneLog.d(TAG, "🎯 [暗號吻合] 正在建立手錶日誌接收流...");
             com.google.android.gms.wearable.Wearable.getChannelClient(this)
                 .getInputStream(channel)
                 .addOnSuccessListener(inputStream -> {
-                    Log.d("PhoneLog_Trace", "🟢 [日誌流就緒] 啟動背景讀取執行緒...");
+                    PhoneLog.d("PhoneLog_Trace", "🟢 [日誌流就緒] 啟動背景讀取執行緒...");
                     new Thread(() -> readLogStream(inputStream)).start();
                 })
-                .addOnFailureListener(e -> Log.e("PhoneLog_Trace", "❌ [日誌流獲取失敗]", e));
+                .addOnFailureListener(e -> PhoneLog.e("PhoneLog_Trace", "❌ [日誌流獲取失敗]", e));
         }
     }
 
@@ -313,61 +310,25 @@ public class PhoneSyncListenerService extends WearableListenerService {
      * 📥 统一的无线日志与大包测试流读取器（带线程同步保护）
      */
     private void readLogStream(java.io.InputStream inputStream) {
-        java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", java.util.Locale.getDefault());
-        long testStartTime = System.currentTimeMillis();
-        long totalReceivedBytes = 0;
+        java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat(
+                "yyyy-MM-dd HH:mm:ss.SSS", java.util.Locale.getDefault());
 
-        try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(inputStream, java.nio.charset.StandardCharsets.UTF_8))) {
+        try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                new java.io.InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
+
             String line;
             while ((line = reader.readLine()) != null) {
-                // 🔬 分流检测：如果这一行是压力测试大包
-                if (line.contains("[PAYLOAD_START_PACKET_")) {
-                    int lineSize = line.getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
-                    totalReceivedBytes += lineSize;
-                    
-                    String packetNum = "1";
-                    if (line.contains("[PAYLOAD_START_PACKET_2]")) packetNum = "2";
-                    else if (line.contains("[PAYLOAD_START_PACKET_3]")) packetNum = "3";
-                    
-                    double sizeKb = lineSize / 1024.0;
-                    String summary = String.format(java.util.Locale.getDefault(),
-                            "🟢 成功接收第 %s 個大包 | 大小: %.2f KB (%d 字节)", 
-                            packetNum, sizeKb, lineSize);
-                    
-                    Log.i("Channel_Test_Trace", "📥 [接收成功] " + summary);
-                    synchronized (PhoneLog.class) { // 🔒 加锁防止高频并发写入冲突
-                        PhoneLog.appendFromRemote("[TEST] " + summary);
-                    }
-
-                    // 如果三个大包都收齐了，打印跑分报告
-                    if ("3".equals(packetNum)) {
-                        double totalMb = totalReceivedBytes / (1024.0 * 1024.0);
-                        double totalTimeSec = (System.currentTimeMillis() - testStartTime) / 1000.0;
-                        if (totalTimeSec <= 0) totalTimeSec = 0.1; // 防止除零
-                        double speed = totalMb / totalTimeSec;
-                        
-                        String finalSummary = String.format(java.util.Locale.getDefault(),
-                                "🏆 [測試完成] 共接收 %.2f MB 數據 | 總耗時: %.2f 秒 | 平均速度: %.2f MB/s",
-                                totalMb, totalTimeSec, speed);
-                        
-                        Log.i("Channel_Test_Trace", finalSummary);
-                        synchronized (PhoneLog.class) {
-                            PhoneLog.appendFromRemote("[TEST] " + finalSummary);
-                        }
-                    }
-                } else {
-                    // 2. 普通日志包处理
-                    if (line.startsWith("[WEAR]") && !line.contains("] [20")) {
-                        String timeStr = sdf.format(new java.util.Date());
-                        line = "[WEAR] [" + timeStr + "]" + line.substring(6);
-                    }
-                    synchronized (PhoneLog.class) { // 🔒 加锁防止高频并发写入冲突
-                        PhoneLog.appendFromRemote(line);
-                    }
+                // 补充时间戳
+                if (line.startsWith("[WEAR]") && !line.contains("] [20")) {
+                    String timeStr = sdf.format(new java.util.Date());
+                    line = "[WEAR] [" + timeStr + "]" + line.substring(6);
+                }
+                synchronized (PhoneLog.class) {
+                    PhoneLog.appendFromRemote(line);
                 }
             }
         } catch (Exception e) {
-            Log.e("PhoneLog_Trace", "❌ [流讀取異常] 管道中斷", e);
+            PhoneLog.e(TAG, "❌ [流讀取異常] 管道中斷", e);
         }
     }
 
