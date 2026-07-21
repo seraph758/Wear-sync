@@ -407,14 +407,29 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Slider(
-                            value = screenPullDownInterval.toFloat(),
-                            onValueChange = { screenPullDownInterval = it.toInt() 
-     sp.edit { putInt("screen_pull_down_interval", it.toInt()) }                        },
-                            valueRange = 0f..2000f,
-                            steps = 19,
-                            modifier = Modifier.weight(1f)
-                        )
+Slider(
+    value = screenPullDownInterval.toFloat(),
+    onValueChange = { newValue ->
+        val newInterval = newValue.toInt()
+        
+        // 1. 更新 UI 状态
+        screenPullDownInterval = newInterval
+        
+        // 2. 持久化到 SharedPreferences
+        sp.edit { putInt("screen_pull_down_interval", newInterval) }
+        
+        // 3. 同步到手表（直接使用 newInterval，避免读到旧状态）
+        PhoneDndManager.syncDndToWear(
+            context = requireContext(),
+            interruptionFilter = currentFilter, // 确保此变量已在外部定义
+            pullDownDelayMs = newInterval       // ✅ 用局部变量，而非状态变量
+        )
+    },
+    valueRange = 0f..2000f,
+    steps = 19,
+    modifier = Modifier.weight(1f)
+)
+
                         Text(
                             text = "${screenPullDownInterval}ms",
                             fontSize = 13.sp,
