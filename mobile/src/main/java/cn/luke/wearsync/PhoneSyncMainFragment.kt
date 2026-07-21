@@ -60,6 +60,12 @@ import java.nio.charset.StandardCharsets
 import androidx.compose.material3.Slider
 import androidx.compose.material3.OutlinedButton
 import cn.luke.wearsync.PhoneLog
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.await
+import androidx.compose.ui.unit.widthIn
+import androidx.compose.ui.text.style.TextAlign
+
 
 class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListener {
     companion object {
