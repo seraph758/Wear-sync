@@ -9,18 +9,12 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.lifecycle.ComponentActivity;
+import androidx.activity.ComponentActivity; // ✅ 確保是 androidx.activity 包
 
 import com.google.android.gms.tasks.Tasks;
 import com.google.android.gms.wearable.MessageClient;
 import com.google.android.gms.wearable.Node;
 import com.google.android.gms.wearable.Wearable;
-
-import org.json.JSONObject;
-
-import java.lang.ref.WeakReference;
-import java.nio.charset.StandardCharsets;
-import java.util.List;
 
 public class WearAlarmActivity extends ComponentActivity {
 
