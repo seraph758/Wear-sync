@@ -62,7 +62,7 @@ import androidx.compose.material3.OutlinedButton
 import cn.luke.wearsync.PhoneLog
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.await
+import kotlinx.coroutines.tasks.await
 import androidx.compose.ui.unit.widthIn
 import androidx.compose.ui.text.style.TextAlign
 import kotlinx.coroutines.tasks.await
