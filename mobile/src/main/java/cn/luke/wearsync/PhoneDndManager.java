@@ -78,24 +78,23 @@ public class PhoneDndManager {
         int currentMask = sp.getInt("KEY_MASK", 15);
 
         new Thread(() -> {
-            try {
-                JSONObject json = new JSONObject();
-                json.put("sender", "phone");
-                json.put("type", "dnd");
-                json.put("dnd_state", interruptionFilter);
-                json.put("mask", currentMask);
-               json.put("pullDownDelayMs", screenPullDownInterval);
-                json.put("timestamp", System.currentTimeMillis());
+    try {
+        JSONObject json = new JSONObject();
+        json.put("sender", "phone");
+        json.put("type", "dnd");
+        json.put("dnd_state", interruptionFilter);
+        json.put("mask", currentMask);
+        json.put("pullDownDelayMs", screenPullDownInterval); // ✅ 加在这里
+        json.put("timestamp", System.currentTimeMillis());
 
-                byte[] data = json.toString().getBytes(StandardCharsets.UTF_8);
-                String nodeId = WearSyncState.getNodeId(context);
+        byte[] data = json.toString().getBytes(StandardCharsets.UTF_8);
+        String nodeId = WearSyncState.getNodeId(context);
 
-                if (nodeId == null || nodeId.isEmpty()) {
-                    PhoneLog.w(TAG, "⚠️ [DND发送失败] NodeId为空");
-                    return;
-                }
-
-                PhoneLog.d(TAG, "📤 [准备发送] dnd_state=" + interruptionFilter + " mask=" + currentMask);
+        if (nodeId == null || nodeId.isEmpty()) {
+            PhoneLog.w(TAG, "⚠️ [DND发送失败] NodeId为空");
+            return;
+        }
+           PhoneLog.d(TAG, "📤 [准备发送] dnd_state=" + interruptionFilter + " mask=" + currentMask);
 
                 Tasks.await(Wearable.getMessageClient(context).sendMessage(nodeId, UNIVERSAL_SYNC_PATH, data));
 
