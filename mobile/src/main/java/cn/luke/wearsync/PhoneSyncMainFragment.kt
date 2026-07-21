@@ -421,9 +421,9 @@ Slider(
         // 3. 同步到手表
         // ✅ 修改后：只传 context 和 间隔值，删掉 interruptionFilter 参数
         PhoneDndManager.syncDndToWear(
-            context = requireContext(),
-            pullDownDelayMs = newInterval 
-        )
+    requireContext(),
+    newInterval 
+)
     },
     valueRange = 0f..2000f,
     steps = 19,
