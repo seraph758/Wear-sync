@@ -92,38 +92,52 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
         }
     }
 
+// 修改函数签名，接收参数
     private fun sendVibrationCommand(action: String, onDuration: Int, offDuration: Int, repeat: Int) {
         val nodeId = WearSyncState.getNodeId(requireContext())
         if (nodeId.isNullOrEmpty()) {
             PhoneLog.w(TAG, "⚠️ 无法发送震动指令：手表未连接")
             return
         }
-        Thread {
+    
+        viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
             try {
-                val configJson = JSONObject().apply {
-                    put("mode", 0)
-                    put("pattern", intArrayOf(0, onDuration, offDuration, onDuration))
-                    put("repeatIndex", repeat)
-                }
-                val json = JSONObject().apply {
+                // 1. 发送 STOP
+                val stopJson = JSONObject().apply {
                     put("sender", "phone")
                     put("type", "vibration")
-                    put("action", action)
-                    put("config", configJson.toString())
+                    put("action", "stop")
                     put("timestamp", System.currentTimeMillis())
                 }
                 Wearable.getMessageClient(requireContext()).sendMessage(
-                    nodeId, UNIVERSAL_SYNC_PATH, json.toString().toByteArray(StandardCharsets.UTF_8)
-                ).addOnSuccessListener {
-                    PhoneLog.d(TAG, "✅ 震动[$action]已发送 → on=${onDuration}ms off=${offDuration}ms")
-                }.addOnFailureListener { e ->
-                    PhoneLog.e(TAG, "❌ 震动[$action]发送失败: ${e.message}")
+                    nodeId, UNIVERSAL_SYNC_PATH, stopJson.toString().toByteArray(StandardCharsets.UTF_8)
+                ).await()
+    
+                // 2. 发送新配置
+                if (action == "preview" || action == "save") {
+                    val configJson = JSONObject().apply {
+                        put("mode", 0)
+                        // 使用传入的参数，而不是直接引用 UI 变量
+                        put("pattern", intArrayOf(0, onDuration, offDuration, onDuration))
+                        put("repeatIndex", if (action == "preview") -1 else repeat)
+                    }
+                    val json = JSONObject().apply {
+                        put("sender", "phone")
+                        put("type", "vibration")
+                        put("action", action)
+                        put("config", configJson.toString())
+                        put("timestamp", System.currentTimeMillis())
+                    }
+                    Wearable.getMessageClient(requireContext()).sendMessage(
+                        nodeId, UNIVERSAL_SYNC_PATH, json.toString().toByteArray(StandardCharsets.UTF_8)
+                    ).await()
                 }
             } catch (e: Exception) {
-                PhoneLog.e(TAG, "❌ 构建震动指令异常: ${e.message}", e)
+                PhoneLog.e(TAG, "❌ 震动指令异常: ${e.message}", e)
             }
-        }.start()
+        }
     }
+
 
     private val requestCameraPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -165,6 +179,10 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                 MaterialTheme {
                     val isDark = isSystemInDarkTheme()
                     val backgroundColor = if (isDark) Color(0xFF121214) else Color(0xFFF4F4F6)
+                    var screenPullDownInterval by remember { 
+        mutableIntStateOf(sp.getInt("screen_pull_down_interval", 500)) 
+    }
+                        
                     val cardBgColor = if (isDark) Color(0xFF1E1E24) else Color(0xFFFFFFFF)
                     val textColor = if (isDark) Color.White else Color(0xFF1C1C1E)
                     val subTextColor = if (isDark) Color.Gray else Color(0xFF757575)
@@ -299,37 +317,110 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                     }
                                 }
 
-                                AnimatedVisibility(visible = isDndExpanded) {
-                                    Card(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(12.dp),
-                                        colors = CardDefaults.cardColors(containerColor = cardBgColor)
-                                    ) {
-                                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                                Text("启用勿扰主同步", fontWeight = FontWeight.SemiBold, color = textColor, fontSize = 14.sp)
-                                                Switch(checked = masterOn, onCheckedChange = { masterOn = it; updateMask(it, vibrateOn, sleepOn, powerOn) })
-                                            }
-                                            AnimatedVisibility(visible = masterOn) {
-                                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                                    HorizontalDivider(color = dividerColor)
-                                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                                        Text("手表端振动反馈", color = textColor, fontSize = 13.sp)
-                                                        Switch(checked = vibrateOn, onCheckedChange = { vibrateOn = it; updateMask(masterOn, it, sleepOn, powerOn) })
-                                                    }
-                                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                                        Text("睡眠模式同步", color = textColor, fontSize = 13.sp)
-                                                        Switch(checked = sleepOn, onCheckedChange = { sleepOn = it; updateMask(masterOn, vibrateOn, it, powerOn) })
-                                                    }
-                                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                                        Text("省电模式同步", color = textColor, fontSize = 13.sp)
-                                                        Switch(checked = powerOn, onCheckedChange = { powerOn = it; updateMask(masterOn, vibrateOn, sleepOn, it) })
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
+                     AnimatedVisibility(visible = isDndExpanded) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = cardBgColor)
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            // 主开关
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("启用勿扰主同步", fontWeight = FontWeight.SemiBold, color = textColor, fontSize = 14.sp)
+                Switch(
+                    checked = masterOn,
+                    onCheckedChange = { masterOn = it; updateMask(it, vibrateOn, sleepOn, powerOn) }
+                )
+            }
+
+            // ✅ 子项区域：受 masterOn 控制
+            AnimatedVisibility(visible = masterOn) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    HorizontalDivider(color = dividerColor)
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("手表端振动反馈", color = textColor, fontSize = 13.sp)
+                        Switch(
+                            checked = vibrateOn,
+                            onCheckedChange = { vibrateOn = it; updateMask(masterOn, it, sleepOn, powerOn) }
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("睡眠模式同步", color = textColor, fontSize = 13.sp)
+                        Switch(
+                            checked = sleepOn,
+                            onCheckedChange = { sleepOn = it; updateMask(masterOn, vibrateOn, it, powerOn) }
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("省电模式同步", color = textColor, fontSize = 13.sp)
+                        Switch(
+                            checked = powerOn,
+                            onCheckedChange = { powerOn = it; updateMask(masterOn, vibrateOn, sleepOn, it) }
+                        )
+                    }
+
+                    // ✅ 新增：下拉菜单间隔（在 masterOn 的 Column 内部）
+                    HorizontalDivider(color = dividerColor, modifier = Modifier.padding(vertical = 4.dp))
+
+                    Text(
+                        text = "亮屏与下拉菜单间隔",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = textColor
+                    )
+                    Text(
+                        text = "手机同步勿扰时，手表亮屏后延迟多久允许下拉菜单响应",
+                        fontSize = 11.sp,
+                        color = subTextColor,
+                        lineHeight = 14.sp
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Slider(
+                            value = screenPullDownInterval.toFloat(),
+                            onValueChange = { screenPullDownInterval = it.toInt() 
+     sp.edit { putInt("screen_pull_down_interval", it.toInt()) }                        },
+                            valueRange = 0f..2000f,
+                            steps = 19,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            text = "${screenPullDownInterval}ms",
+                            fontSize = 13.sp,
+                            color = textColor,
+                            modifier = Modifier.padding(start = 8.dp).widthIn(min = 56.dp),
+                            textAlign = TextAlign.End
+                        )
+                    }
+                } // ← masterOn 的 Column 结束
+            } // ← masterOn 的 AnimatedVisibility 结束
+        } // ← Card 内部的 Column 结束
+    } // ← Card 结束
+} // ← isDndExpanded 的 AnimatedVisibility 结束
 
                                 AnimatedVisibility(visible = isAlarmExpanded) {
                                     Card(
