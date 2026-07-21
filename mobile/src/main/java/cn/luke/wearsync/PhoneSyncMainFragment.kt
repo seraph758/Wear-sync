@@ -411,24 +411,17 @@ Slider(
     value = screenPullDownInterval.toFloat(),
     onValueChange = { newValue ->
         val newInterval = newValue.toInt()
-        
-        // 1. 更新 UI 状态
         screenPullDownInterval = newInterval
-        
-        // 2. 持久化到 SharedPreferences
         sp.edit { putInt("screen_pull_down_interval", newInterval) }
         
-        // 3. 同步到手表
-        // ✅ 修改后：只传 context 和 间隔值，删掉 interruptionFilter 参数
-        PhoneDndManager.syncDndToWear(
-    requireContext(),
-    newInterval 
-)
+        // ✅ 只传 context + 间隔值，不传 currentFilter
+        PhoneDndManager.syncDndToWear(requireContext(), newInterval)
     },
     valueRange = 0f..2000f,
     steps = 19,
     modifier = Modifier.weight(1f)
 )
+
 
                         Text(
                             text = "${screenPullDownInterval}ms",
