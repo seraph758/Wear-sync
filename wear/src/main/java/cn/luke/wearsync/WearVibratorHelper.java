@@ -90,6 +90,31 @@ public final class WearVibratorHelper {
             WearLog.e(TAG, "💥 触发震动异常: " + e.getMessage(), e);
         }
     }
+/**
+ * 新增：使用传入的参数直接触发震动
+ * 用于处理手表的“预览”指令
+ */
+public static void vibratePattern(Context context, int onDuration, int offDuration, int repeatIndex) {
+    Vibrator vibrator = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
+    if (vibrator == null || !vibrator.hasVibrator()) {
+        WearLog.e(TAG, "❌ 震动失败：Vibrator null 或不支持");
+        return;
+    }
+
+    // 构建震动模式：等待0ms -> 震动onDuration -> 等待offDuration -> 震动onDuration
+    long[] pattern = {0, onDuration, offDuration, onDuration};
+    
+    WearLog.d(TAG, "📳 触发预览波形震动 length=" + pattern.length + ", repeat=" + repeatIndex);
+
+    try {
+        vibrator.cancel();
+        VibrationEffect effect = VibrationEffect.createWaveform(pattern, repeatIndex);
+        vibrator.vibrate(effect);
+        WearLog.i(TAG, "✅ 预览波形震动已触发");
+    } catch (Exception e) {
+        WearLog.e(TAG, "💥 触发预览震动异常: " + e.getMessage(), e);
+    }
+}
 
     /**
      * 🛑 停止所有震动
