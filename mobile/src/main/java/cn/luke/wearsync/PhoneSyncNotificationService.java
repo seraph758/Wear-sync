@@ -345,7 +345,7 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
         }
 
         try {
-            PhoneDndManager.syncDndToWear(this, interruptionFilter);
+            PhoneDndManager.syncDndToWear(this);
         } catch (Exception e) {
             PhoneLog.e(TAG, e.getMessage());
         }
