@@ -57,36 +57,38 @@ public class WearSyncListenerService extends WearableListenerService {
 
                 WearLog.d(TAG, "📥 [手表信令到港] ➔ type=[" + type + "], action=[" + action + "]");
 
-                // 2. 震动控制逻辑修复版
-                if ("vibration".equalsIgnoreCase(type)) {
-                    String configJsonStr = json.optString("config", "");
-                    if (!configJsonStr.isEmpty()) {
-                        JSONObject configJson = new JSONObject(configJsonStr);
+// 2. 震动控制逻辑修复版
+if ("vibration".equalsIgnoreCase(type)) {
+    String configJsonStr = json.optString("config", "");
+    if (!configJsonStr.isEmpty()) {
+        JSONObject configJson = new JSONObject(configJsonStr);
+        // 从 JSON 中直接提取自定义参数
+        int onDuration = configJson.optInt("onDuration", 500);
+        int offDuration = configJson.optInt("offDuration", 200);
+        int repeatIndex = configJson.optInt("repeatIndex", -1);
 
-                        // 从 JSON 中直接提取自定义参数
-                        int onDuration = configJson.optInt("onDuration", 500);
-                        int offDuration = configJson.optInt("offDuration", 200);
-                        int repeatIndex = configJson.optInt("repeatIndex", -1);
+        if ("preview".equalsIgnoreCase(action)) {
+            // 📳 修复：直接使用传过来的参数震动，而不是读本地配置
+            // 假设 WearVibratorHelper 有一个可以直接接收参数的方法
+            // 如果没有，你需要在 WearVibratorHelper 里加一个这样的方法
+            WearVibratorHelper.vibratePattern(this, onDuration, offDuration, repeatIndex);
+            WearLog.i(TAG, "🔄 收到预览指令，已触发即时自定义震动: on=" + onDuration + ", off=" + offDuration + ", repeat=" + repeatIndex);
+        } else if ("save".equalsIgnoreCase(action)) {
+            // 💾 持久化到手表本地
+            android.content.SharedPreferences sp = getSharedPreferences("wear_vibration_prefs", Context.MODE_PRIVATE);
+            sp.edit().putInt("on_duration", onDuration)
+                    .putInt("off_duration", offDuration)
+                    .putInt("repeat_index", repeatIndex)
+                    .apply();
+            // 刷新内存配置
+            WearVibratorHelper.initFromPhone(this);
+            WearLog.i(TAG, "💾 收到保存指令，配置参数已更新持久化");
+        }
+    }
+    return; // 震动指令处理完毕，直接返回
+}
 
-                        if ("preview".equalsIgnoreCase(action)) {
-                            // 📳 即时波形预览（不更改配置直接播放）
-                            WearVibratorHelper.vibratePattern(this);
-                            WearLog.i(TAG, "🔄 收到预览指令，已触发即时自定义震动");
-                        } else if ("save".equalsIgnoreCase(action)) {
-                            // 💾 持久化到手表本地
-                            android.content.SharedPreferences sp = getSharedPreferences("wear_vibration_prefs", Context.MODE_PRIVATE);
-                            sp.edit().putInt("on_duration", onDuration)
-                                     .putInt("off_duration", offDuration)
-                                     .putInt("repeat_index", repeatIndex)
-                                     .apply();
 
-                            // 刷新内存配置
-                            WearVibratorHelper.initFromPhone(this);
-                            WearLog.i(TAG, "💾 收到保存指令，配置参数已更新持久化");
-                        }
-                    }
-                    return; // 震动指令处理完毕，直接返回
-                }
                 // 3. 原有：勿扰同步包
                 if ("dnd".equalsIgnoreCase(type)) {
                     int dndStatePhone = json.optInt("dnd_state", -1);
