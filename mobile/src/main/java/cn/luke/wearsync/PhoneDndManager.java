@@ -1,46 +1,59 @@
 package cn.luke.wearsync;
 
-import android.content.Context;
 import android.app.NotificationManager;
+import android.content.Context;
 import android.content.SharedPreferences;
-import androidx.core.app.NotificationManagerCompat; // 确保导入这个
+import androidx.core.app.NotificationManagerCompat;
+import androidx.preference.PreferenceManager;
 import com.google.android.gms.tasks.Tasks;
 import com.google.android.gms.wearable.Wearable;
 import org.json.JSONObject;
 import java.nio.charset.StandardCharsets;
 
 /**
- * 🌓 勿扰与配置掩码核心业务专属管理器 (单包精简优化版)
+ * 🌓 勿扰与配置掩码核心业务专属管理器
+ * 职责：
+ * 1. 处理手表发来的逆向同步请求 (handleIncomingAction)
+ * 2. 处理手机 UI 或系统触发的正向同步请求 (syncDndToWear)
  */
 public class PhoneDndManager {
     private static final String TAG = "WearSync_PhoneDnd";
     private static final String PREFS_NAME = "dndsync_prefs";
     private static final String KEY_MASK = "dnd_sync_mask";
-    // ✅ 新增：定义读取间隔配置的键名
-    private static final String KEY_PULL_DOWN_DELAY = "screen_pull_down_interval"; 
+    private static final String KEY_PULL_DOWN_DELAY = "screen_pull_down_interval";
     private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
 
+    // ==========================================
+    // 1. 逆向同步入口 (手表 -> 手机)
+    // ==========================================
+    /**
+     * 处理手表发来的 DND 变更指令
+     * @param context 上下文
+     * @param wearSystemDndVal 手表当前的 DND 状态值 (目标值)
+     */
     public static void handleIncomingAction(Context context, int wearSystemDndVal) {
         PhoneLog.d(TAG, "📥 [逆向同步] 收到手表反向勿扰信令 ➔ 目标值 = " + wearSystemDndVal);
         try {
             NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
             if (nm != null) {
-                // 🎯 核心安全校驗：先獲取手機當前的 filter 狀態
+                // 🎯 核心安全校验：先获取手机当前的 filter 状态
                 int currentPhoneFilter = nm.getCurrentInterruptionFilter();
-                // 🎯 只有當手錶傳過來的狀態與手機當前狀態不相等時，才允許修改，原地攔截重複信號
+                
+                // 🎯 只有当手表传过来的状态与手机当前状态不相等时，才允许修改，原地拦截重复信号
                 if (currentPhoneFilter != wearSystemDndVal) {
                     boolean hasPermission = nm.isNotificationPolicyAccessGranted();
                     if (hasPermission) {
-                        // 🔒 關閉正向發射開關，告訴手機監聽器：「這是我自己改的，不要再發回給手錶了！」
-                        // （請確保您的 PhoneSyncNotificationService 裡有對齊這個 isInternalUpdate 變量）
-                        // PhoneSyncNotificationService.isInternalUpdate = true;
+                        // 🔒 关闭正向发射开关，告诉手机监听器：「这是我自己的改的，不要再发回给手表了！」
+                        // 注意：请确保 PhoneSyncNotificationService 中有对应的 isInternalUpdate 变量逻辑
+                        // PhoneSyncNotificationService.isInternalUpdate = true; 
+                        
                         nm.setInterruptionFilter(wearSystemDndVal);
                         PhoneLog.d(TAG, "✨ [逆向同步成功] 手机系统勿扰模式已成功设置为 = " + wearSystemDndVal);
                     } else {
                         PhoneLog.w(TAG, "⚠️ [逆向同步失败] 手机端缺乏 NotificationPolicyAccess 权限！");
                     }
                 } else {
-                    PhoneLog.d(TAG, "✅ [逆向同步攔截] 手機當前勿擾 Filter 已經是 " + wearSystemDndVal + "，判定為回流或重複信號，不作處理。");
+                    PhoneLog.d(TAG, "✅ [逆向同步拦截] 手机当前勿扰 Filter 已经是 " + wearSystemDndVal + "，判定为回流或重复信号，不作处理。");
                 }
             }
         } catch (Exception e) {
@@ -48,54 +61,36 @@ public class PhoneDndManager {
         }
     }
 
+    // ==========================================
+    // 2. 正向同步入口 (手机 -> 手表)
+    // ==========================================
+
     /**
-     * 🛰️ 正向同步：
-     * 手机勿扰状态 + 联动配置一次性发送给手表
-     * <p>
-     * 数据格式：
-     * <p>
-     * {
-     * sender:"phone",
-     * type:"dnd",
-     * <p>
-     * dnd_state:2,
-     * <p>
-     * mask:15
-     * }
-     * <p>
-     * mask:
-     * <p>
-     * Bit0 = 总同步开关
-     * Bit1 = 勿扰震动
-     * Bit2 = 睡眠模式联动
-     * Bit3 = 省电模式联动
+     * 场景 A：UI (MainFragment) 触发
+     * 用户在设置界面拖动滑块时调用。
+     * 逻辑：实时获取当前 DND 状态 + 使用 UI 传入的新间隔值 -> 发送
+     *
+     * @param context 上下文
+     * @param pullDownDelayMs UI 传入的最新间隔值
      */
-    // ✅ 修改：方法签名只接收 Context
-     /**
-     * 🛰️ 正向同步：
-     * 手机勿扰状态 + 联动配置一次性发送给手表
-     * <p>
-     * 注意：此方法由 UI (MainFragment) 调用，只传入了新的间隔值。
-     * DND 状态会在方法内部实时获取。
-     */
-    // ✅ 修改后：接收 Context 和 间隔值
     public static void syncDndToWear(Context context, int pullDownDelayMs) {
         new Thread(() -> {
             try {
                 // 1. 在内部实时获取勿扰状态 (不要依赖外部传进来的值)
                 int interruptionFilter = NotificationManagerCompat.from(context).getCurrentInterruptionFilter();
                 
-                // 2. 获取配置掩码
-                SharedPreferences sp = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-                int currentMask = sp.getInt(KEY_MASK, 15);
-                
-                // 3. 打包数据
+                // 2. 打包数据
                 JSONObject json = new JSONObject();
                 json.put("sender", "phone");
                 json.put("type", "dnd");
                 json.put("dnd_state", interruptionFilter); // ✅ 使用内部获取的值
-                json.put("mask", currentMask);
                 json.put("pullDownDelayMs", pullDownDelayMs); // ✅ 使用 UI 传进来的新值
+                
+                // 3. 读取掩码配置 (如果需要一并发送)
+                SharedPreferences sp = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+                int currentMask = sp.getInt(KEY_MASK, 15);
+                json.put("mask", currentMask);
+                
                 json.put("timestamp", System.currentTimeMillis());
 
                 byte[] data = json.toString().getBytes(StandardCharsets.UTF_8);
@@ -115,4 +110,50 @@ public class PhoneDndManager {
         }).start();
     }
 
+    /**
+     * 场景 B：系统监听器 (PhoneSyncNotificationService) 触发
+     * 当手机系统勿扰模式发生变化时调用。
+     * 逻辑：实时获取当前 DND 状态 + 读取本地保存的间隔配置 -> 发送
+     *
+     * @param context 上下文
+     */
+    public static void syncDndToWear(Context context) {
+        new Thread(() -> {
+            try {
+                // 1. 实时获取当前 DND 状态
+                int interruptionFilter = NotificationManagerCompat.from(context).getCurrentInterruptionFilter();
+                
+                // 2. 读取本地保存的间隔配置 (使用 PreferenceManager 读取 MainFragment 保存的值)
+                SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
+                int delay = sp.getInt(KEY_PULL_DOWN_DELAY, 500); // 默认 500ms
+                
+                // 3. 读取掩码配置
+                SharedPreferences spPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+                int currentMask = spPrefs.getInt(KEY_MASK, 15);
+
+                // 4. 打包发送
+                JSONObject json = new JSONObject();
+                json.put("sender", "phone");
+                json.put("type", "dnd");
+                json.put("dnd_state", interruptionFilter);
+                json.put("mask", currentMask);
+                json.put("pullDownDelayMs", delay);
+                json.put("timestamp", System.currentTimeMillis());
+
+                byte[] data = json.toString().getBytes(StandardCharsets.UTF_8);
+                String nodeId = WearSyncState.getNodeId(context);
+                
+                if (nodeId == null || nodeId.isEmpty()) {
+                    PhoneLog.w(TAG, "⚠️ [DND发送失败] NodeId为空");
+                    return;
+                }
+                
+                PhoneLog.d(TAG, "📤 [系统触发发送] dnd_state=" + interruptionFilter + " delay=" + delay);
+                Tasks.await(Wearable.getMessageClient(context).sendMessage(nodeId, UNIVERSAL_SYNC_PATH, data));
+                
+            } catch (Exception e) {
+                PhoneLog.e(TAG, "🔴 [DND发送异常]", e);
+            }
+        }).start();
+    }
 }
