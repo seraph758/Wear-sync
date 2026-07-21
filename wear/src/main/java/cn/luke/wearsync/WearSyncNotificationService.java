@@ -38,21 +38,14 @@ public class WearSyncNotificationService extends NotificationListenerService {
     }
 
     @Override
-    public void onInterruptionFilterChanged(int interruptionFilter) {
-        super.onInterruptionFilterChanged(interruptionFilter);
-        if (isInternalUpdate) {
-        
-            long delta =
-                    System.currentTimeMillis()
-                            - lastInternalUpdateTime;
-        
-            WearLog.d(TAG,
-                    "🔒 内部同步 "
-                    + delta
-                    + "ms");
-        
-            return;
-        }
-        sendDndReverseSyncToPhone(this, interruptionFilter);
+public void onInterruptionFilterChanged(int interruptionFilter) {
+    super.onInterruptionFilterChanged(interruptionFilter);
+    if (isInternalUpdate) {
+        long delta = System.currentTimeMillis() - lastInternalUpdateTime;
+        WearLog.d(TAG, "🔒 内部同步 " + delta + "ms");
+        return;
     }
+    // ✅ 修改：只传 this (Context)，不再传 interruptionFilter
+    sendDndReverseSyncToPhone(this); 
+}
 }
