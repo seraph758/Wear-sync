@@ -16,25 +16,25 @@ public class WearSyncNotificationService extends NotificationListenerService {
     public static long lastInternalUpdateTime = 0;
 
     public static void sendDndReverseSyncToPhone(Context context, int interruptionFilter) {
-        new Thread(() -> {
-            try {
-                JSONObject json = new JSONObject();
-                json.put("sender", "wear");
-                json.put("type", "dnd");
-                json.put("dnd_profile_value", interruptionFilter);
-                json.put("timestamp", System.currentTimeMillis());
+    new Thread(() -> {
+        try {
+            JSONObject json = new JSONObject();
+            json.put("sender", "wear");
+            json.put("type", "dnd");
+            json.put("dnd_profile_value", interruptionFilter); // ✅ 携带目标值
+            json.put("timestamp", System.currentTimeMillis());
 
-                byte[] data = json.toString().getBytes(StandardCharsets.UTF_8);
-                List<Node> nodes = Tasks.await(Wearable.getNodeClient(context).getConnectedNodes());
-                
-                for (Node node : nodes) {
-                    Tasks.await(Wearable.getMessageClient(context).sendMessage(node.getId(), UNIVERSAL_SYNC_PATH, data));
-                }
-                WearLog.d(TAG, "🚀 [逆向同步成功] 手表勿扰改变，已反向通知手机 ➔ " + interruptionFilter);
-            } catch (Exception e) {
-                WearLog.e(TAG, "❌ 手表投递反向勿扰信令失败", e);
+            byte[] data = json.toString().getBytes(StandardCharsets.UTF_8);
+            List<Node> nodes = Tasks.await(Wearable.getNodeClient(context).getConnectedNodes());
+            for (Node node : nodes) {
+                Tasks.await(Wearable.getMessageClient(context)
+                        .sendMessage(node.getId(), UNIVERSAL_SYNC_PATH, data));
             }
-        }).start();
+            WearLog.d(TAG, "🚀 [逆向同步] 手表DND=" + interruptionFilter + " 已通知手机");
+        } catch (Exception e) {
+            WearLog.e(TAG, "❌ 手表投递反向勿扰信令失败", e);
+        }
+    }).start();
     }
 
     @Override
@@ -46,6 +46,6 @@ public void onInterruptionFilterChanged(int interruptionFilter) {
         return;
     }
     // ✅ 修改：只传 this (Context)，不再传 interruptionFilter
-    sendDndReverseSyncToPhone(this); 
+    sendDndReverseSyncToPhone(this, interruptionFilter); 
 }
 }
