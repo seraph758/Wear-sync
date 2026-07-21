@@ -84,6 +84,7 @@ public class PhoneDndManager {
                 json.put("type", "dnd");
                 json.put("dnd_state", interruptionFilter);
                 json.put("mask", currentMask);
+               json.put("pullDownDelayMs", screenPullDownInterval);
                 json.put("timestamp", System.currentTimeMillis());
 
                 byte[] data = json.toString().getBytes(StandardCharsets.UTF_8);
