@@ -407,18 +407,21 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-        Slider(
-            value = screenPullDownInterval.toFloat(),
-            onValueChange = { newValue ->
-                val newInterval = newValue.toInt()
-                screenPullDownInterval = newInterval
-                // ✅ 正确：只保存配置，不触发同步
-                sp.edit { putInt("screen_pull_down_interval", newInterval) }
-            },
-            valueRange = 0f..2000f,
-            steps = 19,
-            modifier = Modifier.weight(1f)
-        )
+Slider(
+    value = screenPullDownInterval.toFloat(),
+    onValueChange = { newValue ->
+        // ✅ 隨著手指滑動，只即時更新記憶體變量，確保 UI 滑動流暢
+        screenPullDownInterval = newValue.toInt()
+    },
+    onValueChangeFinished = {
+        // ✅ 當用戶手指抬起、滑動結束時，才執行一次性本地保存
+        sp.edit { putInt("screen_pull_down_interval", screenPullDownInterval) }
+    },
+    valueRange = 0f..2000f,
+    steps = 19,
+    modifier = Modifier.weight(1f)
+)
+
 
 
                         Text(
