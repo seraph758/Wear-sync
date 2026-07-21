@@ -61,16 +61,16 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_17
-        targetCompatibility JavaVersion.VERSION_17
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
     }
 
     kotlinOptions {
-        jvmTarget = '17'
+        jvmTarget = '1.8'
     }
 }
 
-// 全局 Java 编译配置（对所有模块生效）
+// 全局 Java 编译配置
 tasks.withType(JavaCompile).configureEach {
     options.compilerArgs += ['-Xlint:deprecation', '-Xlint:unchecked']
     options.deprecation = true
@@ -81,7 +81,7 @@ dependencies {
     implementation 'com.google.android.material:material:1.12.0'
     implementation 'androidx.preference:preference-ktx:1.2.1'
 
-    // 🔥 Wear OS 6 官方最新依赖
+    // 🔥 Wear OS 6 官方最新依赖（纯 Java）
     implementation 'androidx.wear:wear:1.4.0'
     implementation "androidx.wear:wear-remote-interactions:1.2.0"
     implementation 'androidx.percentlayout:percentlayout:1.0.0'
@@ -90,12 +90,6 @@ dependencies {
     implementation 'androidx.core:core-ktx:1.12.0'
 
     implementation 'com.google.android.gms:play-services-wearable:20.0.1'
-
-    def camerax_version = "1.4.2"
-    implementation "androidx.camera:camera-core:${camerax_version}"
-    implementation "androidx.camera:camera-camera2:${camerax_version}"
-    implementation "androidx.camera:camera-lifecycle:${camerax_version}"
-    implementation "androidx.camera:camera-extensions:${camerax_version}"
 
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
