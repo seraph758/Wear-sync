@@ -67,6 +67,7 @@ import androidx.compose.ui.unit.widthIn
 import androidx.compose.ui.text.style.TextAlign
 import kotlinx.coroutines.tasks.await
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.widthIn
 
 
 
@@ -783,7 +784,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                                     if (!isCameraAllowedState.value) {
                                                         Button(onClick = { requestCameraPermissionLauncher.launch(Manifest.permission.CAMERA) }, contentPadding = PaddingValues(horizontal = 6.dp), modifier = Modifier.align(Alignment.End).height(26.dp)) { Text("授相机", fontSize = 10.sp) }
                                                     } else {
-                                                        Text("🟢 已放放行", fontSize = 11.sp, color = Color(0xFF4CAF50), modifier = Modifier.align(Alignment.End))
+                                                        Text("🟢 已放行", fontSize = 11.sp, color = Color(0xFF4CAF50), modifier = Modifier.align(Alignment.End))
                                                     }
                                                 }
                                             }
