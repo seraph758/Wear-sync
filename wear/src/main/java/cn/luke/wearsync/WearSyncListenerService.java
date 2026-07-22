@@ -176,6 +176,8 @@ public class WearSyncListenerService extends WearableListenerService {
                     } else {
                         // 🔴 关闭日志传输的完整逻辑
                         WearLog.d(TAG, "🛑 收到关闭日志指令，正在执行清理...");
+                          // ✅ 新增：从源头关闭日志开关，彻底停止日志生成
+                          WearLog.DEBUG = false;
 
                         // 1. 停止 WearLog 向 OutputStream 写入
                         WearLog.setLogOutputStream(null);
