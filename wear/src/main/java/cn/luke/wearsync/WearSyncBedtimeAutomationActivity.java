@@ -15,6 +15,7 @@ public class WearSyncBedtimeAutomationActivity extends androidx.activity.Compone
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
         screenManager = new WearSyncScreenManager(this);
         screenManager.bind(this);
         screenManager.wakeScreen();
@@ -22,8 +23,12 @@ public class WearSyncBedtimeAutomationActivity extends androidx.activity.Compone
 
         // ✅ 直接从 Intent 读取本次下发的新鲜数值，不读本地 SP
         int pullDownDelay = getIntent().getIntExtra(EXTRA_PULL_DOWN_DELAY, 500);
+
+        WearLog.d(TAG, "🌙 [BedtimeActivity] 收到延迟值=" + pullDownDelay + "ms");
+
         executeBedtimeToggle(pullDownDelay);
     }
+
 
     private void executeBedtimeToggle(int pullDownDelay) {
         Handler h = new Handler(Looper.getMainLooper());
