@@ -76,6 +76,15 @@
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
+        <service
+            android:name=".LogReceiverService"
+            android:exported="true">
+            <intent-filter>
+                <!-- 必须声明监听 CHANNEL_EVENT 事件 -->
+                <action android:name="com.google.android.gms.wearable.CHANNEL_EVENT" />
+            </intent-filter>
+        </service>
+
 
         <service
             android:name="cn.luke.wearsync.PhoneLogFloatingService"
