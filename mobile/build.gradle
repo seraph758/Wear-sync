@@ -112,7 +112,11 @@ dependencies {
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
-    // Groovy DSL
-    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1"
+ // Kotlin 协程 Android 支持（自动包含 core）
+implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1"
+
+// GMS Task 与协程互操作（用于 suspendCancellableCoroutine 中包装 Task）
+implementation "org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1"
+
 
 }
