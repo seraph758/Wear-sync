@@ -151,12 +151,12 @@ public class WearSyncListenerService extends WearableListenerService {
                     boolean wearDebug = json.optBoolean("wear_log_debug", true);
                     WearLog.DEBUG = wearDebug;
                     WearLog.d(TAG, "🎛️ [远程同步] 接收到手机端远程控场，手表日志开闭状态同步修改为 ➔ " + wearDebug);
-                
+
                     if (wearDebug) {
                         // ✅ 1. 先建立数据通道
                         String logPath = DATA_CHANNEL_BASE_PATH + "/log";
                         openLogChannelToPhone(messageEvent.getSourceNodeId(), logPath);
-                        
+
                         // ✅ 2. 再发送一个手机能识别的“握手”信令，通知手机准备接收
                         try {
                             JSONObject handshakeJson = new JSONObject();
@@ -176,26 +176,28 @@ public class WearSyncListenerService extends WearableListenerService {
                     } else {
                         // 🔴 关闭日志传输的完整逻辑
                         WearLog.d(TAG, "🛑 收到关闭日志指令，正在执行清理...");
-                
+
                         // 1. 停止 WearLog 向 OutputStream 写入
                         WearLog.setLogOutputStream(null);
-                
+
                         // 2. 主动关闭手表端的日志通道
                         if (mLogChannel != null) {
                             Wearable.getChannelClient(this).close(mLogChannel)
-                                .addOnSuccessListener(aVoid -> {
-                                    WearLog.d(TAG, "✅ 日志通道已关闭: " + mLogChannel.getPath());
-                                    mLogChannel = null; // 关闭后清空引用
-                                })
-                                .addOnFailureListener(e -> WearLog.e(TAG, "❌ 关闭日志通道失败", e));
+                                    .addOnSuccessListener(aVoid -> {
+                                        WearLog.d(TAG, "✅ 日志通道已关闭: " + mLogChannel.getPath());
+                                        mLogChannel = null; // 关闭后清空引用
+                                    })
+                                    .addOnFailureListener(e -> WearLog.e(TAG, "❌ 关闭日志通道失败", e));
                         } else {
                             WearLog.d(TAG, "⚠️ 尝试关闭日志通道，但通道引用为空，可能尚未建立或已关闭");
                         }
                     }
-                    
+
                     // ✅ 关键：处理完 wearlog 指令后直接 return，防止代码继续往下执行
-                    return; 
-                } catch (Exception e) {
+                    return;
+                } // 🔴 这里补上缺失的右大括号，用来闭合最外层的 if ("wearlog"...)
+
+            } catch (Exception e) {
                 WearLog.e(TAG, "🔴 解析手机发往手表的指令崩溃: " + e.getMessage(), e);
             }
         }
