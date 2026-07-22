@@ -173,24 +173,27 @@ public class WearSyncListenerService extends WearableListenerService {
                         } catch (Exception e) {
                             WearLog.e(TAG, "发送日志通道握手信令失败", e);
                         }
-                    } else {
-                        // 🔴 关闭日志传输的完整逻辑
-                        WearLog.d(TAG, "🛑 收到关闭日志指令，正在执行清理...");
-                          // ✅ 新增：从源头关闭日志开关，彻底停止日志生成
-                          WearLog.DEBUG = false;
+                    } } else {
+    WearLog.d(TAG, "🛑 收到关闭日志指令，正在执行清理...");
 
-                        // 1. 停止 WearLog 向 OutputStream 写入
-                        WearLog.setLogOutputStream(null);
+    // ✅ 只需这一行：从源头关闭，d/i/w/e 全部静默
+    WearLog.DEBUG = false;
 
-                        // 2. 主动关闭手表端的日志通道
-                        if (mLogChannel != null) {
-                            Wearable.getChannelClient(this).close(mLogChannel)
-                                    .addOnSuccessListener(aVoid -> {
-                                        WearLog.d(TAG, "✅ 日志通道已关闭: " + mLogChannel.getPath());
-                                        mLogChannel = null; // 关闭后清空引用
-                                    })
-                                    .addOnFailureListener(e -> WearLog.e(TAG, "❌ 关闭日志通道失败", e));
-                        } else {
+    // ✅ 保留通道关闭：释放系统资源（这是 Channel API 层面的清理，与日志内容无关）
+    if (mLogChannel != null) {
+        Wearable.getChannelClient(this).close(mLogChannel)
+                .addOnSuccessListener(aVoid -> {
+                    // ⚠️ 此时 DEBUG=false，这条日志不会输出，但回调仍会执行
+                    mLogChannel = null;
+                })
+                .addOnFailureListener(e -> {
+                    // 如果需要在关闭过程中记录错误，可临时恢复 DEBUG
+                    // 或直接使用原生 Log.e
+                    Log.e(TAG, "❌ 关闭日志通道失败", e);
+                });
+    }
+}
+ else {
                             WearLog.d(TAG, "⚠️ 尝试关闭日志通道，但通道引用为空，可能尚未建立或已关闭");
                         }
                     }
