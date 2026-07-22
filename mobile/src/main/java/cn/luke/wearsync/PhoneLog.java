@@ -4,20 +4,24 @@ import android.content.Context;
 import android.os.Environment;
 import android.util.Log;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.FileReader;
 import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 
 import timber.log.Timber;
 
 /**
  * 手机端日志管理器（Timber 代理版）
- * ✅ 所有 d/w/e/clear/exportBackupFile 方法签名保持不变
+ * ✅ 所有 d/w/e/clear/exportBackupFile/getLatestTenMinutesLogs 方法签名保持不变
  * ✅ 外部调用方零改动
  */
 public class PhoneLog {
@@ -138,6 +142,40 @@ public class PhoneLog {
         }
     }
 
+    /**
+     * 获取最近10分钟的日志内容（供UI展示）
+     * ✅ 返回 List<String>，无参数，兼容 Kotlin 调用方
+     */
+    public static List<String> getLatestTenMinutesLogs() {
+        List<String> result = new ArrayList<>();
+        if (phoneLogFile == null || !phoneLogFile.exists()) {
+            return result;
+        }
+
+        long tenMinAgo = System.currentTimeMillis() - 10 * 60 * 1000L;
+
+        try (BufferedReader reader = new BufferedReader(new FileReader(phoneLogFile))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                // 日志格式: "2026-07-22 23:10:26.SSS D/TAG: message"
+                try {
+                    String timeStr = line.substring(0, 19); // "2026-07-22 23:10:26"
+                    SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US);
+                    long logTime = sdf.parse(timeStr).getTime();
+                    if (logTime >= tenMinAgo) {
+                        result.add(line);
+                    }
+                } catch (Exception e) {
+                    // 无法解析时间戳的行，保守保留
+                    result.add(line);
+                }
+            }
+        } catch (IOException e) {
+            Log.e(TAG, "读取日志失败", e);
+        }
+        return result;
+    }
+
     // ==================== 内部实现 ====================
 
     private static String getSystemTime() {
@@ -197,28 +235,6 @@ public class PhoneLog {
             writeToFile(file, line, t);
         }
     }
-/**
- * 获取最近10分钟的日志内容（供UI展示）
- */
-public static String getLatestTenMinutesLogs(Context context) {
-    File logFile = new File(context.getExternalFilesDir(null), "phone_log.txt");
-    if (!logFile.exists()) return "";
-
-    long tenMinAgo = System.currentTimeMillis() - 10 * 60 * 1000;
-    StringBuilder sb = new StringBuilder();
-
-    try (BufferedReader reader = new BufferedReader(new FileReader(logFile))) {
-        String line;
-        while ((line = reader.readLine()) != null) {
-            // 简单按时间戳前缀过滤，格式需匹配你的日志输出格式
-            // 如果日志格式不含时间戳，则直接返回最后N行
-            sb.append(line).append("\n");
-        }
-    } catch (IOException e) {
-        Log.e("PhoneLog", "读取日志失败", e);
-    }
-    return sb.toString();
-}
 
     /** 通用文件写入（追加模式） */
     private static synchronized void writeToFile(File file, String line, Throwable t) {
