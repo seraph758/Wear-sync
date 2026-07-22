@@ -108,7 +108,10 @@ FloatingActionButton(
                             contentColor = Color.White,
                             modifier = Modifier.size(42.dp)
                         ) {
-                            Icon(Icons.Default.PanTool, "切换为悬浮窗", modifier = Modifier.size(18.dp))
+    // ✅ 用 OpenWith 表示"切换窗口模式"，语义合适且一定存在
+Icon(Icons.Default.OpenWith, "切换为悬浮窗", modifier = Modifier.size(18.dp))
+
+                            
                         }
                         FloatingActionButton(
                             onClick = { PhoneLog.clear(); logLines = emptyList() },
