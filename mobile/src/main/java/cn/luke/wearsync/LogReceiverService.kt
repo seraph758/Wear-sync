@@ -1,12 +1,13 @@
 package cn.luke.wearsync
 
 import android.util.Log
-import com.google.android.gms.tasks.Tasks
 import com.google.android.gms.wearable.ChannelClient
 import com.google.android.gms.wearable.Wearable
 import com.google.android.gms.wearable.WearableListenerService
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -14,31 +15,39 @@ import java.io.InputStream
 import java.nio.charset.StandardCharsets
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
-import androidx.lifecycle.lifecycleScope // ✅ 导入 lifecycleScope
 
 class LogReceiverService : WearableListenerService() {
+
+    // ✅ 修复1: WearableListenerService 没有 lifecycleScope，必须手动创建 Job 和 Scope
+    private val serviceJob = Job()
+    private val serviceScope = CoroutineScope(Dispatchers.IO + serviceJob)
 
     override fun onChannelOpened(channel: ChannelClient.Channel) {
         super.onChannelOpened(channel)
         Log.d("LogReceiver", "📥 通道已打开: ${channel.path}")
 
         if (channel.path == "/wear_data_channel/log") {
-            // ✅ 使用 lifecycleScope 替代手动创建的 scope
-            // 它会在 Service 销毁时自动取消协程，防止内存泄漏
-            lifecycleScope.launch(Dispatchers.IO) {
+            // ✅ 修复2: 使用手动创建的 serviceScope 启动协程
+            serviceScope.launch {
                 var inputStream: InputStream? = null
                 try {
+                    // 在协程内部调用挂起函数，解决 "should be called only from a coroutine" 错误
                     inputStream = getInputStreamSuspend(channel)
                     Log.d("LogReceiver", "🟢 成功获取输入流")
 
                     val buffer = ByteArray(4096)
-                    var readBytes: Int
-                    // 循环读取数据块
+                    // ✅ 修复3: Kotlin 要求变量必须初始化
+                    var readBytes: Int = -1
+
+                    // ✅ 修复4: 在协程作用域内，isActive 可以被正确解析
                     while (isActive && inputStream.read(buffer).also { readBytes = it } != -1) {
                         val logChunk = String(buffer, 0, readBytes, StandardCharsets.UTF_8)
                         PhoneLog.appendFromRemote(logChunk)
                     }
                     Log.d("LogReceiver", "🔌 输入流已关闭")
+                } catch (e: CancellationException) {
+                    // 协程被正常取消时，不需要打印错误日志
+                    Log.d("LogReceiver", "⚠️ 日志读取协程已被取消")
                 } catch (e: Exception) {
                     Log.e("LogReceiver", "❌ 读取日志流时出错", e)
                 } finally {
@@ -52,19 +61,29 @@ class LogReceiverService : WearableListenerService() {
         }
     }
 
-    // ✅ onDestroy 方法不再需要，因为 lifecycleScope 会自动处理协程的取消
+    override fun onDestroy() {
+        super.onDestroy()
+        // ✅ 修复5: Job.cancel() 需要传入 CancellationException 参数
+        serviceJob.cancel(CancellationException("LogReceiverService is being destroyed"))
+    }
 
-    // ✅ 新增：一个挂起函数，用于以 Kotlin 协程的方式获取 InputStream
+    /**
+     * 将基于回调的 getInputStream 转换为 Kotlin 挂起函数
+     */
     private suspend fun getInputStreamSuspend(channel: ChannelClient.Channel): InputStream {
         return suspendCancellableCoroutine { continuation ->
-            val task = Wearable.getChannelClient(this).getInputStream(channel)
+            val task = Wearable.getChannelClient(this@LogReceiverService).getInputStream(channel)
             task.addOnSuccessListener { inputStream ->
-                continuation.resume(inputStream)
+                if (continuation.isActive) {
+                    continuation.resume(inputStream)
+                }
             }.addOnFailureListener { exception ->
-                continuation.resumeWithException(exception)
+                if (continuation.isActive) {
+                    continuation.resumeWithException(exception)
+                }
             }
 
-            // 如果协程被取消，也取消这个任务
+            // 如果协程被取消，同步取消底层的 GMS Task
             continuation.invokeOnCancellation {
                 task.cancel()
             }
