@@ -86,6 +86,9 @@ public class PhoneDndManager {
      * 仅在手机系统勿扰模式发生变化时调用
      */
     public static void syncDndToWear(Context context) {
+                // ✅ 初始化SP实例（整个方法复用）
+                SharedPreferences spPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+                int currentMask = spPrefs.getInt(KEY_MASK, 15);
         new Thread(() -> {
             try {
                 // 1. 实时获取当前 DND 状态
@@ -93,13 +96,9 @@ public class PhoneDndManager {
 
                 // 2. ✅ 实时读取用户刚滑动保存的最新延迟值
                 int delay = spPrefs.getInt(KEY_PULL_DOWN_DELAY, 500);
-PhoneLog.d("PullDownDelay", "实际读取延迟: " + delay + "ms");
+PhoneLog.d("PullDownDelay", "实际读取延迟: " + delay + "ms");             
 
-                // 3. 读取掩码配置
-                SharedPreferences spPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-                int currentMask = spPrefs.getInt(KEY_MASK, 15);
-
-                // 4. 打包发送（状态+最新延迟作为一个完整载荷）
+                // 3. 打包发送（状态+最新延迟作为一个完整载荷）
                 JSONObject json = new JSONObject();
                 json.put("sender", "phone");
                 json.put("type", "dnd");
