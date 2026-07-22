@@ -15,6 +15,9 @@ import org.json.JSONObject;
 
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import android.util.Log;
+
+
 
 public class WearSyncListenerService extends WearableListenerService {
 
