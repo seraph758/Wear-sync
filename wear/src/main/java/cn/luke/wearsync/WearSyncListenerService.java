@@ -155,16 +155,12 @@ public class WearSyncListenerService extends WearableListenerService {
                         // ✅ 1. 先建立数据通道
                         String logPath = DATA_CHANNEL_BASE_PATH + "/log";
                         openLogChannelToPhone(messageEvent.getSourceNodeId(), logPath);
-
                         // ✅ 2. 再发送一个手机能识别的“握手”信令，通知手机准备接收
                         try {
                             JSONObject handshakeJson = new JSONObject();
                             handshakeJson.put("sender", "wear");
-                            // 使用手机已知的类型，比如 "camera"
                             handshakeJson.put("type", "camera");
-                            // 使用一个专门的 action 来标识这是日志通道的握手
                             handshakeJson.put("action", "LOG_CHANNEL_HANDSHAKE");
-
                             Wearable.getMessageClient(this)
                                     .sendMessage(
                                             messageEvent.getSourceNodeId(),
@@ -176,7 +172,25 @@ public class WearSyncListenerService extends WearableListenerService {
                             WearLog.e(TAG, "发送日志通道握手信令失败", e);
                         }
                     } else {
+                        // 🔴 新增：关闭日志传输的完整逻辑
+                        WearLog.d(TAG, "🛑 收到关闭日志指令，正在执行清理...");
+
+                        // 1. 停止 WearLog 向 OutputStream 写入
                         WearLog.setLogOutputStream(null);
+
+                        // 2. 主动关闭手表端的日志通道
+                        // 我们需要获取所有已打开的通道，并关闭我们用于日志的那个
+                        Wearable.getChannelClient(this).getLocalChannels()
+                                .addOnSuccessListener(channels -> {
+                                    String logPath = DATA_CHANNEL_BASE_PATH + "/log";
+                                    for (ChannelClient.Channel channel : channels) {
+                                        if (logPath.equals(channel.getPath())) {
+                                            Wearable.getChannelClient(this).close(channel);
+                                            WearLog.d(TAG, "✅ 日志通道已关闭: " + channel.getPath());
+                                            break;
+                                        }
+                                    }
+                                });
                     }
                     return;
                 }
