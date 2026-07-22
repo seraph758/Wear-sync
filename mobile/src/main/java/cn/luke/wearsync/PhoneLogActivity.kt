@@ -108,27 +108,29 @@ Button(
     Text("切换悬浮窗", fontSize = 12.sp) // 直接显示文字
 }
 
-                        FloatingActionButton(
-                            onClick = { PhoneLog.clear(); logLines = emptyList() },
-                            containerColor = Color(0xFF3A3A3C),
-                            contentColor = Color.White,
-                            modifier = Modifier.size(42.dp)
-                        ) {
-                            Icon(Icons.Default.Delete, "清空", modifier = Modifier.size(18.dp))
-                        }
-                        FloatingActionButton(
-                            onClick = {
-                                val backup = PhoneLog.exportBackupFile()
-                                if (backup != null) {
-                                    Toast.makeText(context, "备份成功！", Toast.LENGTH_LONG).show()
-                                }
-                            },
-                            containerColor = Color(0xFF007AFF),
-                            contentColor = Color.White,
-                            modifier = Modifier.size(42.dp)
-                        ) {
-                            Icon(Icons.Default.Check, "保存备份", modifier = Modifier.size(18.dp))
-                        }
+                        // 清空按钮
+Button(
+    onClick = { PhoneLog.clear(); logLines = emptyList() },
+    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3A3A3C)),
+    modifier = Modifier.height(42.dp)
+) {
+    Text("清空", fontSize = 12.sp)
+}
+
+// 保存备份按钮
+Button(
+    onClick = {
+        val backup = PhoneLog.exportBackupFile()
+        if (backup != null) {
+            Toast.makeText(context, "备份成功！", Toast.LENGTH_LONG).show()
+        }
+    },
+    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF007AFF)),
+    modifier = Modifier.height(42.dp)
+) {
+    Text("保存备份", fontSize = 12.sp)
+}
+
                     }
                 }
             }
