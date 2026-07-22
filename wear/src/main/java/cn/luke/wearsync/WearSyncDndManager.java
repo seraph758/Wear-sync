@@ -56,9 +56,13 @@ public class WearSyncDndManager {
     /**
      * ✅ 兼容旧调用：使用默认延迟值 500ms
      */
-    public static void executeDndSync(Context context, int dndStatePhone) {
-        executeDndSync(context, dndStatePhone, 500);
-    }
+ public static void executeDndSync(Context context, int dndStatePhone) {
+    // ✅ 在兜底方法内部自动读取SP，杜绝硬编码遗漏
+    SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
+    int pullDownDelay = sp.getInt("screen_pull_down_interval", 500);
+    executeDndSync(context, dndStatePhone, pullDownDelay);
+}
+
 
     /**
      * ✅ 新增：带延迟参数的重载方法
