@@ -94,6 +94,7 @@ public class PhoneDndManager {
                 // 2. ✅ 实时读取用户刚滑动保存的最新延迟值
                 SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
                 int delay = sp.getInt(KEY_PULL_DOWN_DELAY, 500);
+PhoneLog.d("PullDownDelay", "实际读取延迟: " + delay + "ms");
 
                 // 3. 读取掩码配置
                 SharedPreferences spPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
