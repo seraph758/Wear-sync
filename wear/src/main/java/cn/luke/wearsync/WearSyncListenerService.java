@@ -189,7 +189,7 @@ if ("wearlog".equalsIgnoreCase(type)) {
                     .addOnSuccessListener(aVoid -> {
                         mLogChannel = null;
                     })
-                    .addOnFailureListener(e -> {
+                    .addOnFailureListener((Exception e) -> {
                         Log.e(TAG, "❌ 关闭日志通道失败", e);
                     });
         } else {
