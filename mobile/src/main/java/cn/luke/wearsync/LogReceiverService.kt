@@ -15,6 +15,8 @@ import java.io.InputStream
 import java.nio.charset.StandardCharsets
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import kotlinx.coroutines.cancel
+
 
 class LogReceiverService : WearableListenerService() {
 
@@ -34,7 +36,8 @@ class LogReceiverService : WearableListenerService() {
                     Log.d("LogReceiver", "🟢 成功获取输入流")
 
                     val buffer = ByteArray(4096)
-                    var readBytes: Int
+                    var readBytes: Int = -1
+
                     // 循环读取数据块
                     while (isActive && inputStream.read(buffer).also { readBytes = it } != -1) {
                         val logChunk = String(buffer, 0, readBytes, StandardCharsets.UTF_8)
