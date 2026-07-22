@@ -12,6 +12,8 @@ import android.provider.Settings;
 import android.widget.Toast;
 import org.json.JSONObject;
 import cn.luke.wearsync.WearSyncBedtimeAutomationActivity;
+import android.content.SharedPreferences;
+import android.preference.PreferenceManager;
 
 
 
