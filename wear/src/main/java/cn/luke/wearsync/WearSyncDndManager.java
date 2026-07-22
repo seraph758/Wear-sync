@@ -53,7 +53,18 @@ public class WearSyncDndManager {
                         + " 省电=" + isPowerSaveLinkageOpen);
     }
 
+    /**
+     * ✅ 兼容旧调用：使用默认延迟值 500ms
+     */
     public static void executeDndSync(Context context, int dndStatePhone) {
+        executeDndSync(context, dndStatePhone, 500);
+    }
+
+    /**
+     * ✅ 新增：带延迟参数的重载方法
+     * 用于接收手机端下发的最新 pullDownDelayMs 并透传给 BedtimeAutomationActivity
+     */
+    public static void executeDndSync(Context context, int dndStatePhone, int pullDownDelayMs) {
         if (!isSyncAllowed) {
             WearLog.w(TAG, "🛑 [DND拦截] 总开关关闭");
             return;
@@ -77,7 +88,7 @@ public class WearSyncDndManager {
             WearLog.d(TAG, "⚡ [DND变化] 开始同步");
         }
 
-        // 假设项目中依然有这两个变量，如果有报错可以移除
+        // 标记内部更新，防止通知监听器重复触发
         WearSyncNotificationService.isInternalUpdate = true;
         WearSyncNotificationService.lastInternalUpdateTime = System.currentTimeMillis();
 
@@ -86,8 +97,12 @@ public class WearSyncDndManager {
             vibrate(context);
         }
 
+        // ✅ 睡眠联动：透传最新的下拉延迟值给 Activity
         if (isSleepLinkageOpen) {
-            toggleBedtimeMode(context);
+            Intent intent = new Intent(context, WearSyncBedtimeAutomationActivity.class);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            intent.putExtra("extra_pull_down_delay", pullDownDelayMs);
+            context.startActivity(intent);
         }
 
         if (isPowerSaveLinkageOpen) {
@@ -97,7 +112,7 @@ public class WearSyncDndManager {
                     Settings.Global.putInt(context.getContentResolver(), "low_power", enable ? 1 : 0);
                     context.sendBroadcast(new Intent(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED));
                     WearLog.d(TAG, "🔋 [省电异步同步] " + (enable ? "开启" : "关闭"));
-                } catch(Exception e){
+                } catch (Exception e) {
                     WearLog.e(TAG, "❌ [省电同步失败] " + e.getMessage());
                 }
             }, 5500);
@@ -111,6 +126,7 @@ public class WearSyncDndManager {
             WearSyncNotificationService.isInternalUpdate = false;
         }, 7000);
     }
+
 
     private static void toggleBedtimeMode(Context context) {
     // 🚀 修正：真正加上無障礙服務的狀態檢查判斷
