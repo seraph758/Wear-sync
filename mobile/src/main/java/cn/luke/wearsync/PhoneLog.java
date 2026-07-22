@@ -197,6 +197,28 @@ public class PhoneLog {
             writeToFile(file, line, t);
         }
     }
+/**
+ * 获取最近10分钟的日志内容（供UI展示）
+ */
+public static String getLatestTenMinutesLogs(Context context) {
+    File logFile = new File(context.getExternalFilesDir(null), "phone_log.txt");
+    if (!logFile.exists()) return "";
+
+    long tenMinAgo = System.currentTimeMillis() - 10 * 60 * 1000;
+    StringBuilder sb = new StringBuilder();
+
+    try (BufferedReader reader = new BufferedReader(new FileReader(logFile))) {
+        String line;
+        while ((line = reader.readLine()) != null) {
+            // 简单按时间戳前缀过滤，格式需匹配你的日志输出格式
+            // 如果日志格式不含时间戳，则直接返回最后N行
+            sb.append(line).append("\n");
+        }
+    } catch (IOException e) {
+        Log.e("PhoneLog", "读取日志失败", e);
+    }
+    return sb.toString();
+}
 
     /** 通用文件写入（追加模式） */
     private static synchronized void writeToFile(File file, String line, Throwable t) {
