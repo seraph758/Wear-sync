@@ -236,6 +236,12 @@ public class PhoneSyncListenerService extends WearableListenerService {
      
             return;
         }
+        if ("LOG_CHANNEL_HANDSHAKE".equalsIgnoreCase(action)) {
+            PhoneLog.d(TAG, "🤝 收到手表日志通道握手，数据通道已准备就绪！");
+            // 这里不需要做任何事，onChannelOpened 会处理流的读取
+            // 打印这条日志就证明“数据路”也通了
+            return;
+        }
      
         PhoneLog.w(TAG,
                 "unknown camera action: "

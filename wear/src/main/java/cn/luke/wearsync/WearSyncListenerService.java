@@ -146,13 +146,35 @@ public class WearSyncListenerService extends WearableListenerService {
                     }
                 }
                 // 6. 原有：手飙日志无线远程联控模组
-                if ("wearlog".equalsIgnoreCase(type)) { // ✅ 修正1: 匹配正确的信令类型 "wearlog"
+                if ("wearlog".equalsIgnoreCase(type)) {
                     boolean wearDebug = json.optBoolean("wear_log_debug", true);
                     WearLog.DEBUG = wearDebug;
                     WearLog.d(TAG, "🎛️ [远程同步] 接收到手机端远程控场，手表日志开闭状态同步修改为 ➔ " + wearDebug);
+
                     if (wearDebug) {
-                        // ✅ 修正2: 使用新的数据通道路径
-                        openLogChannelToPhone(messageEvent.getSourceNodeId(), DATA_CHANNEL_BASE_PATH + "/log");
+                        // ✅ 1. 先建立数据通道
+                        String logPath = DATA_CHANNEL_BASE_PATH + "/log";
+                        openLogChannelToPhone(messageEvent.getSourceNodeId(), logPath);
+
+                        // ✅ 2. 再发送一个手机能识别的“握手”信令，通知手机准备接收
+                        try {
+                            JSONObject handshakeJson = new JSONObject();
+                            handshakeJson.put("sender", "wear");
+                            // 使用手机已知的类型，比如 "camera"
+                            handshakeJson.put("type", "camera");
+                            // 使用一个专门的 action 来标识这是日志通道的握手
+                            handshakeJson.put("action", "LOG_CHANNEL_HANDSHAKE");
+
+                            Wearable.getMessageClient(this)
+                                    .sendMessage(
+                                            messageEvent.getSourceNodeId(),
+                                            UNIVERSAL_SYNC_PATH,
+                                            handshakeJson.toString().getBytes(StandardCharsets.UTF_8)
+                                    );
+                            WearLog.d(TAG, "📡 已发送日志通道握手信令");
+                        } catch (Exception e) {
+                            WearLog.e(TAG, "发送日志通道握手信令失败", e);
+                        }
                     } else {
                         WearLog.setLogOutputStream(null);
                     }
@@ -211,17 +233,24 @@ public class WearSyncListenerService extends WearableListenerService {
     }
 
     // 修改方法签名，增加 path 参数
-    private void openLogChannelToPhone(String phoneNodeId, String path) {
-        WearLog.d(TAG, "🔌 正在尝试与手机建立日志专属 Channel 管道: " + path);
+    /**
+     * ⚠️ 仅用于日志传输！
+     * 日志是唯一由手表主动向手机推送的数据流
+     */
+    private void openLogChannelToPhone(String phoneNodeId, String logPath) {
+        WearLog.d(TAG, "🔌 正在建立日志 Channel: " + logPath);
+
         Wearable.getChannelClient(this)
-                .openChannel(phoneNodeId, path) // ✅ 使用传入的 path 参数
-                .addOnSuccessListener(channel -> Wearable.getChannelClient(this)
-                        .getOutputStream(channel)
-                        .addOnSuccessListener(outputStream -> {
-                            WearLog.setLogOutputStream(outputStream);
-                            WearLog.d(TAG, "🟢 成功与手机建立日志 Channel 传输通道！");
-                        })
+                .openChannel(phoneNodeId, logPath)
+                .addOnSuccessListener(channel ->
+                        Wearable.getChannelClient(this)
+                                .getOutputStream(channel)
+                                .addOnSuccessListener(outputStream -> {
+                                    WearLog.setLogOutputStream(outputStream);
+                                    WearLog.d(TAG, "🟢 日志输出通道就绪");
+                                })
+                                .addOnFailureListener(e -> WearLog.e(TAG, "❌ 获取日志输出流失败", e))
                 )
-                .addOnFailureListener(e -> WearLog.e(TAG, "❌ 建立日志通道失败: " + e.getMessage()));
+                .addOnFailureListener(e -> WearLog.e(TAG, "❌ 建立日志通道失败", e));
     }
 }
