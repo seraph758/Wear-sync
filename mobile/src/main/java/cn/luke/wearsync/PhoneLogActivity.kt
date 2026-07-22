@@ -21,6 +21,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
+import android.content.Intent
 
 class PhoneLogActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -96,6 +97,19 @@ class PhoneLogActivity : ComponentActivity() {
                         .padding(16.dp)
                 ) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+FloatingActionButton(
+                            onClick = {
+                                // 启动悬浮窗服务
+                                startService(Intent(this@PhoneLogActivity, PhoneLogFloatingService::class.java))
+                                // 关闭当前全屏 Activity
+                                finish()
+                            },
+                            containerColor = Color(0xFF8E44AD), // 用一个不同的颜色，比如紫色
+                            contentColor = Color.White,
+                            modifier = Modifier.size(42.dp)
+                        ) {
+                            Icon(Icons.Default.PanTool, "切换为悬浮窗", modifier = Modifier.size(18.dp))
+                        }
                         FloatingActionButton(
                             onClick = { PhoneLog.clear(); logLines = emptyList() },
                             containerColor = Color(0xFF3A3A3C),
