@@ -26,7 +26,6 @@ import android.content.Intent
 class PhoneLogActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        PhoneLog.initDirectories()
         setContent {
             val context = LocalContext.current
             var logLines by remember { mutableStateOf(listOf<String>()) }
