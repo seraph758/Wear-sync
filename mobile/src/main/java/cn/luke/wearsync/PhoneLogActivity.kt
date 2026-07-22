@@ -21,21 +21,17 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 class PhoneLogActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         PhoneLog.initDirectories()
-  setContent {
+        setContent {
             val context = LocalContext.current
             var logLines by remember { mutableStateOf(listOf<String>()) }
             val listState = rememberLazyListState()
 
-            // 定时去底层统一池子里同步 10 分钟数据即可，不需要自己再算逻辑
+            // 定时同步日志
             LaunchedEffect(Unit) {
                 while (true) {
                     val freshLogs = PhoneLog.getLatestTenMinutesLogs()
@@ -46,36 +42,54 @@ class PhoneLogActivity : ComponentActivity() {
                 }
             }
 
+            // 自动滚动到底部
             LaunchedEffect(logLines.size) {
                 if (logLines.isNotEmpty()) {
                     listState.animateScrollToItem(logLines.lastIndex)
                 }
             }
 
-            Box(modifier = Modifier.fillMaxSize().background(Color(0xFF101012))) {
+            // 现代化深色主题背景
+            Box(modifier = Modifier.fillMaxSize().background(Color(0xFF121212))) {
                 androidx.compose.foundation.text.selection.SelectionContainer {
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 80.dp)
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
                     ) {
                         items(logLines.size) { index ->
                             val line = logLines[index]
                             val isWear = line.contains("[WEAR]")
                             val isError = line.contains(" E/") || line.contains("Error")
+
+                            // 🎨 现代化配色方案
                             val textColor = when {
-                                isError -> Color(0xFFFF5252)
-                                isWear -> Color(0xFF00B0FF)
-                                else -> Color(0xFF00E676)
+                                isError -> Color(0xFFFF6B6B) // 错误：亮红色
+                                isWear -> Color(0xFF60A5FA)  // 手表：蓝色
+                                else -> Color(0xFF4ADE80)    // 手机：绿色
                             }
-                            Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 3.dp)) {
-                                Text(text = line, color = textColor, fontSize = 11.sp, fontFamily = FontFamily.Monospace, lineHeight = 14.sp)
+                            val bgColor = if (isWear) Color(0xFF0A1628).copy(alpha = 0.4f) else Color.Transparent
+
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 2.dp)
+                                    .background(bgColor, shape = MaterialTheme.shapes.small)
+                                    .padding(horizontal = 8.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = line,
+                                    color = textColor,
+                                    fontSize = 11.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    lineHeight = 14.sp
+                                )
                             }
                         }
                     }
                 }
 
-                // 3. 右下角控制浮动按钮组（清空、保存备份）
+                // 底部操作按钮
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
@@ -84,7 +98,7 @@ class PhoneLogActivity : ComponentActivity() {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FloatingActionButton(
                             onClick = { PhoneLog.clear(); logLines = emptyList() },
-                            containerColor = Color(0xFF2C2C30),
+                            containerColor = Color(0xFF3A3A3C),
                             contentColor = Color.White,
                             modifier = Modifier.size(42.dp)
                         ) {
