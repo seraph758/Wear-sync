@@ -97,22 +97,17 @@ class PhoneLogActivity : ComponentActivity() {
                         .padding(16.dp)
                 ) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-FloatingActionButton(
-                            onClick = {
-                                // 启动悬浮窗服务
-                                startService(Intent(this@PhoneLogActivity, PhoneLogFloatingService::class.java))
-                                // 关闭当前全屏 Activity
-                                finish()
-                            },
-                            containerColor = Color(0xFF8E44AD), // 用一个不同的颜色，比如紫色
-                            contentColor = Color.White,
-                            modifier = Modifier.size(42.dp)
-                        ) {
-    // ✅ 用 OpenWith 表示"切换窗口模式"，语义合适且一定存在
-Icon(Icons.Default.Settings, "切换为悬浮窗", modifier = Modifier.size(18.dp))
+Button(
+    onClick = {
+        startService(Intent(this@PhoneLogActivity, PhoneLogFloatingService::class.java))
+        finish()
+    },
+    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8E44AD)),
+    modifier = Modifier.height(42.dp) // 保持和之前 FAB 差不多的高度
+) {
+    Text("切换悬浮窗", fontSize = 12.sp) // 直接显示文字
+}
 
-                            
-                        }
                         FloatingActionButton(
                             onClick = { PhoneLog.clear(); logLines = emptyList() },
                             containerColor = Color(0xFF3A3A3C),
