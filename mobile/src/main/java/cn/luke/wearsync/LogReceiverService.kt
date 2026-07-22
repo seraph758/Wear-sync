@@ -1,6 +1,7 @@
 package cn.luke.wearsync
 
 import android.util.Log
+import com.google.android.gms.tasks.Tasks
 import com.google.android.gms.wearable.ChannelClient
 import com.google.android.gms.wearable.Wearable
 import com.google.android.gms.wearable.WearableListenerService
@@ -9,10 +10,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.InputStream
 import java.nio.charset.StandardCharsets
-
-// ... 其他导入保持不变
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 class LogReceiverService : WearableListenerService() {
 
@@ -27,8 +29,8 @@ class LogReceiverService : WearableListenerService() {
             scope.launch {
                 var inputStream: InputStream? = null
                 try {
-                    val inputStreamTask = Wearable.getChannelClient(this@LogReceiverService).getInputStream(channel)
-                    inputStream = Tasks.await(inputStreamTask)
+                    // ✅ 使用 suspendCancellableCoroutine 包装 getInputStream，代码更简洁
+                    inputStream = getInputStreamSuspend(channel)
                     Log.d("LogReceiver", "🟢 成功获取输入流")
 
                     val buffer = ByteArray(4096)
@@ -36,10 +38,6 @@ class LogReceiverService : WearableListenerService() {
                     // 循环读取数据块
                     while (isActive && inputStream.read(buffer).also { readBytes = it } != -1) {
                         val logChunk = String(buffer, 0, readBytes, StandardCharsets.UTF_8)
-                        
-                        // ✅ 关键修改：将接收到的数据块交给 PhoneLog 处理
-                        // 注意：网络流读取是按数据块（chunk）进行的，一行日志可能会被分在两个块里。
-                        // 这里的实现假设 appendFromRemote 能处理这种情况，或者手表端是按行发送的。
                         PhoneLog.appendFromRemote(logChunk)
                     }
                     Log.d("LogReceiver", "🔌 输入流已关闭")
@@ -59,5 +57,22 @@ class LogReceiverService : WearableListenerService() {
     override fun onDestroy() {
         super.onDestroy()
         job.cancel()
+    }
+
+    // ✅ 新增：一个挂起函数，用于以 Kotlin 协程的方式获取 InputStream
+    private suspend fun getInputStreamSuspend(channel: ChannelClient.Channel): InputStream {
+        return suspendCancellableCoroutine { continuation ->
+            val task = Wearable.getChannelClient(this).getInputStream(channel)
+            task.addOnSuccessListener { inputStream ->
+                continuation.resume(inputStream)
+            }.addOnFailureListener { exception ->
+                continuation.resumeWithException(exception)
+            }
+            
+            // 如果协程被取消，也取消这个任务
+            continuation.invokeOnCancellation {
+                task.cancel()
+            }
+        }
     }
 }
