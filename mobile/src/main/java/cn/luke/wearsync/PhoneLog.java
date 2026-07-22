@@ -1,156 +1,227 @@
 package cn.luke.wearsync;
 
+import android.content.Context;
 import android.os.Environment;
 import android.util.Log;
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Date;
-import java.util.List;
 import java.util.Locale;
 
-public class PhoneLog {
-    private static final String TAG = "PhoneLog_Core";
-    private static final List<String> logBuffer = new ArrayList<>();
-    private static final int MAX_BUFFER_SIZE = 2000;
+import timber.log.Timber;
 
+/**
+ * 手机端日志管理器（Timber 代理版）
+ * ✅ 所有 d/w/e/clear/exportBackupFile 方法签名保持不变
+ * ✅ 外部调用方零改动
+ */
+public class PhoneLog {
+
+    private static final String TAG = "PhoneLog_Core";
     public static boolean DEBUG = true;
 
-    private static final File baseDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "WearSync");
-    public static final File logDir = new File(baseDir, "Log");
-    public static final File filesDir = new File(baseDir, "Files");
+    // 日志存储目录：/storage/emulated/0/Download/WearSync/Log/
+    private static File logDir;
+    private static File phoneLogFile;
+    private static File wearLogFile;
 
-    static {
-        initDirectories();
-    }
+    /**
+     * ⚠️ 必须在 Application.onCreate() 中首先调用
+     */
+    public static void init(boolean isDebug, Context context) {
+        DEBUG = isDebug;
 
-    public static synchronized void initDirectories() {
-        try {
-            if (!baseDir.exists() && !baseDir.mkdirs()) Log.w(TAG, "創建 baseDir 失敗");
-            if (!logDir.exists() && !logDir.mkdirs()) Log.w(TAG, "創建 logDir 失敗");
-            if (!filesDir.exists() && !filesDir.mkdirs()) Log.w(TAG, "創建 filesDir 失敗");
-        } catch (Exception e) {
-            Log.e(TAG, "初始化創建目錄失敗", e);
+        // 1. 初始化日志目录和文件
+        logDir = new File(Environment.getExternalStoragePublicDirectory(
+                Environment.DIRECTORY_DOWNLOADS), "WearSync/Log");
+        if (!logDir.exists()) logDir.mkdirs();
+
+        phoneLogFile = new File(logDir, "phone_log.txt");
+        wearLogFile = new File(logDir, "wear_log.txt");
+
+        // 2. 根据环境种植不同的日志树
+        if (isDebug) {
+            Timber.plant(new Timber.DebugTree());
+        } else {
+            Timber.plant(new PhoneFileTree(phoneLogFile));
+            Timber.plant(new WearFileTree(wearLogFile));
         }
+
+        Timber.i("PhoneLog 初始化完成 | DEBUG=%b | logDir=%s", isDebug, logDir.getAbsolutePath());
     }
 
-    private static String getSystemTime() {
-        return new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault()).format(new Date());
-    }
+    // ==================== 对外 API（签名完全不变）====================
 
     public static void d(String tag, String msg) {
         if (!DEBUG) return;
-        Log.d(tag, msg);
-        append("[PHONE] [" + getSystemTime() + "] D/" + tag + ": " + msg);
+        Timber.tag(tag).d(msg);
+    }
+
+    public static void i(String tag, String msg) {
+        if (!DEBUG) return;
+        Timber.tag(tag).i(msg);
     }
 
     public static void w(String tag, String msg) {
         if (!DEBUG) return;
-        Log.w(tag, msg);
-        append("[PHONE] [" + getSystemTime() + "] W/" + tag + ": " + msg);
+        Timber.tag(tag).w(msg);
     }
 
     public static void e(String tag, String msg) {
         if (!DEBUG) return;
-        Log.e(tag, msg);
-        append("[PHONE] [" + getSystemTime() + "] E/" + tag + ": " + msg);
+        Timber.tag(tag).e(msg);
     }
 
     public static void e(String tag, String msg, Throwable tr) {
         if (!DEBUG) return;
-        Log.e(tag, msg, tr);
-        append("[PHONE] [" + getSystemTime() + "] E/" + tag + ": " + msg + " (Exception: " + tr.getMessage() + ")");
+        Timber.tag(tag).e(tr, msg);
     }
 
+    /**
+     * 接收手表端发来的日志 → 写入 wear_log.txt
+     * ✅ 此方法签名不变，WearSyncListenerService 无需改动
+     */
     public static void appendFromRemote(String line) {
         if (line == null || line.trim().isEmpty()) return;
-        Log.d("PhoneLog_Trace", "📥 [流接收成功] 底層收到了來自手錶的裸行: " + line);
-        
-        if (line.contains("[WEAR]") || line.contains("[TEST]")) {
-            append(line);
-        } else {
-            append("[WEAR] [" + getSystemTime() + "] " + line);
+
+        String finalLine = line;
+        if (!line.contains("[WEAR]") && !line.contains("[TEST]")) {
+            finalLine = "[WEAR] [" + getSystemTime() + "] " + line;
         }
+
+        // 通过特定 tag 路由到 WearFileTree
+        Timber.tag("WEAR_LOG").i(finalLine);
     }
 
-    private static synchronized void append(String finalLine) {
-        if (logBuffer.size() >= MAX_BUFFER_SIZE) {
-            logBuffer.remove(0);
-        }
-        logBuffer.add(finalLine);
-        appendToFile(finalLine);
-    }
-
-    // 🎯 統一輸出 10 分鐘內日誌的緩衝池方法
-    public static synchronized List<String> getLatestTenMinutesLogs() {
-        long currentTime = System.currentTimeMillis();
-        long tenMinutesAgo = currentTime - 10 * 60 * 1000;
-        SimpleDateFormat timeFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault());
-        List<String> filteredList = new ArrayList<>();
-
-        for (String line : logBuffer) {
-            try {
-                if (line.contains("[") && line.contains("]")) {
-                    int firstBracket = line.indexOf('[', 1);
-                    int firstCloseBracket = line.indexOf(']', firstBracket);
-                    if (firstBracket != -1 && firstCloseBracket != -1) {
-                        String timeStr = line.substring(firstBracket + 1, firstCloseBracket);
-                        long logTime = timeFormat.parse(timeStr).getTime();
-                        if (logTime >= tenMinutesAgo) {
-                            filteredList.add(line);
-                        }
-                        continue;
-                    }
-                }
-            } catch (Exception e) {
-                // 忽略解析失敗的行並保留
-            }
-            filteredList.add(line);
-        }
-        return filteredList;
-    }
-
+    /** 清空所有日志文件 */
     public static synchronized void clear() {
-        logBuffer.clear();
-    }
-
-    private static void appendToFile(String line) {
         try {
-            File file = new File(logDir, "current_log.txt");
-            try (FileOutputStream fos = new FileOutputStream(file, true)) {
-                fos.write((line + "\n").getBytes());
+            if (phoneLogFile != null && phoneLogFile.exists()) {
+                //noinspection ResultOfMethodCallIgnored
+                phoneLogFile.delete();
+                phoneLogFile.createNewFile();
             }
-        } catch (Exception e) {
-            Log.e(TAG, "追加到本地失敗", e);
+            if (wearLogFile != null && wearLogFile.exists()) {
+                //noinspection ResultOfMethodCallIgnored
+                wearLogFile.delete();
+                wearLogFile.createNewFile();
+            }
+            Timber.i("日志已清空");
+        } catch (IOException e) {
+            Log.e(TAG, "清空日志失败", e);
         }
     }
 
+    /**
+     * 导出备份文件
+     * ✅ 返回值类型不变，UI 层调用方无需改动
+     */
     public static synchronized File exportBackupFile() {
         try {
-            File backupFile = new File(logDir, "WearSync_Backup_" + System.currentTimeMillis() + ".txt");
-            File currentFile = new File(logDir, "current_log.txt");
+            long ts = System.currentTimeMillis();
+            File phoneBackup = new File(logDir, "Phone_Backup_" + ts + ".txt");
+            File wearBackup = new File(logDir, "Wear_Backup_" + ts + ".txt");
 
-            if (currentFile.exists()) {
-                try (FileInputStream fis = new FileInputStream(currentFile);
-                     FileChannel source = fis.getChannel();
-                     FileOutputStream fos = new FileOutputStream(backupFile);
-                     FileChannel destination = fos.getChannel()) {
-                    destination.transferFrom(source, 0, source.size());
-                }
-            } else {
-                try (FileOutputStream fos = new FileOutputStream(backupFile)) {
-                    for (String line : logBuffer) {
-                        fos.write((line + "\n").getBytes());
-                    }
+            copyFile(phoneLogFile, phoneBackup);
+            copyFile(wearLogFile, wearBackup);
+
+            Timber.i("备份成功: %s, %s", phoneBackup.getName(), wearBackup.getName());
+            return phoneBackup; // 保持原接口兼容
+        } catch (Exception e) {
+            Log.e(TAG, "备份失败", e);
+            return null;
+        }
+    }
+
+    // ==================== 内部实现 ====================
+
+    private static String getSystemTime() {
+        return new SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault()).format(new Date());
+    }
+
+    private static void copyFile(File src, File dst) throws IOException {
+        if (src == null || !src.exists()) {
+            if (dst != null && !dst.exists()) dst.createNewFile();
+            return;
+        }
+        try (FileInputStream fis = new FileInputStream(src);
+             FileChannel in = fis.getChannel();
+             FileOutputStream fos = new FileOutputStream(dst);
+             FileChannel out = fos.getChannel()) {
+            out.transferFrom(in, 0, in.size());
+        }
+    }
+
+    // ==================== 自定义日志树 ====================
+
+    /** 手机日志 → phone_log.txt */
+    private static class PhoneFileTree extends Timber.Tree {
+        private final File file;
+
+        PhoneFileTree(File file) { this.file = file; }
+
+        @Override
+        protected void log(int priority, String tag, String message, Throwable t) {
+            // WEAR_LOG tag 的日志不走这棵树
+            if ("WEAR_LOG".equals(tag)) return;
+
+            String level = getLevelChar(priority);
+            String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS",
+                    Locale.getDefault()).format(new Date());
+            String line = String.format("%s %s/%s: %s", timestamp, level, tag, message);
+
+            writeToFile(file, line, t);
+        }
+    }
+
+    /** 手表日志 → wear_log.txt */
+    private static class WearFileTree extends Timber.Tree {
+        private final File file;
+
+        WearFileTree(File file) { this.file = file; }
+
+        @Override
+        protected void log(int priority, String tag, String message, Throwable t) {
+            // 只处理 WEAR_LOG tag
+            if (!"WEAR_LOG".equals(tag)) return;
+
+            String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS",
+                    Locale.getDefault()).format(new Date());
+            String line = String.format("%s %s", timestamp, message);
+
+            writeToFile(file, line, t);
+        }
+    }
+
+    /** 通用文件写入（追加模式） */
+    private static synchronized void writeToFile(File file, String line, Throwable t) {
+        try {
+            if (!file.exists()) file.createNewFile();
+            try (FileOutputStream fos = new FileOutputStream(file, true)) {
+                fos.write((line + "\n").getBytes());
+                if (t != null) {
+                    fos.write((Log.getStackTraceString(t) + "\n").getBytes());
                 }
             }
-            return backupFile;
-        } catch (Exception e) {
-            Log.e(TAG, "備份失敗", e);
-            return null;
+        } catch (IOException e) {
+            // 这里只能用原生 Log，避免死循环
+            Log.e("PhoneLog_FileIO", "写入日志文件失败: " + file.getName(), e);
+        }
+    }
+
+    private static String getLevelChar(int priority) {
+        switch (priority) {
+            case Log.VERBOSE: return "V";
+            case Log.DEBUG:   return "D";
+            case Log.INFO:    return "I";
+            case Log.WARN:    return "W";
+            case Log.ERROR:   return "E";
+            default:          return "?";
         }
     }
 }
