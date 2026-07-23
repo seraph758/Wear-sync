@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
@@ -21,30 +22,22 @@ import timber.log.Timber;
 
 /**
  * 手机端日志管理器（Timber 代理版）
- * ✅ 所有 d/w/e/clear/exportBackupFile/getLatestTenMinutesLogs/isWearLog 方法签名保持不变
- * ✅ 外部调用方零改动
  */
 public class PhoneLog {
     private static final String TAG = "PhoneLog_Core";
     public static boolean DEBUG = true;
-    // 日志存储目录：/storage/emulated/0/Download/WearSync/Log/
     private static File logDir;
     private static File phoneLogFile;
     private static File wearLogFile;
 
-    /**
-     * ⚠️ 必须在 Application.onCreate() 中首先调用
-     */
     public static void init(boolean isDebug, Context context) {
         DEBUG = isDebug;
-        // 1. 初始化日志目录和文件
         logDir = new File(Environment.getExternalStoragePublicDirectory(
                 Environment.DIRECTORY_DOWNLOADS), "WearSync/Log");
         if (!logDir.exists()) logDir.mkdirs();
         phoneLogFile = new File(logDir, "phone_log.txt");
         wearLogFile = new File(logDir, "wear_log.txt");
 
-        // 2. 根据环境种植不同的日志树
         if (isDebug) {
             Timber.plant(new Timber.DebugTree());
         } else {
@@ -54,7 +47,7 @@ public class PhoneLog {
         Timber.i("PhoneLog 初始化完成 | DEBUG=%b | logDir=%s", isDebug, logDir.getAbsolutePath());
     }
 
-    // ==================== 对外 API（签名完全不变）====================
+    // ==================== 对外 API ====================
     public static void d(String tag, String msg) {
         if (!DEBUG) return;
         Timber.tag(tag).d(msg);
@@ -81,8 +74,7 @@ public class PhoneLog {
     }
 
     /**
-     * 🎯 【新增】判断一行日志是否来自手表
-     * Kotlin 端通过 PhoneLog.isWearLog(line) 调用
+     * 🎯 判断一行日志是否来自手表
      */
     public static boolean isWearLog(String line) {
         return line != null && line.contains("[WEAR]");
@@ -90,15 +82,10 @@ public class PhoneLog {
 
     /**
      * 接收手表端发来的日志
-     * 修改点：调用 formatWearLogLine 进行格式化和清洗，确保格式统一
      */
     public static void appendFromRemote(String line) {
         if (line == null || line.trim().isEmpty()) return;
-
-        // 核心修改：使用统一的格式化方法
         String finalLine = formatWearLogLine(line);
-
-        // 通过特定 tag 路由到 WearFileTree
         Timber.tag("WEAR_LOG").i(finalLine);
     }
 
@@ -106,12 +93,10 @@ public class PhoneLog {
     public static synchronized void clear() {
         try {
             if (phoneLogFile != null && phoneLogFile.exists()) {
-                //noinspection ResultOfMethodCallIgnored
                 phoneLogFile.delete();
                 phoneLogFile.createNewFile();
             }
             if (wearLogFile != null && wearLogFile.exists()) {
-                //noinspection ResultOfMethodCallIgnored
                 wearLogFile.delete();
                 wearLogFile.createNewFile();
             }
@@ -123,7 +108,6 @@ public class PhoneLog {
 
     /**
      * 导出备份文件
-     * ✅ 返回值类型不变，UI 层调用方无需改动
      */
     public static synchronized File exportBackupFile() {
         try {
@@ -133,7 +117,7 @@ public class PhoneLog {
             copyFile(phoneLogFile, phoneBackup);
             copyFile(wearLogFile, wearBackup);
             Timber.i("备份成功: %s, %s", phoneBackup.getName(), wearBackup.getName());
-            return phoneBackup; // 保持原接口兼容
+            return phoneBackup;
         } catch (Exception e) {
             Log.e(TAG, "备份失败", e);
             return null;
@@ -141,22 +125,44 @@ public class PhoneLog {
     }
 
     /**
-     * 获取最近10分钟的日志内容（供UI展示）
-     * ✅ 返回 List<String>，无参数，兼容 Kotlin 调用方
+     * ✅ 【核心修复】获取最近10分钟的日志内容（手机+手表合并）
+     * 同时读取 phone_log.txt 和 wear_log.txt，合并后按时间戳排序返回
      */
     public static List<String> getLatestTenMinutesLogs() {
         List<String> result = new ArrayList<>();
-        if (phoneLogFile == null || !phoneLogFile.exists()) {
-            return result;
-        }
         long tenMinAgo = System.currentTimeMillis() - 10 * 60 * 1000L;
-        try (BufferedReader reader = new BufferedReader(new FileReader(phoneLogFile))) {
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US);
+
+        // 1. 读取手机日志
+        readLogsFromFile(phoneLogFile, tenMinAgo, sdf, result);
+
+        // 2. ✅ 新增：读取手表日志
+        readLogsFromFile(wearLogFile, tenMinAgo, sdf, result);
+
+        // 3. ✅ 新增：按时间戳排序，保证双端日志交错显示时顺序正确
+        Collections.sort(result, (a, b) -> {
+            try {
+                String timeA = a.substring(0, 19);
+                String timeB = b.substring(0, 19);
+                return timeA.compareTo(timeB);
+            } catch (Exception e) {
+                return 0;
+            }
+        });
+
+        return result;
+    }
+
+    /**
+     * ✅ 新增：从指定日志文件中读取最近10分钟的日志
+     */
+    private static void readLogsFromFile(File file, long tenMinAgo, SimpleDateFormat sdf, List<String> result) {
+        if (file == null || !file.exists()) return;
+        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
             String line;
             while ((line = reader.readLine()) != null) {
-                // 日志格式: "2026-07-22 23:10:26.SSS D/TAG: message"
                 try {
-                    String timeStr = line.substring(0, 19); // "2026-07-22 23:10:26"
-                    SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US);
+                    String timeStr = line.substring(0, 19);
                     long logTime = sdf.parse(timeStr).getTime();
                     if (logTime >= tenMinAgo) {
                         result.add(line);
@@ -167,48 +173,29 @@ public class PhoneLog {
                 }
             }
         } catch (IOException e) {
-            Log.e(TAG, "读取日志失败", e);
+            Log.e(TAG, "读取日志文件失败: " + file.getName(), e);
         }
-        return result;
     }
 
-    // ==================== 新增的日志处理逻辑 ====================
+    // ==================== 日志格式化 ====================
 
-    /**
-     * 格式化从手表传来的日志行
-     * 1. 统一添加 [WEAR] 前缀，便于筛选
-     * 2. 清洗重复的时间戳，只保留一个
-     * @param rawLine 从手表接收到的原始日志字符串
-     * @return 格式化后的日志字符串
-     */
     private static String formatWearLogLine(String rawLine) {
         String line = rawLine.trim();
-        String finalLine;
-
-        // 正则表达式匹配 "[WEAR] [时间戳]" 或 "[时间戳]" 的模式
-        // 例如: "[WEAR] [2026-07-23 01:47:47.749]" 或 "[2026-07-23 01:47:47.749]"
         Pattern pattern = Pattern.compile("(\\[WEAR\\]\\s*)?(\\[\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3}\\])\\s*");
         Matcher matcher = pattern.matcher(line);
 
         if (matcher.find()) {
-            // 如果匹配到时间戳，将其移除，只保留后面的日志内容
             String contentAfterTimestamp = line.substring(matcher.end()).trim();
-            finalLine = "[WEAR] " + contentAfterTimestamp;
+            return "[WEAR] " + contentAfterTimestamp;
         } else {
-            // 如果没有匹配到标准时间戳格式，直接加上 [WEAR] 前缀
             if (!line.startsWith("[WEAR]")) {
-                finalLine = "[WEAR] " + line;
-            } else {
-                finalLine = line;
+                return "[WEAR] " + line;
             }
+            return line;
         }
-        return finalLine;
     }
 
     // ==================== 内部实现 ====================
-    private static String getSystemTime() {
-        return new SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault()).format(new Date());
-    }
 
     private static void copyFile(File src, File dst) throws IOException {
         if (src == null || !src.exists()) {
@@ -224,17 +211,13 @@ public class PhoneLog {
     }
 
     // ==================== 自定义日志树 ====================
-    /** 手机日志 → phone_log.txt */
+
     private static class PhoneFileTree extends Timber.Tree {
         private final File file;
-
-        PhoneFileTree(File file) {
-            this.file = file;
-        }
+        PhoneFileTree(File file) { this.file = file; }
 
         @Override
         protected void log(int priority, String tag, String message, Throwable t) {
-            // WEAR_LOG tag 的日志不走这棵树
             if ("WEAR_LOG".equals(tag)) return;
             String level = getLevelChar(priority);
             String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault()).format(new Date());
@@ -243,26 +226,19 @@ public class PhoneLog {
         }
     }
 
-    /** 手表日志 → wear_log.txt */
     private static class WearFileTree extends Timber.Tree {
         private final File file;
-
-        WearFileTree(File file) {
-            this.file = file;
-        }
+        WearFileTree(File file) { this.file = file; }
 
         @Override
         protected void log(int priority, String tag, String message, Throwable t) {
-            // 只处理 WEAR_LOG tag
             if (!"WEAR_LOG".equals(tag)) return;
             String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault()).format(new Date());
-            // 此时 message 已经是格式化好的 "[WEAR] ..." 形式，直接追加时间戳即可
             String line = String.format("%s %s", timestamp, message);
             writeToFile(file, line, t);
         }
     }
 
-    /** 通用文件写入（追加模式） */
     private static synchronized void writeToFile(File file, String line, Throwable t) {
         try {
             if (!file.exists()) file.createNewFile();
@@ -273,25 +249,19 @@ public class PhoneLog {
                 }
             }
         } catch (IOException e) {
-            // 这里只能用原生 Log，避免死循环
             Log.e("PhoneLog_FileIO", "写入日志文件失败: " + file.getName(), e);
         }
     }
 
     private static String getLevelChar(int priority) {
         switch (priority) {
-            case Log.VERBOSE:
-                return "V";
-            case Log.DEBUG:
-                return "D";
-            case Log.INFO:
-                return "I";
-            case Log.WARN:
-                return "W";
-            case Log.ERROR:
-                return "E";
-            default:
-                return "?";
+            case Log.VERBOSE: return "V";
+            case Log.DEBUG:   return "D";
+            case Log.INFO:    return "I";
+            case Log.WARN:    return "W";
+            case Log.ERROR:   return "E";
+            default:          return "?";
         }
     }
 }
+
