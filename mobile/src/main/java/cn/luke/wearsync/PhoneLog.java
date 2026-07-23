@@ -20,9 +20,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import timber.log.Timber;
 
-/**
- * 手机端日志管理器（Timber 代理版）
- */
 public class PhoneLog {
     private static final String TAG = "PhoneLog_Core";
     public static boolean DEBUG = true;
@@ -38,12 +35,15 @@ public class PhoneLog {
         phoneLogFile = new File(logDir, "phone_log.txt");
         wearLogFile = new File(logDir, "wear_log.txt");
 
+        // ✅ 【核心修复】无论 Debug/Release 都注册文件树，确保日志写入文件
+        Timber.plant(new PhoneFileTree(phoneLogFile));
+        Timber.plant(new WearFileTree(wearLogFile));
+
+        // Debug 模式下额外注册控制台树，方便 Logcat 查看
         if (isDebug) {
             Timber.plant(new Timber.DebugTree());
-        } else {
-            Timber.plant(new PhoneFileTree(phoneLogFile));
-            Timber.plant(new WearFileTree(wearLogFile));
         }
+
         Timber.i("PhoneLog 初始化完成 | DEBUG=%b | logDir=%s", isDebug, logDir.getAbsolutePath());
     }
 
@@ -73,23 +73,16 @@ public class PhoneLog {
         Timber.tag(tag).e(tr, msg);
     }
 
-    /**
-     * 🎯 判断一行日志是否来自手表
-     */
     public static boolean isWearLog(String line) {
         return line != null && line.contains("[WEAR]");
     }
 
-    /**
-     * 接收手表端发来的日志
-     */
     public static void appendFromRemote(String line) {
         if (line == null || line.trim().isEmpty()) return;
         String finalLine = formatWearLogLine(line);
         Timber.tag("WEAR_LOG").i(finalLine);
     }
 
-    /** 清空所有日志文件 */
     public static synchronized void clear() {
         try {
             if (phoneLogFile != null && phoneLogFile.exists()) {
@@ -107,13 +100,14 @@ public class PhoneLog {
     }
 
     /**
-     * 导出备份文件
+     * ✅ 【修复1】备份文件名改为可读系统时间格式
      */
     public static synchronized File exportBackupFile() {
         try {
-            long ts = System.currentTimeMillis();
-            File phoneBackup = new File(logDir, "Phone_Backup_" + ts + ".txt");
-            File wearBackup = new File(logDir, "Wear_Backup_" + ts + ".txt");
+            String timeStr = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
+                    .format(new Date());
+            File phoneBackup = new File(logDir, "Phone_Backup_" + timeStr + ".txt");
+            File wearBackup = new File(logDir, "Wear_Backup_" + timeStr + ".txt");
             copyFile(phoneLogFile, phoneBackup);
             copyFile(wearLogFile, wearBackup);
             Timber.i("备份成功: %s, %s", phoneBackup.getName(), wearBackup.getName());
@@ -124,22 +118,14 @@ public class PhoneLog {
         }
     }
 
-    /**
-     * ✅ 【核心修复】获取最近10分钟的日志内容（手机+手表合并）
-     * 同时读取 phone_log.txt 和 wear_log.txt，合并后按时间戳排序返回
-     */
     public static List<String> getLatestTenMinutesLogs() {
         List<String> result = new ArrayList<>();
         long tenMinAgo = System.currentTimeMillis() - 10 * 60 * 1000L;
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US);
 
-        // 1. 读取手机日志
         readLogsFromFile(phoneLogFile, tenMinAgo, sdf, result);
-
-        // 2. ✅ 新增：读取手表日志
         readLogsFromFile(wearLogFile, tenMinAgo, sdf, result);
 
-        // 3. ✅ 新增：按时间戳排序，保证双端日志交错显示时顺序正确
         Collections.sort(result, (a, b) -> {
             try {
                 String timeA = a.substring(0, 19);
@@ -153,9 +139,6 @@ public class PhoneLog {
         return result;
     }
 
-    /**
-     * ✅ 新增：从指定日志文件中读取最近10分钟的日志
-     */
     private static void readLogsFromFile(File file, long tenMinAgo, SimpleDateFormat sdf, List<String> result) {
         if (file == null || !file.exists()) return;
         try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
@@ -168,7 +151,6 @@ public class PhoneLog {
                         result.add(line);
                     }
                 } catch (Exception e) {
-                    // 无法解析时间戳的行，保守保留
                     result.add(line);
                 }
             }
@@ -178,7 +160,6 @@ public class PhoneLog {
     }
 
     // ==================== 日志格式化 ====================
-
     private static String formatWearLogLine(String rawLine) {
         String line = rawLine.trim();
         Pattern pattern = Pattern.compile("(\\[WEAR\\]\\s*)?(\\[\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3}\\])\\s*");
@@ -188,15 +169,11 @@ public class PhoneLog {
             String contentAfterTimestamp = line.substring(matcher.end()).trim();
             return "[WEAR] " + contentAfterTimestamp;
         } else {
-            if (!line.startsWith("[WEAR]")) {
-                return "[WEAR] " + line;
-            }
-            return line;
+            return line.startsWith("[WEAR]") ? line : "[WEAR] " + line;
         }
     }
 
     // ==================== 内部实现 ====================
-
     private static void copyFile(File src, File dst) throws IOException {
         if (src == null || !src.exists()) {
             if (dst != null && !dst.exists()) dst.createNewFile();
@@ -211,7 +188,6 @@ public class PhoneLog {
     }
 
     // ==================== 自定义日志树 ====================
-
     private static class PhoneFileTree extends Timber.Tree {
         private final File file;
         PhoneFileTree(File file) { this.file = file; }
