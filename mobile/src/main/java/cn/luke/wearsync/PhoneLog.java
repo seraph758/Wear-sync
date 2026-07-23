@@ -21,7 +21,7 @@ import timber.log.Timber;
 
 /**
  * 手机端日志管理器（Timber 代理版）
- * ✅ 所有 d/w/e/clear/exportBackupFile/getLatestTenMinutesLogs 方法签名保持不变
+ * ✅ 所有 d/w/e/clear/exportBackupFile/getLatestTenMinutesLogs/isWearLog 方法签名保持不变
  * ✅ 外部调用方零改动
  */
 public class PhoneLog {
@@ -78,6 +78,14 @@ public class PhoneLog {
     public static void e(String tag, String msg, Throwable tr) {
         if (!DEBUG) return;
         Timber.tag(tag).e(tr, msg);
+    }
+
+    /**
+     * 🎯 【新增】判断一行日志是否来自手表
+     * Kotlin 端通过 PhoneLog.isWearLog(line) 调用
+     */
+    public static boolean isWearLog(String line) {
+        return line != null && line.contains("[WEAR]");
     }
 
     /**
@@ -287,4 +295,3 @@ public class PhoneLog {
         }
     }
 }
-
