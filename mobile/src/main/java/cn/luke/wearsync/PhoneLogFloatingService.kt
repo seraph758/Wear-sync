@@ -45,17 +45,14 @@ private object LogColors {
     val headerBg = Color(0xFF1E1E1E)
     val splitterIdle = Color(0xFF2C2C2C)
     val splitterActive = Color(0xFF00B0FF)
-    
     // 手机日志：绿色系
     val phonePanelBg = Color(0xFF0D1A0F)
     val phoneText = Color(0xFF4ADE80)
     val phoneTag = Color(0xFF22572A)
-    
     // 手表日志：蓝色系
     val wearPanelBg = Color(0xFF0A1628)
     val wearText = Color(0xFF60A5FA)
     val wearTag = Color(0xFF1E3A5F)
-    
     // 通用语义色
     val errorText = Color(0xFFFF6B6B)
     val testText = Color(0xFFE879F9)
@@ -63,14 +60,11 @@ private object LogColors {
 }
 
 class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
-
     private lateinit var windowManager: WindowManager
     private var floatingView: ComposeView? = null
     private lateinit var windowParams: WindowManager.LayoutParams
-
     private val controller = SavedStateRegistryController.create(this)
     override val savedStateRegistry: SavedStateRegistry = controller.savedStateRegistry
-
     private val lifecycleRegistry = LifecycleRegistry(this)
     override val lifecycle: Lifecycle get() = lifecycleRegistry
 
@@ -79,19 +73,16 @@ class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
     override fun onCreate() {
         controller.performRestore(null)
         super.onCreate()
-
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
 
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         val layoutType = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-
         windowParams = WindowManager.LayoutParams(
-            1000, 900,
-            layoutType,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or 
-            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            1000, 900, layoutType,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
@@ -106,38 +97,25 @@ class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
                 override val viewModelStore: ViewModelStore = viewModelStore
             })
             setViewTreeSavedStateRegistryOwner(this@PhoneLogFloatingService)
-
             setContent {
                 var phoneLogs by remember { mutableStateOf(listOf<String>()) }
                 var wearLogs by remember { mutableStateOf(listOf<String>()) }
                 val phoneListState = rememberLazyListState()
                 val wearListState = rememberLazyListState()
-
                 var splitRatio by remember { mutableFloatStateOf(0.5f) }
                 var isDraggingSplitter by remember { mutableStateOf(false) }
 
-                // PhoneLogFloatingService.kt
-
-LaunchedEffect(Unit) {
-    while (true) {
-        val freshLogs = PhoneLog.getLatestTenMinutesLogs()
-        
-        // 优化分类逻辑
-        val newPhone = freshLogs.filter { !isLikelyWearLog(it) }
-        val newWear = freshLogs.filter { isLikelyWearLog(it) }
-
-        if (phoneLogs.size != newPhone.size) phoneLogs = newPhone
-        if (wearLogs.size != newWear.size) wearLogs = newWear
-        delay(400)
-    }
-}
-
-// 新增辅助函数：更智能地判断是否为手表日志
-private fun isLikelyWearLog(line: String): Boolean {
-    return line.contains("[WEAR]") || 
-           (line.contains("WEAR") && (line.contains("WearSync") || line.contains("WearListener")))
-}
-
+                LaunchedEffect(Unit) {
+                    while (true) {
+                        val freshLogs = PhoneLog.getLatestTenMinutesLogs()
+                        // 核心修改：使用 PhoneLog 类中的方法进行筛选
+                        val newPhone = freshLogs.filter { !PhoneLog.isWearLog(it) }
+                        val newWear = freshLogs.filter { PhoneLog.isWearLog(it) }
+                        if (phoneLogs.size != newPhone.size) phoneLogs = newPhone
+                        if (wearLogs.size != newWear.size) wearLogs = newWear
+                        delay(400)
+                    }
+                }
 
                 LaunchedEffect(phoneLogs.size) {
                     if (phoneLogs.isNotEmpty()) phoneListState.animateScrollToItem(phoneLogs.lastIndex)
@@ -155,7 +133,6 @@ private fun isLikelyWearLog(line: String): Boolean {
                         .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
                 ) {
                     Column(modifier = Modifier.fillMaxSize()) {
-                        
                         // === 🖐️ 全区域可拖拽标题栏 ===
                         Row(
                             modifier = Modifier
@@ -167,7 +144,9 @@ private fun isLikelyWearLog(line: String): Boolean {
                                         change.consume()
                                         windowParams.x += dragAmount.x.toInt()
                                         windowParams.y += dragAmount.y.toInt()
-                                        try { windowManager.updateViewLayout(floatingView, windowParams) } catch (_: Exception) {}
+                                        try {
+                                            windowManager.updateViewLayout(floatingView, windowParams)
+                                        } catch (_: Exception) {}
                                     }
                                 }
                                 .padding(horizontal = 12.dp),
@@ -286,8 +265,9 @@ private fun isLikelyWearLog(line: String): Boolean {
                                     contentPadding = PaddingValues(horizontal = 10.dp),
                                     modifier = Modifier.height(28.dp),
                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3A3A3C))
-                                ) { Text("清空", fontSize = 11.sp) }
-
+                                ) {
+                                    Text("清空", fontSize = 11.sp)
+                                }
                                 Button(
                                     onClick = {
                                         startActivity(Intent(this@PhoneLogFloatingService, PhoneLogActivity::class.java).apply {
@@ -298,8 +278,9 @@ private fun isLikelyWearLog(line: String): Boolean {
                                     contentPadding = PaddingValues(horizontal = 10.dp),
                                     modifier = Modifier.height(28.dp),
                                     colors = ButtonDefaults.buttonColors(containerColor = LogColors.splitterActive)
-                                ) { Text("全屏", fontSize = 11.sp, color = Color.Black, fontWeight = FontWeight.Bold) }
-
+                                ) {
+                                    Text("全屏", fontSize = 11.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+                                }
                                 Button(
                                     onClick = {
                                         val file = PhoneLog.exportBackupFile()
@@ -308,24 +289,25 @@ private fun isLikelyWearLog(line: String): Boolean {
                                     contentPadding = PaddingValues(horizontal = 10.dp),
                                     modifier = Modifier.height(28.dp),
                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF007AFF))
-                                ) { Text("保存", fontSize = 11.sp) }
-
+                                ) {
+                                    Text("保存", fontSize = 11.sp)
+                                }
                                 Button(
                                     onClick = { stopSelf() },
                                     contentPadding = PaddingValues(horizontal = 10.dp),
                                     modifier = Modifier.height(28.dp),
                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF3B30))
-                                ) { Text("收起", fontSize = 11.sp) }
+                                ) {
+                                    Text("收起", fontSize = 11.sp)
+                                }
                             }
                         }
                     }
-
                     // === 📐 四向边缘缩放手势层 ===
                     EdgeResizeLayer(windowParams, floatingView!!)
                 }
             }
         }
-
         windowManager.addView(floatingView, windowParams)
     }
 
@@ -333,7 +315,9 @@ private fun isLikelyWearLog(line: String): Boolean {
         super.onDestroy()
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
         floatingView?.let {
-            try { windowManager.removeView(it) } catch (_: Exception) {}
+            try {
+                windowManager.removeView(it)
+            } catch (_: Exception) {}
         }
     }
 }
@@ -346,7 +330,6 @@ private fun isLikelyWearLog(line: String): Boolean {
 private fun EdgeResizeLayer(params: WindowManager.LayoutParams, view: ComposeView) {
     val edgeSize = 14.dp // 边缘热区宽度
     val wm = view.context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-
     Box(modifier = Modifier.fillMaxSize()) {
         // 右边缘
         Box(modifier = Modifier
@@ -357,10 +340,11 @@ private fun EdgeResizeLayer(params: WindowManager.LayoutParams, view: ComposeVie
                 detectDragGestures { change, dragAmount ->
                     change.consume()
                     params.width = max(600, params.width + dragAmount.x.toInt())
-                    try { wm.updateViewLayout(view, params) } catch (_: Exception) {}
+                    try {
+                        wm.updateViewLayout(view, params)
+                    } catch (_: Exception) {}
                 }
             })
-        
         // 下边缘
         Box(modifier = Modifier
             .align(Alignment.BottomCenter)
@@ -370,10 +354,11 @@ private fun EdgeResizeLayer(params: WindowManager.LayoutParams, view: ComposeVie
                 detectDragGestures { change, dragAmount ->
                     change.consume()
                     params.height = max(400, params.height + dragAmount.y.toInt())
-                    try { wm.updateViewLayout(view, params) } catch (_: Exception) {}
+                    try {
+                        wm.updateViewLayout(view, params)
+                    } catch (_: Exception) {}
                 }
             })
-        
         // 右下角（同时调整宽高）
         Box(modifier = Modifier
             .align(Alignment.BottomEnd)
@@ -383,7 +368,9 @@ private fun EdgeResizeLayer(params: WindowManager.LayoutParams, view: ComposeVie
                     change.consume()
                     params.width = max(600, params.width + dragAmount.x.toInt())
                     params.height = max(400, params.height + dragAmount.y.toInt())
-                    try { wm.updateViewLayout(view, params) } catch (_: Exception) {}
+                    try {
+                        wm.updateViewLayout(view, params)
+                    } catch (_: Exception) {}
                 }
             })
     }
@@ -397,13 +384,11 @@ private fun EdgeResizeLayer(params: WindowManager.LayoutParams, view: ComposeVie
 private fun LogLineItem(line: String, defaultColor: Color) {
     val isError = line.contains(" E/") || line.contains("Error")
     val isTest = line.contains("[TEST]")
-
     val textColor = when {
         isError -> LogColors.errorText
         isTest -> LogColors.testText
         else -> defaultColor
     }
-
     Text(
         text = line,
         color = textColor,
