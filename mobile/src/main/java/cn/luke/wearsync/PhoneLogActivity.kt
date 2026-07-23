@@ -1,5 +1,6 @@
 package cn.luke.wearsync
 
+import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -8,9 +9,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,7 +19,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
-import android.content.Intent
 
 class PhoneLogActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -59,14 +56,15 @@ class PhoneLogActivity : ComponentActivity() {
                     ) {
                         items(logLines.size) { index ->
                             val line = logLines[index]
-                            val isWear = line.contains("[WEAR]")
+                            // 核心修改：使用 PhoneLog 类中的方法进行筛选
+                            val isWear = PhoneLog.isWearLog(line)
                             val isError = line.contains(" E/") || line.contains("Error")
 
                             // 🎨 现代化配色方案
                             val textColor = when {
                                 isError -> Color(0xFFFF6B6B) // 错误：亮红色
-                                isWear -> Color(0xFF60A5FA)  // 手表：蓝色
-                                else -> Color(0xFF4ADE80)    // 手机：绿色
+                                isWear -> Color(0xFF60A5FA) // 手表：蓝色
+                                else -> Color(0xFF4ADE80) // 手机：绿色
                             }
                             val bgColor = if (isWear) Color(0xFF0A1628).copy(alpha = 0.4f) else Color.Transparent
 
@@ -96,40 +94,37 @@ class PhoneLogActivity : ComponentActivity() {
                         .padding(16.dp)
                 ) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-Button(
-    onClick = {
-        startService(Intent(this@PhoneLogActivity, PhoneLogFloatingService::class.java))
-        finish()
-    },
-    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8E44AD)),
-    modifier = Modifier.height(42.dp) // 保持和之前 FAB 差不多的高度
-) {
-    Text("切换悬浮窗", fontSize = 12.sp) // 直接显示文字
-}
-
+                        Button(
+                            onClick = {
+                                startService(Intent(this@PhoneLogActivity, PhoneLogFloatingService::class.java))
+                                finish()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8E44AD)),
+                            modifier = Modifier.height(42.dp)
+                        ) {
+                            Text("切换悬浮窗", fontSize = 12.sp)
+                        }
                         // 清空按钮
-Button(
-    onClick = { PhoneLog.clear(); logLines = emptyList() },
-    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3A3A3C)),
-    modifier = Modifier.height(42.dp)
-) {
-    Text("清空", fontSize = 12.sp)
-}
-
-// 保存备份按钮
-Button(
-    onClick = {
-        val backup = PhoneLog.exportBackupFile()
-        if (backup != null) {
-            Toast.makeText(context, "备份成功！", Toast.LENGTH_LONG).show()
-        }
-    },
-    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF007AFF)),
-    modifier = Modifier.height(42.dp)
-) {
-    Text("保存备份", fontSize = 12.sp)
-}
-
+                        Button(
+                            onClick = { PhoneLog.clear(); logLines = emptyList() },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3A3A3C)),
+                            modifier = Modifier.height(42.dp)
+                        ) {
+                            Text("清空", fontSize = 12.sp)
+                        }
+                        // 保存备份按钮
+                        Button(
+                            onClick = {
+                                val backup = PhoneLog.exportBackupFile()
+                                if (backup != null) {
+                                    Toast.makeText(context, "备份成功！", Toast.LENGTH_LONG).show()
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF007AFF)),
+                            modifier = Modifier.height(42.dp)
+                        ) {
+                            Text("保存备份", fontSize = 12.sp)
+                        }
                     }
                 }
             }
