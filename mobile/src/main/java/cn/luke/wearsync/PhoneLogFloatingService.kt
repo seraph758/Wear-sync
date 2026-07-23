@@ -116,16 +116,28 @@ class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
                 var splitRatio by remember { mutableFloatStateOf(0.5f) }
                 var isDraggingSplitter by remember { mutableStateOf(false) }
 
-                LaunchedEffect(Unit) {
-                    while (true) {
-                        val freshLogs = PhoneLog.getLatestTenMinutesLogs()
-                        val newPhone = freshLogs.filter { !it.contains("[WEAR]") }
-                        val newWear = freshLogs.filter { it.contains("[WEAR]") }
-                        if (phoneLogs.size != newPhone.size) phoneLogs = newPhone
-                        if (wearLogs.size != newWear.size) wearLogs = newWear
-                        delay(400)
-                    }
-                }
+                // PhoneLogFloatingService.kt
+
+LaunchedEffect(Unit) {
+    while (true) {
+        val freshLogs = PhoneLog.getLatestTenMinutesLogs()
+        
+        // 优化分类逻辑
+        val newPhone = freshLogs.filter { !isLikelyWearLog(it) }
+        val newWear = freshLogs.filter { isLikelyWearLog(it) }
+
+        if (phoneLogs.size != newPhone.size) phoneLogs = newPhone
+        if (wearLogs.size != newWear.size) wearLogs = newWear
+        delay(400)
+    }
+}
+
+// 新增辅助函数：更智能地判断是否为手表日志
+private fun isLikelyWearLog(line: String): Boolean {
+    return line.contains("[WEAR]") || 
+           (line.contains("WEAR") && (line.contains("WearSync") || line.contains("WearListener")))
+}
+
 
                 LaunchedEffect(phoneLogs.size) {
                     if (phoneLogs.isNotEmpty()) phoneListState.animateScrollToItem(phoneLogs.lastIndex)
