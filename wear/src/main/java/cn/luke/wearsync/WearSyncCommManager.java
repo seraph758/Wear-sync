@@ -1,17 +1,18 @@
 package cn.luke.wearsync;
 
 import android.content.Context;
-import android.net.Uri;
+import android.content.Intent;
 import androidx.annotation.NonNull;
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import com.google.android.gms.tasks.Tasks;
-import com.google.android.gms.wearable.Channel;
 import com.google.android.gms.wearable.ChannelClient;
 import com.google.android.gms.wearable.MessageClient;
 import com.google.android.gms.wearable.MessageEvent;
 import com.google.android.gms.wearable.Node;
 import com.google.android.gms.wearable.Wearable;
 
+import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.nio.charset.StandardCharsets;
@@ -24,16 +25,34 @@ import java.util.concurrent.Executors;
  * 职责：连接维护、通用信令收发、多路通道管理
  */
 public class WearSyncCommManager implements MessageClient.OnMessageReceivedListener {
-
-    private static final String TAG = "WearSync_Comm";
+    private static final String TAG = "WearSyncCommManager";
     private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
-    
+    private static final String PATH_DND = "/dnd_sync";
+    private static final String PATH_ALARM = "/alarm_control";
+    private static final String PATH_CAMERA = "/camera_control";
+
     private static volatile WearSyncCommManager instance;
     private final Context appContext;
     private final MessageClient messageClient;
     private final ChannelClient channelClient;
     private final ExecutorService executor;
     private Node connectedNode;
+
+    public interface ConnectionListener {
+        void onConnected(Node node);
+        void onDisconnected();
+    }
+
+    private ConnectionListener connectionListener;
+
+    // 新增：注册连接监听
+    public void setConnectionListener(ConnectionListener listener) {
+        this.connectionListener = listener;
+        // 注册时如果已经连上了，直接回调一次
+        if (connectedNode != null && listener != null) {
+            listener.onConnected(connectedNode);
+        }
+    }
 
     // 👇 私有构造，全局单例
     private WearSyncCommManager(Context context) {
@@ -57,34 +76,30 @@ public class WearSyncCommManager implements MessageClient.OnMessageReceivedListe
     }
 
     // ==================== 1. 通用信令发送 ====================
-
     /**
      * ✅ 核心：完全通用的信令发送接口
-     * @param type   业务类型标识，如 "camera_control", "sensor_data", "notification"
+     * @param type 业务类型标识，如 "camera_control", "sensor_data", "notification"
      * @param action 具体动作，如 "START_STREAM", "TAKE_PHOTO"
-     * @param extra  附加参数，可为 null
+     * @param extra 附加参数，可为 null
      */
     public void sendCommand(String type, String action, JSONObject extra) {
         if (connectedNode == null) {
             WearLog.w(TAG, "⚠️ 发送命令失败 [type=" + type + ", action=" + action + "]：节点未连接");
             return;
         }
-
         executor.execute(() -> {
             try {
                 JSONObject json = new JSONObject();
                 json.put("sender", "wear");
-                json.put("type", type);       // 👈 业务类型由调用方决定
-                json.put("action", action);   // 👈 具体动作由调用方决定
+                json.put("type", type);
+                json.put("action", action);
                 json.put("timestamp", System.currentTimeMillis());
                 if (extra != null) {
                     json.put("extra", extra);
                 }
-
                 byte[] payload = json.toString().getBytes(StandardCharsets.UTF_8);
                 Tasks.await(messageClient.sendMessage(
                         connectedNode.getId(), UNIVERSAL_SYNC_PATH, payload));
-                
                 WearLog.d(TAG, "📤 命令已发送: type=" + type + ", action=" + action);
             } catch (Exception e) {
                 WearLog.e(TAG, "🔴 发送命令失败: " + e.getMessage(), e);
@@ -93,7 +108,6 @@ public class WearSyncCommManager implements MessageClient.OnMessageReceivedListe
     }
 
     // ==================== 2. 通用通道管理 ====================
-
     /**
      * ✅ 打开通用数据通道（视频流、文件传输等都走这里）
      * @param channelPath 通道路径标识，如 "/wear-video-stream", "/wear-file-transfer"
@@ -108,32 +122,50 @@ public class WearSyncCommManager implements MessageClient.OnMessageReceivedListe
     }
 
     // ==================== 3. 连接管理 & 消息接收 ====================
-    
-    public void connect() { /* 与之前相同，查找并缓存 Node */ }
-    public void disconnect() { /* 清理资源 */ }
+    public void connect() {
+        executor.execute(() -> {
+            try {
+                List<Node> nodes = Tasks.await(Wearable.getNodeClient(appContext).getConnectedNodes());
+                if (!nodes.isEmpty()) {
+                    connectedNode = nodes.get(0);
+                    WearLog.i(TAG, "✅ 节点已连接: " + connectedNode.getDisplayName());
+                    if (connectionListener != null) {
+                        connectionListener.onConnected(connectedNode);
+                    }
+                }
+            } catch (Exception e) {
+                WearLog.e(TAG, "连接检查失败", e);
+            }
+        });
+    }
+
+    public void disconnect() {
+        /* 清理资源 */
+    }
+
+    // 新增：专门给业务用的发送方法（简化参数）
+    public void sendBusinessCommand(String type, String action) {
+        sendCommand(type, action, null);
+    }
 
     @Override
-    public void onMessageReceived(@NonNull MessageEvent event) {
-        // 👈 收到手机消息后，同样通过 LocalBroadcast 按 type 分发
-        // 不在此处做任何业务处理，只做解析和转发
-        if (UNIVERSAL_SYNC_PATH.equals(event.getPath())) {
-            String raw = new String(event.getData(), StandardCharsets.UTF_8);
-            WearLog.d(TAG, "📥 收到手机端消息: " + raw);
-            
-            try {
-                JSONObject json = new JSONObject(raw);
-                String type = json.optString("type", "");
-                String action = json.optString("action", "");
-                
-                Intent intent = new Intent("cn.luke.wearsync.COMM_MESSAGE_RECEIVED");
-                intent.putExtra("type", type);
-                intent.putExtra("action", action);
-                intent.putExtra("raw", raw);
-                LocalBroadcastManager.getInstance(appContext).sendBroadcast(intent);
-                
-            } catch (JSONException e) {
-                WearLog.e(TAG, "🔴 解析手机端消息失败", e);
+    public void onMessageReceived(@NonNull MessageEvent messageEvent) {
+        String path = messageEvent.getPath();
+        String data = new String(messageEvent.getData());
+        WearLog.d(TAG, "收到消息: path=" + path + ", data=" + data);
+        try {
+            JSONObject json = new JSONObject(data);
+            // 根据路径分发给不同的 Manager
+            if (PATH_DND.equals(path)) {
+                WearSyncDndManager.handleIncomingCommand(appContext, json);
+            } else if (PATH_ALARM.equals(path)) {
+                WearAlarmActivity.handleIncomingCommand(appContext, json);
+            } else if (PATH_CAMERA.equals(path)) {
+                WearCameraActivity.handleIncomingCommand(appContext, json);
             }
+            // ... 其他路径处理
+        } catch (JSONException e) {
+            WearLog.e(TAG, "解析消息失败", e);
         }
     }
 }

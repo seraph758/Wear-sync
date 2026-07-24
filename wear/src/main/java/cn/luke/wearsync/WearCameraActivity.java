@@ -13,18 +13,15 @@ import android.view.SurfaceView;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.os.VibrationEffect;
-
-
 import androidx.core.content.ContextCompat;
 import androidx.activity.ComponentActivity;
 import androidx.activity.OnBackPressedCallback;
-
+import androidx.localbroadcastmanager.content.LocalBroadcastManager; // ✅ 新增导入
 import com.google.android.gms.tasks.Tasks;
 import com.google.android.gms.wearable.Node;
 import com.google.android.gms.wearable.Wearable;
-
 import org.json.JSONObject;
-
+import org.json.JSONException; // ✅ 新增导入
 import java.lang.ref.WeakReference;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -33,18 +30,14 @@ import java.util.List;
 // 🟢 完美優化：變更繼承為 ComponentActivity 以原生支持現代返回調度器
 public class WearCameraActivity extends ComponentActivity implements SurfaceHolder.Callback {
     private static final String TAG = "WearSync_WearCameraUI";
-    private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
-
     // 🚀 彻底删除了原有的 static instance 泄露源，全部由下方的 sActivityRef 弱引用全权接管
     public static WeakReference<WearCameraActivity> sActivityRef = new WeakReference<>(null);
-
     private SurfaceView surfaceView;
     private MediaCodec mDecoder;
     private boolean isDecoderRunning = false;
     private boolean isUserExiting = false;
     private PowerManager.WakeLock wakeLock;
     private long activityCreateTime;
-
     private boolean isSurfaceReady = false;
     private final java.util.concurrent.ConcurrentLinkedQueue<byte[]> frameQueue = new java.util.concurrent.ConcurrentLinkedQueue<>();
     private Thread renderThread;
@@ -58,16 +51,15 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
             }
         }
     };
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         activityCreateTime = System.currentTimeMillis();
         // 修改点1: 将 WearLog.i 改为 WearLog.d (假设你的类里只有 d 方法)
-        WearLog.d(TAG, "🟢 [生命周期] onCreate 啟動時間戳: " + activityCreateTime); 
-        
+        WearLog.d(TAG, "🟢 [生命周期] onCreate 啟動時間戳: " + activityCreateTime);
         sActivityRef = new WeakReference<>(this);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        
         PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
         if (pm != null) {
             // 注意：FULL_WAKE_LOCK 已过时，但目前为了编译通过先保留，后续建议改为 FLAG_KEEP_SCREEN_ON
@@ -75,255 +67,176 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
             wakeLock.acquire(10 * 60 * 1000L);
             WearLog.d(TAG, "🔋 WakeLock acquired for 10 mins");
         }
-        
         setContentView(R.layout.activity_wear_camera);
-        
         // 修改点2: 修正 findViewById 的逻辑，使用 XML 中实际存在的 ID 'surfaceView'
         surfaceView = findViewById(R.id.surfaceView);
-        
         if (surfaceView != null) {
             surfaceView.getHolder().addCallback(this);
         } else {
             WearLog.e(TAG, "❌ 找不到 SurfaceView，请检查布局文件 ID 是否为 surfaceView");
         }
-
         // 修改点3: 修正按钮 ID，XML 中是 btn_shutter，代码里写成了 btn_close_camera
         Button btnClose = findViewById(R.id.btn_shutter);
-        
-        if (btnClose != null) {
+                if (btnClose != null) {
             btnClose.setOnClickListener(v -> {
-                WearLog.d(TAG, "👆 用戶點擊了介面上的【關閉】按鈕");
-                cleanExit(true);
+                WearLog.d(TAG, "🔘 用户点击 [关闭相机]");
+                // 发送关闭指令给手机
+                WearSyncCommManager.getInstance(this).sendBusinessCommand("camera_action", "STOP");
+                cleanExit(false);
             });
         }
 
-        IntentFilter filter = new IntentFilter("cn.luke.wearsync.ACTION_PHONE_KILL_CAMERA");
-        ContextCompat.registerReceiver(this, phoneKillReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED);
-
-        // 🚀 核心優化移動：將預測性返回監聽器安全註冊在 onCreate 內部，杜絕編譯錯位
+        // 注册返回键回调，实现干净退出
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
             public void handleOnBackPressed() {
-                WearLog.d(TAG, "🔄 [手勢側滑返回] 觸發預測性返回，執行乾淨退出...");
-                cleanExit(true); 
+                WearLog.d(TAG, "🔙 用户按下返回键");
+                cleanExit(false);
             }
         });
+
+        // 注册广播接收器，监听来自手机的关闭指令
+        IntentFilter filter = new IntentFilter("cn.luke.wearsync.ACTION_PHONE_KILL_CAMERA");
+        ContextCompat.registerReceiver(this, phoneKillReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED);
+
+        // 启动解码线程
+        startDecoderThread();
+    }
+
+    // ✅ 新增：处理来自 CommManager 的指令
+    public static void handleIncomingCommand(Context context, JSONObject json) {
+        WearLog.d(TAG, "收到相机控制指令: " + json.toString());
+        String action = json.optString("action");
+        if ("STOP".equals(action)) {
+            // 可以在这里执行一些逻辑，然后关闭界面
+            if (sActivityRef.get() != null) {
+                sActivityRef.get().cleanExit(false);
+            }
+        }
+    }
+
+    private void startDecoderThread() {
+        renderThread = new Thread(() -> {
+            while (!Thread.currentThread().isInterrupted()) {
+                byte[] frameData = frameQueue.poll();
+                if (frameData != null && isSurfaceReady) {
+                    try {
+                        int inputBufferId = mDecoder.dequeueInputBuffer(10000);
+                        if (inputBufferId >= 0) {
+                            ByteBuffer inputBuffer = mDecoder.getInputBuffer(inputBufferId);
+                            if (inputBuffer != null) {
+                                inputBuffer.clear();
+                                inputBuffer.put(frameData);
+                                mDecoder.queueInputBuffer(inputBufferId, 0, frameData.length, 0, 0);
+                            }
+                        }
+                        MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
+                        int outputBufferId = mDecoder.dequeueOutputBuffer(bufferInfo, 10000);
+                        if (outputBufferId >= 0) {
+                            mDecoder.releaseOutputBuffer(outputBufferId, true);
+                        }
+                    } catch (Exception e) {
+                        WearLog.e(TAG, "解码帧时出错", e);
+                    }
+                }
+            }
+        });
+        renderThread.start();
+    }
+
+    private void initDecoder() {
+        try {
+            // 假设视频是 H.264 编码，分辨率 640x480
+            MediaFormat format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, 640, 480);
+            mDecoder = MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);
+            mDecoder.configure(format, surfaceView.getHolder().getSurface(), null, 0);
+            mDecoder.start();
+            isDecoderRunning = true;
+            WearLog.d(TAG, "解码器初始化成功");
+        } catch (Exception e) {
+            WearLog.e(TAG, "初始化解码器失败", e);
+        }
+    }
+
+    /**
+     * 🚀 核心修复：无条件停止解码 + 释放屏幕资源
+     * @param fromPhone 是否由手机端指令触发
+     */
+    private void cleanExit(boolean fromPhone) {
+        if (isUserExiting) return;
+        isUserExiting = true;
+        WearLog.d(TAG, "🚪 [干净退出] 开始执行，来源: " + (fromPhone ? "手机指令" : "用户操作"));
+
+        // 1. 停止解码线程
+        if (renderThread != null) {
+            renderThread.interrupt();
+            try {
+                renderThread.join(1000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            renderThread = null;
+        }
+
+        // 2. 释放解码器
+        if (mDecoder != null) {
+            try {
+                mDecoder.stop();
+                mDecoder.release();
+            } catch (Exception e) {
+                WearLog.e(TAG, "释放解码器异常", e);
+            }
+            mDecoder = null;
+            isDecoderRunning = false;
+        }
+
+        // 3. 清空帧队列
+        frameQueue.clear();
+
+        // 4. 释放 WakeLock
+        if (wakeLock != null && wakeLock.isHeld()) {
+            wakeLock.release();
+            wakeLock = null;
+            WearLog.d(TAG, "🔋 WakeLock released");
+        }
+
+        // 5. 移除广播接收器
+        try {
+            unregisterReceiver(phoneKillReceiver);
+        } catch (Exception e) {
+            // 可能未注册，忽略
+        }
+
+        // 6. 清除静态引用
+        if (sActivityRef != null) {
+            sActivityRef.clear();
+            sActivityRef = null;
+        }
+
+        // 7. 结束 Activity
+        finishAndRemoveTask();
+        WearLog.d(TAG, "✅ [干净退出] 完成");
     }
 
     @Override
     public void surfaceCreated(SurfaceHolder holder) {
-        WearLog.d(TAG, "📺 surfaceCreated");
         isSurfaceReady = true;
-        startRenderThread(holder);
+        initDecoder();
     }
 
     @Override
     public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
-        WearLog.d(TAG, "📺 surfaceChanged W=" + width + " H=" + height);
     }
 
     @Override
     public void surfaceDestroyed(SurfaceHolder holder) {
-        WearLog.d(TAG, "📺 surfaceDestroyed");
         isSurfaceReady = false;
-        stopRenderThread();
-    }
-
-    public void feedH264Data(byte[] data,int length){
-    
-        if(isUserExiting){
-    
-            WearLog.d(TAG,
-                    "CAM-W020 ignore exiting");
-    
-            return;
-        }
-    
-    
-        byte[] frame =
-                new byte[length];
-    
-    
-        System.arraycopy(
-                data,
-                0,
-                frame,
-                0,
-                length
-        );
-    
-    
-        frameQueue.offer(frame);
-    
-    
-        if(frameQueue.size()==1){
-    
-            WearLog.d(TAG,
-                    "CAM-W021 first frame queued");
-    
-        }
-    
-    }
-
-    private void initDecoder(SurfaceHolder holder) {
-        try {
-            WearLog.d(TAG, "🎬 開始初始化 MediaCodec H.264 解碼器...");
-            mDecoder = MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);
-            MediaFormat format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, 640, 480);
-            format.setInteger(MediaFormat.KEY_LOW_LATENCY, 1);
-            
-            mDecoder.configure(format, holder.getSurface(), null, 0);
-            mDecoder.start();
-            isDecoderRunning = true;
-            WearLog.i(TAG, "🟢 解碼器初始化完成並成功開啟！");
-        } catch (Exception e) {
-            WearLog.e(TAG, "❌ 解碼器初始化失敗: " + e.getMessage(), e);
-        }
-    }
-
-    private void releaseDecoder() {
-        isDecoderRunning = false;
-        if (mDecoder != null) {
-            try {
-                WearLog.d(TAG, "🎬 正在釋放解碼器管線...");
-                mDecoder.stop();
-                mDecoder.release();
-                WearLog.i(TAG, "🟢 解碼器管線釋放完畢");
-            } catch (Exception ignored) {}
-            mDecoder = null;
-        }
-        frameQueue.clear();
-    }
-
-    private void startRenderThread(SurfaceHolder holder) {
-        stopRenderThread();
-        initDecoder(holder);
-        WearLog.d(TAG,
-        "CAM-W030 decoder started");
-
-        renderThread = new Thread(() -> {
-            MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
-            while (isSurfaceReady && isDecoderRunning && !Thread.currentThread().isInterrupted()) {
-                try {
-                    byte[] sampleData = frameQueue.poll();
-                    if(sampleData != null){
-
-                WearLog.d(TAG,
-                        "CAM-W031 decode input size="
-                                +sampleData.length);
-            
-            }
-                 if (sampleData == null) {
-                        Thread.sleep(5);
-                        continue;
-                    }
-
-                    int inputBufferIndex = mDecoder.dequeueInputBuffer(10000);
-                    if (inputBufferIndex >= 0) {
-                        ByteBuffer inputBuffer = mDecoder.getInputBuffer(inputBufferIndex);
-                        if (inputBuffer != null) {
-                            inputBuffer.clear();
-                            inputBuffer.put(sampleData);
-                            mDecoder.queueInputBuffer(inputBufferIndex, 0, sampleData.length, System.currentTimeMillis() * 1000, 0);
-                        }
-                    }
-
-                    int outputBufferIndex = mDecoder.dequeueOutputBuffer(bufferInfo, 10000);
-                    while (outputBufferIndex >= 0) {
-                        mDecoder.releaseOutputBuffer(outputBufferIndex, true);
-                        outputBufferIndex = mDecoder.dequeueOutputBuffer(bufferInfo, 0);
-                    }
-                } catch (InterruptedException e) {
-                    break;
-                } catch (Exception e) {
-                    WearLog.e(TAG, "⚠️ 渲染線程循環中遭遇異常: " + e.getMessage());
-                }
-            }
-        }, "WearCameraRenderThread");
-        renderThread.start();
-    }
-public void onChannelReady() {
-
-    WearLog.d(TAG,
-            "CAM-W011 Channel ready callback");
-
-}
-    private void stopRenderThread() {
-        if (renderThread != null) {
-            renderThread.interrupt();
-            try { renderThread.join(500); } catch (Exception ignored) {}
-            renderThread = null;
-        }
-        releaseDecoder();
-    }
-    private void onCallConnected() {
-    // 使用预定义的"双击"效果，比自定义波形更符合 Wear OS 设计语言
-    WearVibratorHelper.vibratePredefined(this, VibrationEffect.EFFECT_DOUBLE_CLICK);
-}
-    private void sendControlSignalToPhone(String actionCommand) {
-        new Thread(() -> {
-            try {
-                JSONObject json = new JSONObject();
-                json.put("sender", "wear");
-                json.put("type", "camera_action");
-                json.put("action", actionCommand);
-                json.put("timestamp", System.currentTimeMillis());
-
-                byte[] payload = json.toString().getBytes(StandardCharsets.UTF_8);
-                List<Node> nodes = Tasks.await(Wearable.getNodeClient(this).getConnectedNodes());
-                if (nodes != null && !nodes.isEmpty()) {
-                    for (Node n : nodes) {
-                        Wearable.getMessageClient(this).sendMessage(n.getId(), UNIVERSAL_SYNC_PATH, payload);
-                    }
-                }
-            } catch (Exception e) {
-                WearLog.e(TAG, "🔴 [信令發送致命] " + e.getMessage());
-            }
-        }).start();
-    }
-
-    private void cleanExit(boolean notifyPhone) {
-        if (isUserExiting) return; // 👈 完美防線：攔截任何二次釋放
-        isUserExiting = true;
-        isSurfaceReady = false;
-        WearVibratorHelper.cancel(this); // 👈 防止残留震动
-
-        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        if (wakeLock != null) {
-            try {
-                if (wakeLock.isHeld()) wakeLock.release();
-            } catch (Exception ignored) {}
-            wakeLock = null;
-        }
-
-        if (notifyPhone) {
-            sendControlSignalToPhone("STOP_CAMERA");
-        }
-
-        try {
-            unregisterReceiver(phoneKillReceiver);
-        } catch (Exception ignored) {}
-
-        releaseDecoder();
-
-        // 🚀 核心優化：乾淨清空弱引用卡槽
-        if (sActivityRef != null) {
-            sActivityRef.clear();
-        }
-
-        finishAndRemoveTask();
     }
 
     @Override
     protected void onDestroy() {
-        WearLog.w(TAG, "🏳️ [生命周期] onDestroy 觸發...");
-        
-        // 🚀 安全防線：在此調用無通知的 cleanExit，防止任何系統強制殺死時的資源殘留
-        cleanExit(false); 
-
-        if (sActivityRef != null) {
-            sActivityRef.clear();
-        }
+        // 双重保险，确保资源被释放
+        cleanExit(false);
         super.onDestroy();
     }
 }
