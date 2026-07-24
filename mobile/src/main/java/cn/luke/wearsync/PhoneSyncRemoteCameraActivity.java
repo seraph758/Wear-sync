@@ -19,25 +19,6 @@ import android.widget.Toast;
 public class PhoneSyncRemoteCameraActivity extends Activity {
 
     private static final String TAG = "PhoneSync_RemoteActivity";
-    private boolean isServiceBound = false;
-
-    // 🤝 异步连接接线员：通过 BIND 机制辅助，确保 Service 拥有合法的 Activity 上下文豁免权
-    private final ServiceConnection connection = new ServiceConnection() {
-        @Override
-        public void onServiceConnected(ComponentName name, IBinder service) {
-            PhoneLog.d(TAG, "🤝 [跳板握手成功] ─── 异部回调触发 ───");
-            PhoneLog.d(TAG, "  └─ 🎯 目标服务类: [" + (name != null ? name.getShortClassName() : "未知") + "]");
-            PhoneLog.d(TAG, "  └─ 🚀 状态更新: PhoneSyncCameraService 已成功与当前跳板 Activity 建立物理绑定 (Context 豁免权生效)！");
-            isServiceBound = true;
-        }
-
-        @Override
-        public void onServiceDisconnected(ComponentName name) {
-            PhoneLog.w(TAG, "⚠️ [跳板断开连接] ─── 异步断开触发 ───");
-            PhoneLog.w(TAG, "  └─ 🎯 目标服务类: [" + (name != null ? name.getShortClassName() : "未知") + "] 发生内部崩溃或被系统意外回收。");
-            isServiceBound = false;
-        }
-    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -50,20 +31,13 @@ public class PhoneSyncRemoteCameraActivity extends Activity {
             PhoneLog.d(TAG, "🔍 [入站信令核对] Intent Action: [" + incomingIntent.getAction() + "]");
         }
 
-        // 🚀【Android 14+ 核心适配】在拉起前台相机服务前，必须确保手机端已有硬件相机权限
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) { // Android 6.0+
+        // 🚀【Android 6.0+ 核心适配】检查相机权限
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             if (checkSelfPermission(android.Manifest.permission.CAMERA) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                PhoneLog.w(TAG, "🔒 [权限拦截] 监测到手机端未被授予 CAMERA 权限，正在强制唤起系统弹窗让用户授权...");
-
-                // 弹出系统权限请求（注意：这会使 Activity 暂停等待用户点击）
+                PhoneLog.w(TAG, "🔒 [权限拦截] 监测到手机端未被授予 CAMERA 权限，正在强制唤起系统弹窗...");
                 requestPermissions(new String[]{android.Manifest.permission.CAMERA}, 102);
-
-                // 提示用户
                 Toast.makeText(this, "请授予相机权限以允许手表控制拍照", Toast.LENGTH_LONG).show();
-
-                // ⚠️ 注意：未授权时不能立刻往下走拉起服务，否则直接崩溃！
-                // 我们在下方的 onRequestPermissionsResult 回调中接力拉起服务。
-                return;
+                return; // 等待用户授权
             }
         }
 
@@ -72,10 +46,7 @@ public class PhoneSyncRemoteCameraActivity extends Activity {
     }
 
     /**
-     * 🚀 封装的核心点火业务：启动并双轨绑定前台相机服务
-     */
-    /**
-     * 🚀 启动并绑定手机端前台相机同步服务
+     * 🚀 封装的核心点火业务：只负责启动前台服务
      */
     private void proceedToStartCameraService() {
         Toast.makeText(this, "正在启动远程相机...", Toast.LENGTH_SHORT).show();
@@ -85,31 +56,27 @@ public class PhoneSyncRemoteCameraActivity extends Activity {
         serviceIntent.setAction("cn.luke.wearsync.ACTION_START_CAMERA");
 
         try {
-            // 1. 因为 minSdk >= 26，直接一行代码走前台服务启动
+            // 1. 启动前台服务。服务内部会自己处理所有初始化逻辑。
+            // 因为此 Activity 是可见的，所以可以成功启动前台服务。
             startForegroundService(serviceIntent);
-
-            // 2. 绑定服务以获取 Android 14+ 后台运行豁免权
-            isServiceBound = bindService(serviceIntent, connection, Context.BIND_AUTO_CREATE);
-            PhoneLog.d(TAG, "服务双轨绑定状态: " + isServiceBound);
+            PhoneLog.d(TAG, "✅ 前台服务启动指令已发送");
 
         } catch (Exception e) {
-            PhoneLog.e(TAG, "拉起或绑定 PhoneSyncCameraService 失败: " + e.getMessage());
+            PhoneLog.e(TAG, "拉起 PhoneSyncCameraService 失败: " + e.getMessage());
+            Toast.makeText(this, "启动服务失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            finish();
+            return;
         }
 
-        // 3. 预留 3.5 秒供相机硬件初始化，随后跳板 Activity 自我销毁
+        // 2. 服务启动后，跳板 Activity 立即退出
+        // 不需要 bindService，因为服务本身就有完整的 Context 来操作摄像头
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            if (isServiceBound) {
-                try {
-                    unbindService(connection);
-                } catch (Exception ignored) {}
-                isServiceBound = false;
-            }
             PhoneLog.d(TAG, "跳板 Activity 任务完成，退出前台。");
             finish();
-        }, 3500);
+        }, 1500); // 1.5秒足够服务启动了
     }
 
-    // 🚀【权限接力棒】当用户点击了系统“允许相机权限”后，在这里立刻接力点火拉起服务
+    // 🚀【权限接力棒】
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
@@ -118,7 +85,7 @@ public class PhoneSyncRemoteCameraActivity extends Activity {
                 PhoneLog.d(TAG, "✅ [权限接力成功] 用户已点击允许相机权限，立刻无缝拉起前台相机服务！");
                 proceedToStartCameraService();
             } else {
-                PhoneLog.e(TAG, "❌ [权限接力失败] 用户拒绝了相机权限，跳板退出，无法拉起前台相机。");
+                PhoneLog.e(TAG, "❌ [权限接力失败] 用户拒绝了相机权限，跳板退出。");
                 Toast.makeText(this, "未获得相机权限，无法完成远程拍照", Toast.LENGTH_SHORT).show();
                 finish();
             }
@@ -127,15 +94,7 @@ public class PhoneSyncRemoteCameraActivity extends Activity {
 
     @Override
     protected void onDestroy() {
-        PhoneLog.w(TAG, "🏳️ [生命周期] onDestroy 触发：监测到 Activity 任务堆栈准备销毁...");
-        if (isServiceBound) {
-            PhoneLog.w(TAG, "🧹 [生命周期保底释放] 发现 onDestroy 触发时绑定仍未断开，触发二次保底 unbindService()...");
-            try {
-                unbindService(connection);
-            } catch (Exception ignored) {}
-            isServiceBound = false;
-        }
-        super.onDestroy();
         PhoneLog.w(TAG, "🏳️ [生命周期] onDestroy ─── 远程相机全透明跳板 Activity 任务生命周期完美安全终结 ───");
+        super.onDestroy();
     }
 }
