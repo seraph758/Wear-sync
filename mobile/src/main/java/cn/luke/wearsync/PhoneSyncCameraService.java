@@ -264,51 +264,48 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
             });
             mEncoder.start();
 
-            ListenableFuture<ProcessCameraProvider> future = ProcessCameraProvider.getInstance(this);
-            future.addListener(() -> {
-                try {
-                    ProcessCameraProvider provider = future.get();
-                    mPreviewUseCase = new Preview.Builder().build();
-                    
-                    // ✅ 修复：使用新的 setSurfaceProvider API，移除了已废弃的 Executor 参数
-                    mPreviewUseCase.setSurfaceProvider(request -> {
-                        request.provideSurface(mInputSurface, ContextCompat.getMainExecutor(this), result -> {
-                        });
-                    });
+// ... 在 setupEncoderAndCamera 方法内部 ...
 
-                    provider.unbindAll();
-                    provider.bindToLifecycle(
-                            PhoneSyncCameraService.this,
-                            CameraSelector.DEFAULT_BACK_CAMERA,
-                            mPreviewUseCase
-                    );
-        PhoneLog.d(TAG,"CAM-P010 Camera bind success");
+ListenableFuture<ProcessCameraProvider> future = ProcessCameraProvider.getInstance(this);
+future.addListener(() -> {
+    try {
+        ProcessCameraProvider provider = future.get();
+        mPreviewUseCase = new Preview.Builder().build();
         
+        // 设置 SurfaceProvider，将编码器的输入 Surface 提供给 CameraX
+        mPreviewUseCase.setSurfaceProvider(request -> {
+            request.provideSurface(mInputSurface, ContextCompat.getMainExecutor(this), result -> {
+                // 可以在这里处理 Surface 提供的结果
+            });
+        });
+
+        provider.unbindAll();
+        
+        // ✅ 修复：使用 this (即 Service 实例) 作为 LifecycleOwner
+        // 因为 PhoneSyncCameraService 已经实现了 LifecycleOwner 接口
+        // 并且 getLifecycle() 方法返回了正确的 LifecycleRegistry
+        provider.bindToLifecycle(
+            this, // ✅ 正确：传入 Service 实例，它会通过 getLifecycle() 提供 Lifecycle
+            CameraSelector.DEFAULT_BACK_CAMERA,
+            mPreviewUseCase
+        );
+
+        PhoneLog.d(TAG, "CAM-P010 Camera bind success");
         setState(CameraState.CAMERA_READY);
-        
-        PhoneLog.d(TAG,"CAM-P011 send CAMERA_READY");
-        
+        PhoneLog.d(TAG, "CAM-P011 send CAMERA_READY");
         sendCameraReady();
         
         if (mPendingStreamingNodeId != null) {
-        
-            PhoneLog.d(TAG,"CAM-P012 pending node=" + mPendingStreamingNodeId);
-        
+            PhoneLog.d(TAG, "CAM-P012 pending node=" + mPendingStreamingNodeId);
             startStreaming(mPendingStreamingNodeId);
-        
             mPendingStreamingNodeId = null;
         }
-                } catch (Exception e) {
-                    PhoneLog.e(TAG, "Camera target binding failed", e);
-                    setState(CameraState.ERROR);
-                }
-            }, ContextCompat.getMainExecutor(this));
-
-        } catch (Exception e) {
-            PhoneLog.e(TAG, "Setup encoder and camera failed", e);
-            setState(CameraState.ERROR);
-        }
+    } catch (Exception e) {
+        PhoneLog.e(TAG, "Camera target binding failed", e);
+        setState(CameraState.ERROR);
     }
+}, ContextCompat.getMainExecutor(this));
+
 
     private void sendCameraReady() {
         new Thread(() -> {
