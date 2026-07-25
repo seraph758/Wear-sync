@@ -104,6 +104,17 @@ public class WearSyncCommManager implements MessageClient.OnMessageReceivedListe
      * 修正：使用 Task 链式调用替代不存在的 Listener 参数
      * @param channelPath 通道路径标识，如 "/wear-video-stream", "/wear-file-transfer"
      */
+        /**
+     * ✅ 拉起手机端相机 Activity 的专用方法
+     * 严格对齐手机端 handleCamera 中的 action 匹配条件：
+     * "START_CAMERA" / "START_CAMERA_UI" / "open_phone_camera"
+     */
+    public void launchPhoneCameraActivity() {
+        // type 必须是小写 "camera" 或 "camera_control"，与手机端 routeMessage 的 case 一致
+        // action 必须是 "START_CAMERA"，与手机端 handleCamera 中的 equalsIgnoreCase 一致
+        sendCommand("camera_control", "START_CAMERA", null);
+    }
+
     public void openChannel(String channelPath) {
         if (connectedNode == null) {
             WearLog.w(TAG, "⚠️ 打开通道失败 [" + channelPath + "]：节点未连接");
