@@ -38,7 +38,7 @@ public class WearAlarmActivity extends ComponentActivity {
         screenManager = new WearSyncScreenManager(this);
         screenManager.bind(this);
         WearLog.d(TAG, "🎬 onCreate: 手表闹钟接管界面启动");
-        screenManager.wakeForSync(5 * 60 * 1000L);
+        screenManager.wakeForSync(3 * 60 * 1000L);
         setContentView(R.layout.activity_wear_alarm);
         
         tvAlarmDay = findViewById(R.id.tv_alarm_day);
@@ -46,9 +46,8 @@ public class WearAlarmActivity extends ComponentActivity {
         Button btnDismiss = findViewById(R.id.btn_dismiss);
         Button btnSnooze = findViewById(R.id.btn_snooze);
 
-        handleIncomingIntent(getIntent());
         startWatchVibration();
-
+      
         // 2. ✅ 修复：将通信逻辑包裹在 onCreate 方法内
         WearSyncCommManager.getInstance(this).setConnectionListener(new WearSyncCommManager.ConnectionListener() {
             @Override

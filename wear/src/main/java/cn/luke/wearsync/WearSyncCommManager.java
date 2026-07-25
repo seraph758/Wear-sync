@@ -19,6 +19,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import com.google.android.gms.tasks.OnFailureListener;
+import com.google.android.gms.tasks.OnSuccessListener;
+import com.google.android.gms.wearable.ChannelClient;
 
 /**
  * 全局统一通信管理器
@@ -112,14 +115,18 @@ public class WearSyncCommManager implements MessageClient.OnMessageReceivedListe
      * ✅ 打开通用数据通道（视频流、文件传输等都走这里）
      * @param channelPath 通道路径标识，如 "/wear-video-stream", "/wear-file-transfer"
      */
-    public void openChannel(String channelPath, ChannelClient.OpenChannelResultCallback callback) {
-        if (connectedNode == null) {
-            WearLog.w(TAG, "⚠️ 打开通道失败 [" + channelPath + "]：节点未连接");
-            return;
-        }
-        WearLog.d(TAG, "🔗 正在请求打开通道: " + channelPath);
-        channelClient.openChannel(connectedNode.getId(), channelPath, callback);
-    }
+        public void openChannel(String channelPath, OnSuccessListener<ChannelClient.Channel> successListener, OnFailureListener failureListener) {
+                if (connectedNode == null) {
+                    WearLog.w(TAG, "⚠️ 打开通道失败 [" + channelPath + "]：节点未连接");
+                    return;
+                }
+                WearLog.d(TAG, "🔗 正在请求打开通道: " + channelPath);
+                
+                // 使用 Task 的链式调用
+                channelClient.openChannel(connectedNode.getId(), channelPath)
+                        .addOnSuccessListener(successListener)
+                        .addOnFailureListener(failureListener);
+            }
 
     // ==================== 3. 连接管理 & 消息接收 ====================
     public void connect() {
