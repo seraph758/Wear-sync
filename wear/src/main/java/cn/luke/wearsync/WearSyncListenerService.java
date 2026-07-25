@@ -130,25 +130,28 @@ public class WearSyncListenerService extends WearableListenerService {
                 return;
             }
                 // 5. 原有：相机穿透控制模组
-                if ("camera_control".equalsIgnoreCase(type)) {
-                    if ("CAMERA_HANDSHAKE".equalsIgnoreCase(action)) {
-                        WearLog.d(TAG, "CAM-W001 收到 CAMERA_HANDSHAKE");
-                        return;
-                    }
-                    if ("STREAM_START".equalsIgnoreCase(action)) {
-                        WearLog.d(TAG, "CAM-W003 STREAM_START");
-                        WearCameraActivity activity = WearCameraActivity.sActivityRef.get();
-                        WearLog.d(TAG, "CAM-W003 activity=" + activity);
-                        if (activity != null) {
-                            activity.onChannelReady();
-                        }
-                        return;
-                    }
-                    if ("STOP_CAMERA".equalsIgnoreCase(action) || "FORCE_QUIT_CAMERA".equalsIgnoreCase(action)) {
-                        sendBroadcast(new Intent("cn.luke.wearsync.ACTION_FORCE_QUIT_WEAR_CAMERA"));
-                        return;
-                    }
-                }
+        if ("camera_control".equalsIgnoreCase(type)) {
+            if ("CAMERA_HANDSHAKE".equalsIgnoreCase(action)) {
+                WearLog.d(TAG, "CAM-W001 收到 CAMERA_HANDSHAKE");
+                return;
+            }
+            if ("STREAM_START".equalsIgnoreCase(action)) {
+                // ... 处理视频流启动
+                return;
+            }
+            if ("STOP_CAMERA".equalsIgnoreCase(action) || "FORCE_QUIT_CAMERA".equalsIgnoreCase(action)) {
+                sendBroadcast(new Intent("cn.luke.wearsync.ACTION_FORCE_QUIT_WEAR_CAMERA"));
+                return;
+            }
+            // ✅ 新增：处理开启手机相机的动作
+            if ("open_phone_camera".equalsIgnoreCase(action)) {
+                WearLog.d(TAG, "📸 收到开启手机相机信令，准备启动 WearCameraActivity...");
+                Intent cameraIntent = new Intent(this, WearCameraActivity.class);
+                cameraIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(cameraIntent);
+                return;
+            }
+        }
 
 // 6. 原有：手飙日志无线远程联控模组
 if ("wearlog".equalsIgnoreCase(type)) {
