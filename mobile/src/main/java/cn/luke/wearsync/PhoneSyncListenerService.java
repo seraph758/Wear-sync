@@ -16,6 +16,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
+
 
 /**
  * 📡 手机端监听核心（Camera + DND + Alarm + 🚀安全追加：无线日志大流接收舱）
@@ -30,6 +32,8 @@ public class PhoneSyncListenerService extends WearableListenerService {
     private static final Executor REMOTE_EXECUTOR = Executors.newSingleThreadExecutor();
 
     public static boolean isInternalUpdate = false;
+    private static final ExecutorService MESSAGE_EXECUTOR = Executors.newSingleThreadExecutor();
+
 
     // ============================================================
     // 📩 主入口（100% 还原，未动任一字句）
@@ -46,6 +50,7 @@ public class PhoneSyncListenerService extends WearableListenerService {
             return;
         }
 
+        MESSAGE_EXECUTOR.execute(() -> {
         try {
             String jsonStr = new String(messageEvent.getData(), StandardCharsets.UTF_8);
             JSONObject json = new JSONObject(jsonStr);
@@ -61,8 +66,9 @@ public class PhoneSyncListenerService extends WearableListenerService {
             routeMessage(json, type, action);
 
         } catch (Exception e) {
-            PhoneLog.e(TAG, "parse failed", e);
-        }
+            PhoneLog.e(TAG, "后台解析信令失败", e);
+          }
+        });
     }
 
     // ============================================================
@@ -339,5 +345,9 @@ public class PhoneSyncListenerService extends WearableListenerService {
             PhoneLog.e(TAG, "❌ [流讀取異常] 管道中斷", e);
         }
     }
-
+  @Override
+    public void onDestroy() {
+        super.onDestroy();
+        MESSAGE_EXECUTOR.shutdown();
+    }
 } // 🟢 修复：去掉了原本末尾多余的一个右大括号
