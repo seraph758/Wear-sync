@@ -126,15 +126,14 @@ public class PhoneLog {
         readLogsFromFile(phoneLogFile, tenMinAgo, sdf, result);
         readLogsFromFile(wearLogFile, tenMinAgo, sdf, result);
 
-        Collections.sort(result, (a, b) -> {
-            try {
-                String timeA = a.substring(0, 19);
-                String timeB = b.substring(0, 19);
-                return timeA.compareTo(timeB);
-            } catch (Exception e) {
-                return 0;
-            }
-        });
+        // ✅ 正确写法：安全、简洁，按时间倒序排列（最新的在最前面）
+Collections.sort(result, (a, b) -> {
+    String timeA = a.length() > 19 ? a.substring(0, 19) : a;
+    String timeB = b.length() > 19 ? b.substring(0, 19) : b;
+    // 注意：b 在前，a 在后，实现倒序排列
+    return timeB.compareTo(timeA);
+});
+
 
         return result;
     }
