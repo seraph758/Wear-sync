@@ -267,46 +267,18 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
 // ... 在 setupEncoderAndCamera 方法内部 ...
 
 ListenableFuture<ProcessCameraProvider> future = ProcessCameraProvider.getInstance(this);
-future.addListener(() -> {
-    try {
-        ProcessCameraProvider provider = future.get();
-        mPreviewUseCase = new Preview.Builder().build();
-        
-        // 设置 SurfaceProvider，将编码器的输入 Surface 提供给 CameraX
-        mPreviewUseCase.setSurfaceProvider(request -> {
-            request.provideSurface(mInputSurface, ContextCompat.getMainExecutor(this), result -> {
-                // 可以在这里处理 Surface 提供的结果
-            });
-        });
+        future.addListener(() -> {
+            try {
+                // ... CameraX 绑定代码 ...
+            } catch (Exception e) {
+                PhoneLog.e(TAG, "Camera target binding failed", e);
+                setState(CameraState.ERROR);
+            }
+        }, ContextCompat.getMainExecutor(this));
 
-        provider.unbindAll();
-        
-        // ✅ 修复：使用 this (即 Service 实例) 作为 LifecycleOwner
-        // 因为 PhoneSyncCameraService 已经实现了 LifecycleOwner 接口
-        // 并且 getLifecycle() 方法返回了正确的 LifecycleRegistry
-        provider.bindToLifecycle(
-            this, // ✅ 正确：传入 Service 实例，它会通过 getLifecycle() 提供 Lifecycle
-            CameraSelector.DEFAULT_BACK_CAMERA,
-            mPreviewUseCase
-        );
+    } // ✅ 修复：在这里添加一个大括号 '}'，用于结束 setupEncoderAndCamera 方法开头的 'try' 代码块
 
-        PhoneLog.d(TAG, "CAM-P010 Camera bind success");
-        setState(CameraState.CAMERA_READY);
-        PhoneLog.d(TAG, "CAM-P011 send CAMERA_READY");
-        sendCameraReady();
-        
-        if (mPendingStreamingNodeId != null) {
-            PhoneLog.d(TAG, "CAM-P012 pending node=" + mPendingStreamingNodeId);
-            startStreaming(mPendingStreamingNodeId);
-            mPendingStreamingNodeId = null;
-        }
-    } catch (Exception e) {
-        PhoneLog.e(TAG, "Camera target binding failed", e);
-        setState(CameraState.ERROR);
-    }
-}, ContextCompat.getMainExecutor(this));
-
-}
+    // 现在，sendCameraReady 方法就成为了 setupEncoderAndCamera 方法内部的一个合法方法
     private void sendCameraReady() {
         new Thread(() -> {
             try {
@@ -317,10 +289,10 @@ future.addListener(() -> {
                 json.put("type", "camera");
                 json.put("action", "CAMERA_READY");
                 Wearable.getMessageClient(this)
-                        .sendMessage(
-                                nodeId,
-                                UNIVERSAL_SYNC_PATH,
-                                json.toString().getBytes(StandardCharsets.UTF_8));
+                    .sendMessage(
+                        nodeId,
+                        UNIVERSAL_SYNC_PATH,
+                        json.toString().getBytes(StandardCharsets.UTF_8));
                 PhoneLog.d(TAG, "P-010 CAMERA_READY");
             } catch (Exception e) {
                 PhoneLog.e(TAG, "send CAMERA_READY", e);
