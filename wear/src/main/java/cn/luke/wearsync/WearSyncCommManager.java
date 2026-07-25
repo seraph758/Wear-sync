@@ -3,6 +3,7 @@ package cn.luke.wearsync;
 import android.content.Context;
 import androidx.annotation.NonNull;
 import com.google.android.gms.tasks.Tasks;
+import com.google.android.gms.wearable.Channel;
 import com.google.android.gms.wearable.ChannelClient;
 import com.google.android.gms.wearable.MessageClient;
 import com.google.android.gms.wearable.MessageEvent;
@@ -44,27 +45,7 @@ public class WearSyncCommManager implements MessageClient.OnMessageReceivedListe
         void onDisconnected();
     }
 
-    // ✅ 新增：定义一个监听器接口
-    public interface DndStateListener {
-        void onLocalDndChanged(int interruptionFilter);
-    }
-
-    private DndStateListener dndStateListener;
     private ConnectionListener connectionListener;
-
-    // ✅ 新增：提供一个方法让外部（NotificationService）注册监听
-    public void setDndStateListener(DndStateListener listener) {
-        this.dndStateListener = listener;
-    }
-
-    // 新增：注册连接监听
-    public void setConnectionListener(ConnectionListener listener) {
-        this.connectionListener = listener;
-        // 注册时如果已经连上了，直接回调一次
-        if (connectedNode != null && listener != null) {
-            listener.onConnected(connectedNode);
-        }
-    }
 
     // 👇 私有构造，全局单例
     private WearSyncCommManager(Context context) {
@@ -120,18 +101,25 @@ public class WearSyncCommManager implements MessageClient.OnMessageReceivedListe
 
     /**
      * ✅ 打开通用数据通道（视频流、文件传输等都走这里）
+     * 修正：使用 Task 链式调用替代不存在的 Listener 参数
      * @param channelPath 通道路径标识，如 "/wear-video-stream", "/wear-file-transfer"
      */
-    public void openChannel(String channelPath, ChannelClient.OnChannelOpenedListener successListener, ChannelClient.OnChannelClosedListener failureListener) {
+    public void openChannel(String channelPath) {
         if (connectedNode == null) {
             WearLog.w(TAG, "⚠️ 打开通道失败 [" + channelPath + "]：节点未连接");
             return;
         }
         WearLog.d(TAG, "🔗 正在请求打开通道: " + channelPath);
-        // 使用 Task 的链式调用
+        
         channelClient.openChannel(connectedNode.getId(), channelPath)
-                .addOnSuccessListener(successListener)
-                .addOnFailureListener(failureListener);
+                .addOnSuccessListener(channel -> {
+                    WearLog.d(TAG, "✅ 通道已打开: " + channelPath);
+                    // TODO: 在这里处理通道打开后的逻辑，例如开始传输日志或流媒体
+                    // 可以调用 channelClient.getOutputStream(channel) 获取输出流
+                })
+                .addOnFailureListener(e -> {
+                    WearLog.e(TAG, "❌ 打开通道失败 [" + channelPath + "]: " + e.getMessage(), e);
+                });
     }
 
     // ==================== 3. 连接管理 & 消息接收 ====================
@@ -155,6 +143,15 @@ public class WearSyncCommManager implements MessageClient.OnMessageReceivedListe
 
     public void disconnect() {
         /* 清理资源 */
+    }
+
+    // 新增：注册连接监听
+    public void setConnectionListener(ConnectionListener listener) {
+        this.connectionListener = listener;
+        // 注册时如果已经连上了，直接回调一次
+        if (connectedNode != null && listener != null) {
+            listener.onConnected(connectedNode);
+        }
     }
 
     // 新增：专门给业务用的发送方法（简化参数）
