@@ -63,22 +63,11 @@ public class WearSyncDndManager {
             return;
         }
 
-        // ✅ 委托给 CommManager 发送，自己只关心业务语义
+        // ✅ 委托给 CommManager 发送，自己只关心通信细节
         WearSyncCommManager.sendDndReverseSync(context, interruptionFilter);
     }
 
-    // ✅ 供 WearableListenerService 调用：处理手机同步过来的指令
-    public static void onRemoteDndChanged(Context context, int value) {
-        isInternalUpdate = true;
-        // 调用系统 API 切换手表 DND...
-        
-        new Handler(Looper.getMainLooper()).postDelayed(
-            () -> isInternalUpdate = false, 1500
-        );
-    }
-    /**
-     * ✅ 兼容旧调用：使用默认延迟值 500ms
-     */
+
     public static void executeDndSync(Context context, int dndStatePhone) {
         // ✅ 在兜底方法内部自动读取SP，杜绝硬编码遗漏
         SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
@@ -163,3 +152,5 @@ public class WearSyncDndManager {
         WearVibratorHelper.vibratePredefined(context, VibrationEffect.EFFECT_TICK);
     }
 }
+
+
