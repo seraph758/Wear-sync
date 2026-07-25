@@ -159,7 +159,9 @@ public class PhoneSyncListenerService extends WearableListenerService {
         }
      
         if ("START_CAMERA".equalsIgnoreCase(action)
-                || "START_CAMERA_UI".equalsIgnoreCase(action)) {
+            
+     || "START_CAMERA_UI".equalsIgnoreCase(action) || 
+        "open_phone_camera".equalsIgnoreCase(action)) {
      
             if (nodeId == null || nodeId.isEmpty()) {
      
