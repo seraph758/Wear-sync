@@ -306,7 +306,7 @@ future.addListener(() -> {
     }
 }, ContextCompat.getMainExecutor(this));
 
-
+}
     private void sendCameraReady() {
         new Thread(() -> {
             try {
