@@ -16,8 +16,12 @@ public class WearSyncNotificationService extends NotificationListenerService {
     @Override
     public void onInterruptionFilterChanged(int interruptionFilter) {
         super.onInterruptionFilterChanged(interruptionFilter);
-        // ✅ 只做一件事：转发事件给 Manager
-        // 注意：这里我们调用的是 DndManager 的一个新方法，专门处理本地变化
-        WearSyncDndManager.onLocalDndChanged(this, interruptionFilter);
+        
+        // ✅ 直接获取 CommManager 实例并通知它
+        // 注意：这里需要确保 CommManager 已经初始化
+        WearSyncCommManager commManager = WearSyncCommManager.getInstance(this);
+        if (commManager.getDndStateListener() != null) {
+             commManager.getDndStateListener().onLocalDndChanged(interruptionFilter);
+        }
     }
 }
