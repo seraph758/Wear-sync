@@ -44,6 +44,9 @@ public class PhoneSyncListenerService extends WearableListenerService {
         if (messageEvent != null && messageEvent.getSourceNodeId() != null) {
             WearSyncState.setNodeId(this, messageEvent.getSourceNodeId());
         }
+ String receivedPath = (messageEvent != null) ? messageEvent.getPath() : "null";
+    PhoneLog.d(TAG, "🔍 收到消息，路径为: [" + receivedPath + "]，期望路径: [" + UNIVERSAL_SYNC_PATH + "]");
+
 
         if (messageEvent == null || !UNIVERSAL_SYNC_PATH.equals(messageEvent.getPath())) {
             super.onMessageReceived(messageEvent);
