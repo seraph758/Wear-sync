@@ -25,6 +25,8 @@ public class WearSyncDndManager {
     private static boolean isVibrateSwitchOn = true;
     private static boolean isSleepLinkageOpen = true;
     private static boolean isPowerSaveLinkageOpen = true;
+    private static volatile boolean isInternalUpdate = false;
+
 
     // 这个方法是给 WearSyncCommManager 调用的
     public static void handleIncomingCommand(Context context, JSONObject json) {
@@ -54,7 +56,26 @@ public class WearSyncDndManager {
         isPowerSaveLinkageOpen = (statusMask & 0x08) != 0;
         WearLog.d(TAG, "📥 [Mask解析] mask=" + statusMask + " 震动=" + isVibrateSwitchOn + " 睡眠=" + isSleepLinkageOpen + " 省电=" + isPowerSaveLinkageOpen);
     }
+      // ✅ 供 NotificationListener 调用：处理用户手动切换
+    public static void onLocalDndChanged(Context context, int interruptionFilter) {
+        if (isInternalUpdate) {
+            WearLog.d(TAG, "🔒 内部同步，跳过反向通知");
+            return;
+        }
 
+        // ✅ 委托给 CommManager 发送，自己只关心业务语义
+        WearSyncCommManager.sendDndReverseSync(context, interruptionFilter);
+    }
+
+    // ✅ 供 WearableListenerService 调用：处理手机同步过来的指令
+    public static void onRemoteDndChanged(Context context, int value) {
+        isInternalUpdate = true;
+        // 调用系统 API 切换手表 DND...
+        
+        new Handler(Looper.getMainLooper()).postDelayed(
+            () -> isInternalUpdate = false, 1500
+        );
+    }
     /**
      * ✅ 兼容旧调用：使用默认延迟值 500ms
      */
