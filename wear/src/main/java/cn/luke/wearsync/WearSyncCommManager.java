@@ -56,7 +56,22 @@ public class WearSyncCommManager implements MessageClient.OnMessageReceivedListe
             listener.onConnected(connectedNode);
         }
     }
+     public static void sendDndReverseSync(Context context, int interruptionFilter) {
+        try {
+            JSONObject json = new JSONObject();
+            json.put("sender", "wear");
+            json.put("type", "dnd");
+            json.put("dnd_profile_value", interruptionFilter);
+            json.put("timestamp", System.currentTimeMillis());
 
+            // 复用已有的发送基础设施
+            sendCommand(context, json); 
+            
+            WearLog.d(TAG, "🚀 [逆向同步] 手表DND=" + interruptionFilter + " 已通知手机");
+        } catch (Exception e) {
+            WearLog.e(TAG, "❌ 反向同步失败", e);
+        }
+    }
     // 👇 私有构造，全局单例
     private WearSyncCommManager(Context context) {
         this.appContext = context.getApplicationContext();
