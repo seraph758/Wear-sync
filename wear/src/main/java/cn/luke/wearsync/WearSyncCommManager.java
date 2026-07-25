@@ -73,6 +73,10 @@ public class WearSyncCommManager implements MessageClient.OnMessageReceivedListe
      * @param extra 附加参数，可为 null
      */
     public void sendCommand(String type, String action, JSONObject extra) {
+  WearLog.d(TAG, "📤 准备发送命令: type=" + type + ", action=" + action 
+        + ", nodeId=" + (connectedNode != null ? connectedNode.getId() : "NULL")
+        + ", path=" + UNIVERSAL_SYNC_PATH);
+    
         if (connectedNode == null) {
             WearLog.w(TAG, "⚠️ 发送命令失败 [type=" + type + ", action=" + action + "]：节点未连接");
             return;
