@@ -85,7 +85,9 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
                     
                 try {
                     WearLog.d(TAG, "② 正在通过 WearSyncCommManager 发送开启相机信令...");
-                    WearSyncCommManager.getInstance(requireContext()).sendBusinessCommand("camera_control", "open_phone_camera");
+               
+WearSyncCommManager.getInstance(requireContext()).launchPhoneCameraActivity();
+
                     WearLog.d(TAG, "✅ 开启相机信令已发送");
                 } catch (Exception e) {
                     WearLog.e(TAG, "❌ 发送开启相机信令失败：" + e.getMessage(), e);
