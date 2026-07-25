@@ -345,9 +345,5 @@ public class PhoneSyncListenerService extends WearableListenerService {
             PhoneLog.e(TAG, "❌ [流讀取異常] 管道中斷", e);
         }
     }
-  @Override
-    public void onDestroy() {
-        super.onDestroy();
-        MESSAGE_EXECUTOR.shutdown();
-    }
+  
 } 
