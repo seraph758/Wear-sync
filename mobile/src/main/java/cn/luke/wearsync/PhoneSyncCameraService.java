@@ -277,6 +277,11 @@ ListenableFuture<ProcessCameraProvider> future = ProcessCameraProvider.getInstan
         }, ContextCompat.getMainExecutor(this));
 
     } // ✅ 修复：在这里添加一个大括号 '}'，用于结束 setupEncoderAndCamera 方法开头的 'try' 代码块
+        catch (Exception e) {
+        PhoneLog.e(TAG, "Encoder setup failed", e);
+        setState(CameraState.ERROR);
+    }
+} 
 
     // 现在，sendCameraReady 方法就成为了 setupEncoderAndCamera 方法内部的一个合法方法
     private void sendCameraReady() {
