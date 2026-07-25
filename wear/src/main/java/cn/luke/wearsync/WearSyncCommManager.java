@@ -96,6 +96,25 @@ public class WearSyncCommManager implements MessageClient.OnMessageReceivedListe
             }
         });
     }
+    // 在 WearSyncCommManager.java 的末尾，添加以下两个方法
+// ============================================================
+
+/**
+ * ✅ 专用方法：通知手机关闭闹钟
+ * 封装了 "alarm_action" 和 "DISMISS" 这两个魔法字符串
+ */
+public void dismissPhoneAlarm() {
+    sendCommand("alarm_action", "DISMISS", null);
+}
+
+/**
+ * ✅ 专用方法：通知手机延后闹钟
+ * 封装了 "alarm_action" 和 "SNOOZE" 这两个魔法字符串
+ */
+public void snoozePhoneAlarm() {
+    sendCommand("alarm_action", "SNOOZE", null);
+}
+    
 
     // ==================== 2. 通用通道管理 ====================
 
