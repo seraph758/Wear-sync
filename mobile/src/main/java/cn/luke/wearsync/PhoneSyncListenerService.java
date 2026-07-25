@@ -350,4 +350,4 @@ public class PhoneSyncListenerService extends WearableListenerService {
         super.onDestroy();
         MESSAGE_EXECUTOR.shutdown();
     }
-} // 🟢 修复：去掉了原本末尾多余的一个右大括号
+} 
