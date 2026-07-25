@@ -46,6 +46,18 @@ public class WearSyncCommManager implements MessageClient.OnMessageReceivedListe
         void onDisconnected();
     }
 
+    // ✅ 新增：定义一个监听器接口
+    public interface DndStateListener {
+        void onLocalDndChanged(int interruptionFilter);
+    }
+
+    private DndStateListener dndStateListener;
+
+    // ✅ 新增：提供一个方法让外部（NotificationService）注册监听
+    public void setDndStateListener(DndStateListener listener) {
+        this.dndStateListener = listener;
+    }
+    
     private ConnectionListener connectionListener;
 
     // 新增：注册连接监听
@@ -56,6 +68,7 @@ public class WearSyncCommManager implements MessageClient.OnMessageReceivedListe
             listener.onConnected(connectedNode);
         }
     }
+
      public static void sendDndReverseSync(Context context, int interruptionFilter) {
         try {
             JSONObject json = new JSONObject();
