@@ -57,16 +57,6 @@ public class WearSyncDndManager {
         WearLog.d(TAG, "📥 [Mask解析] mask=" + statusMask + " 震动=" + isVibrateSwitchOn + " 睡眠=" + isSleepLinkageOpen + " 省电=" + isPowerSaveLinkageOpen);
     }
       // ✅ 供 NotificationListener 调用：处理用户手动切换
-    public static void onLocalDndChanged(Context context, int interruptionFilter) {
-        if (isInternalUpdate) {
-            WearLog.d(TAG, "🔒 内部同步，跳过反向通知");
-            return;
-        }
-
-        // ✅ 委托给 CommManager 发送，自己只关心通信细节
-        WearSyncCommManager.sendDndReverseSync(context, interruptionFilter);
-    }
-
 
     public static void executeDndSync(Context context, int dndStatePhone) {
         // ✅ 在兜底方法内部自动读取SP，杜绝硬编码遗漏
