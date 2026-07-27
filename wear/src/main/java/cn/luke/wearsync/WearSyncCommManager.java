@@ -311,13 +311,6 @@ public void openPhoneCamera() {
             try {
                 future.get();
                 WearLog.w(TAG, "✨ [成功] 手机端远程 Activity 唤醒请求已被 Google 通道确认");
-                
-                // ✅ 修复旧代码笔误：正确拉起本地相机预览界面
-                Intent cameraIntent = new Intent(context, WearCameraActivity.class);
-                cameraIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                context.startActivity(cameraIntent);
-                WearLog.d(TAG, "CAM-W000 WearCameraActivity 已主动拉起");
-                
             } catch (Exception e) {
                 Throwable cause = e.getCause();
                 String errMsg = cause != null 
