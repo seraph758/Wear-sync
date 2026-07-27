@@ -8,14 +8,13 @@ import android.widget.Button;
 import android.widget.TextView;
 import androidx.annotation.Nullable;
 import androidx.activity.ComponentActivity;
-import androidx.localbroadcastmanager.content.LocalBroadcastManager; // ✅ 确保导入
-import com.google.android.gms.tasks.Tasks;
-import com.google.android.gms.wearable.MessageClient;
-import com.google.android.gms.wearable.Node;
-import com.google.android.gms.wearable.Wearable;
+// ❌ 删除 import androidx.localbroadcastmanager.content.LocalBroadcastManager; (未使用)
+// ❌ 删除 import com.google.android.gms.tasks.Tasks; (未使用)
+// ❌ 删除 import com.google.android.gms.wearable.MessageClient; (未使用)
+// ❌ 删除 import com.google.android.gms.wearable.Node; (未使用)
+// ❌ 删除 import com.google.android.gms.wearable.Wearable; (未使用)
 import java.lang.ref.WeakReference;
-import java.nio.charset.StandardCharsets;
-import java.util.List;
+// ❌ 删除 import java.nio.charset.StandardCharsets; (未使用)
 import org.json.JSONObject;
 
 public class WearAlarmActivity extends ComponentActivity {
@@ -32,15 +31,15 @@ public class WearAlarmActivity extends ComponentActivity {
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-            // --- 新增的检查逻辑开始 ---
-    // 检查 Intent 中是否包含强制停止的指令
-    if (getIntent() != null && "FORCE_STOP".equals(getIntent().getStringExtra("alarm_action"))) {
-        WearLog.d("WearAlarmActivity", "收到 FORCE_STOP 指令，正在执行 cleanExit...");
-        cleanExit(); // 调用你已有的退出方法，它会停止震动、释放锁等
-        finish();    // 结束当前 Activity
-        return;      // 直接返回，不再执行后面的启动逻辑
-    }
         
+        // --- 检查 FORCE_STOP 指令 ---
+        if (getIntent() != null && "FORCE_STOP".equals(getIntent().getStringExtra("alarm_action"))) {
+            WearLog.d("WearAlarmActivity", "收到 FORCE_STOP 指令，正在执行 cleanExit...");
+            cleanExit();
+            finish();
+            return;
+        }
+
         // 1. 基础初始化
         instanceRef = new WeakReference<>(this);
         screenManager = new WearSyncScreenManager(this);
@@ -53,44 +52,38 @@ public class WearAlarmActivity extends ComponentActivity {
         tvAlarmTime = findViewById(R.id.tv_alarm_time);
         Button btnDismiss = findViewById(R.id.btn_dismiss);
         Button btnSnooze = findViewById(R.id.btn_snooze);
-
+        
         startWatchVibration();
-      
-        // 2. ✅ 修复：将通信逻辑包裹在 onCreate 方法内
-        WearSyncCommManager.getInstance(this).setConnectionListener(new WearSyncCommManager.ConnectionListener() {
-            @Override
-            public void onConnected(Node node) {
-                WearLog.d(TAG, "通信链路已就绪，可以发送指令");
-            }
 
-            @Override
-            public void onDisconnected() {
-                WearLog.w(TAG, "通信链路断开");
-            }
-        });
-        WearSyncCommManager.getInstance(this).connect();
+        // ❌ 删除：移除所有与 WearSyncCommManager 通信相关的代码
+        // WearSyncCommManager.getInstance(this).setConnectionListener(...);
+        // WearSyncCommManager.getInstance(this).connect();
 
         // 3. 按钮逻辑
         btnDismiss.setOnClickListener(v -> {
             WearLog.d(TAG, "🔘 用户点击 [关闭]");
+            // ✅ 调用 CommManager 发送指令
             WearSyncCommManager.getInstance(this).dismissPhoneAlarm();
             cleanExit();
         });
 
         btnSnooze.setOnClickListener(v -> {
             WearLog.d(TAG, "🔘 用户点击 [延后]");
+            // ✅ 调用 CommManager 发送指令
             WearSyncCommManager.getInstance(this).snoozePhoneAlarm();
             cleanExit();
         });
     }
 
-    // ✅ 新增：处理来自 CommManager 的指令
+    // ✅ 修改：handleIncomingCommand 变为纯粹的 UI 更新方法
+    // 职责：只负责根据指令更新界面，不涉及任何通信逻辑
     public static void handleIncomingCommand(Context context, JSONObject json) {
         WearLog.d(TAG, "收到闹钟控制指令: " + json.toString());
         String action = json.optString("action");
         if ("DISMISS".equals(action)) {
-            if (getInstance() != null) {
-                getInstance().cleanExit();
+            WearAlarmActivity activity = getInstance();
+            if (activity != null) {
+                activity.cleanExit();
             }
         }
     }
