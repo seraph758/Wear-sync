@@ -72,12 +72,12 @@ public class WearSyncListenerService extends WearableListenerService {
                     int repeatIndex = configJson.optInt("repeatIndex", -1);
 
                     if ("preview".equalsIgnoreCase(action)) {
-                        // 📳 修复：直接使用传过来的参数震动，而不是读本地配置
-                        // 假设 WearVibratorHelper 有一个可以直接接收参数的方法
-                        // 如果没有，你需要在 WearVibratorHelper 里加一个这样的方法
-                        WearVibratorHelper.vibratePattern(this, onDuration, offDuration, repeatIndex);
-                        WearLog.i(TAG, "🔄 收到预览指令，已触发即时自定义震动: on=" + onDuration + ", off=" + offDuration + ", repeat=" + repeatIndex);
-                    } else if ("save".equalsIgnoreCase(action)) {
+    // ✅ 修复：直接使用从手机端传过来的最新参数进行震动预览
+    // 这样就绕过了读取本地旧配置的步骤
+    WearVibratorHelper.vibratePattern(this, onDuration, offDuration, repeatIndex);
+    
+    WearLog.i(TAG, "🔄 收到预览指令，已触发即时自定义震动: on=" + onDuration + ", off=" + offDuration + ", repeat=" + repeatIndex);
+} else if ("save".equalsIgnoreCase(action)) {
                         // 💾 持久化到手表本地
                         android.content.SharedPreferences sp = getSharedPreferences("wear_vibration_prefs", Context.MODE_PRIVATE);
                         sp.edit().putInt("on_duration", onDuration)
