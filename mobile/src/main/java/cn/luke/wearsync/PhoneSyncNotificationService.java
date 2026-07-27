@@ -186,20 +186,33 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
         }
 
         // 2. 核心判断：FLAG_INSISTENT + 包名，两者必须同时满足
-        Notification notification = sbn.getNotification();
-        if (notification == null) return;
+Notification notification = sbn.getNotification();
+if (notification == null) return;
 
-        boolean isInsistent = (notification.flags & Notification.FLAG_INSISTENT) != 0;
-        String currentPkg = sbn.getPackageName();
-        String selectedPkg = prefs.getString("selected_alarm_package", "com.google.android.deskclock");
-        boolean isTargetPackage = selectedPkg.equalsIgnoreCase(currentPkg);
+// 1. 第一道门槛：先判断包名（成本最低，快速排除无关通知）
+String currentPkg = sbn.getPackageName();
+String selectedPkg = prefs.getString("selected_alarm_package", "com.google.android.deskclock");
+boolean isTargetPackage = selectedPkg.equalsIgnoreCase(currentPkg);
 
-        PhoneLog.d(TAG, "通知判断 -> isInsistent: " + isInsistent + ", isTargetPackage: " + isTargetPackage + ", pkg: " + currentPkg);
+if (!isTargetPackage) {
+    // 非目标包名，直接静默返回，不打印任何日志
+    return;
+}
 
-        if (!isInsistent || !isTargetPackage) {
-            PhoneLog.d(TAG, "⚠️ 拦截：非真正闹钟通知 (isInsistent=" + isInsistent + ", isTargetPackage=" + isTargetPackage + ")");
-            return;
-        }
+// 2. 第二道门槛：包名匹配后，再判断 FLAG_INSISTENT
+boolean isInsistent = (notification.flags & Notification.FLAG_INSISTENT) != 0;
+
+PhoneLog.d(TAG, "🔔 闹钟包名匹配 -> isInsistent: " + isInsistent + ", pkg: " + currentPkg);
+
+if (!isInsistent) {
+    PhoneLog.d(TAG, "⚠️ 拦截：目标包名匹配但非持续响铃通知 (isInsistent=false)");
+    return;
+}
+
+// ✅ 双重验证通过，确认为真正的闹钟通知
+PhoneLog.d(TAG, "✅ 确认闹钟通知，准备同步到手表 -> pkg: " + currentPkg);
+// ... 后续触发手表闹钟的逻辑 ...
+
 
         // 3. 防重复检查
         if (isAlarmCurrentlyRinging) {
