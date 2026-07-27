@@ -14,6 +14,13 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import android.content.Intent;
+import android.net.Uri;
+import androidx.wear.remote.interactions.RemoteActivityHelper;
+import com.google.common.util.concurrent.ListenableFuture;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
+
 
 /**
  * 全局统一通信管理器
@@ -36,6 +43,8 @@ public class WearSyncCommManager implements MessageClient.OnMessageReceivedListe
     private final ChannelClient channelClient;
     private final ExecutorService executor;
     private Node connectedNode;
+    private final Executor executor = Executors.newSingleThreadExecutor();
+    
 
     // ✅ 防循环标记，统一由 CommManager 管理
     private static volatile boolean isInternalUpdate = false;
