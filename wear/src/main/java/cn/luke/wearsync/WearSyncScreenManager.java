@@ -14,7 +14,7 @@ import java.lang.ref.WeakReference;
 public class WearSyncScreenManager implements DefaultLifecycleObserver {
 
     private static final String TAG = "WearSyncScreenMgr";
-    private static final long MAX_CPU_WAKE_MS = 5 * 60 * 1000L; // 安全上限5分钟
+    private static final long MAX_CPU_WAKE_MS = 3 * 60 * 1000L; // 安全上限3分钟
 
     private final Context appContext;
     private WeakReference<ComponentActivity> activityRef; // 💡 修改为 ComponentActivity
