@@ -33,13 +33,6 @@ public class WearSyncCommManager {
     private final ChannelClient channelClient;
     private Node connectedNode;
 
-    // ✅ 修复2: 保留 ConnectionListener 接口，避免 WearAlarmActivity 报错
-    public interface ConnectionListener {
-        void onConnected();
-        void onDisconnected();
-    }
-    private ConnectionListener connectionListener;
-
     private WearSyncCommManager(@NonNull Context context) {
         this.appContext = context.getApplicationContext();
         this.executor = Executors.newSingleThreadExecutor();
@@ -58,22 +51,9 @@ public class WearSyncCommManager {
         return instance;
     }
 
-    // ======================== 保留的旧接口方法 (避免外部调用报错) ========================
-
-    /**
-     * ✅ 修复3: 保留 setConnectionListener
-     */
-    public void setConnectionListener(ConnectionListener listener) {
-        this.connectionListener = listener;
-    }
-
-    /**
-     * ✅ 修复4: 保留 connect() 方法
-     */
-    public void connect() {
+private void connect() {
         refreshConnectedNode();
-    }
-
+}
     /**
      * ✅ 修复5: 保留 sendBusinessCommand 方法
      */
@@ -103,16 +83,19 @@ public class WearSyncCommManager {
                 if (nodes != null && !nodes.isEmpty()) {
                     connectedNode = nodes.get(0);
                     WearLog.d(TAG, "✅ 已缓存连接节点: " + connectedNode.getDisplayName());
-                    if (connectionListener != null) connectionListener.onConnected();
+                    // ❌ 删除：connectionListener 回调
+                    // if (connectionListener != null) connectionListener.onConnected();
                 } else {
                     connectedNode = null;
                     WearLog.w(TAG, "⚠️ 无已连接的手机节点");
-                    if (connectionListener != null) connectionListener.onDisconnected();
+                    // ❌ 删除：connectionListener 回调
+                    // if (connectionListener != null) connectionListener.onDisconnected();
                 }
             } catch (Exception e) {
                 connectedNode = null;
                 WearLog.e(TAG, "❌ 获取连接节点失败", e);
-                if (connectionListener != null) connectionListener.onDisconnected();
+                // ❌ 删除：connectionListener 回调
+                // if (connectionListener != null) connectionListener.onDisconnected();
             }
         });
     }
