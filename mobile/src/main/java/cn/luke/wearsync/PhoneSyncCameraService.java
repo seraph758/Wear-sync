@@ -95,6 +95,18 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
     @Override
     public void onCreate() {
         super.onCreate();
+    // 1. 创建一个通知 (这是必须的)
+    Notification notification = new NotificationCompat.Builder(this, "camera_service_channel")
+            .setContentTitle("相机服务运行中")
+            .setContentText("正在等待手表连接...")
+            // 找到 .setSmallIcon(...) 这一行
+.setSmallIcon(R.drawable.ic_notification)  // ✅ 改用这个
+
+            .build();
+    
+    // 2. 立即将服务置于前台
+    startForeground(1, notification);
+    
         instance = this;
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE);
         PhoneLog.d(TAG, "SERVICE CREATED");
