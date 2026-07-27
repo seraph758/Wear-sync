@@ -32,6 +32,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import android.os.Build;
+import android.app.Notification;
+import androidx.core.app.NotificationCompat;
+
 
 /**
  * 📹 PhoneSyncCameraService - StateMachine 终极稳定版
