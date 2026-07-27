@@ -129,7 +129,32 @@ public class WearSyncListenerService extends WearableListenerService {
                 startActivity(alarmIntent);
                 return;
             }
-                // 5. 原有：相机穿透控制模组
+                // 5. 新增：处理手机发来的强制停止闹钟指令
+if ("alarm".equalsIgnoreCase(type) && "FORCE_STOP_WEAR_ALARM".equalsIgnoreCase(action)) {
+    WearLog.d(TAG, "🛑 收到手机发来的强制停止闹钟指令，正在关闭 WearAlarmActivity...");
+    
+    // 1. 创建一个 Intent 指向 WearAlarmActivity
+    Intent stopIntent = new Intent(this, WearAlarmActivity.class);
+    
+    // 2. 设置关键 Flags
+    //    NEW_TASK: 因为是从 Service 启动
+    //    CLEAR_TOP: 如果 Activity 已在任务栈中，则将其上方的所有 Activity 都出栈
+    //    SINGLE_TOP: 配合 CLEAR_TOP，确保复用已存在的实例，并触发 onNewIntent
+    stopIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+    
+    // 3. 放入一个“动作”标识，告诉 Activity 这次是来停止的，不是来启动的
+    stopIntent.putExtra("alarm_action", "FORCE_STOP");
+    
+    // 4. 启动 Activity
+    startActivity(stopIntent);
+    
+    // 5. 处理完毕，直接返回，避免执行后续逻辑
+    return; 
+}
+
+
+                
+                // 6. 原有：相机穿透控制模组
         if ("camera_control".equalsIgnoreCase(type)) {
             if ("CAMERA_HANDSHAKE".equalsIgnoreCase(action)) {
                 WearLog.d(TAG, "CAM-W001 收到 CAMERA_HANDSHAKE");
@@ -153,7 +178,7 @@ public class WearSyncListenerService extends WearableListenerService {
             }
         }
 
-// 6. 原有：手飙日志无线远程联控模组
+// 7. 原有：手飙日志无线远程联控模组
 if ("wearlog".equalsIgnoreCase(type)) {
     boolean wearDebug = json.optBoolean("wear_log_debug", true);
     WearLog.DEBUG = wearDebug;
