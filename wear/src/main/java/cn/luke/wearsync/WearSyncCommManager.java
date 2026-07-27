@@ -277,4 +277,50 @@ public void snoozePhoneAlarm() {
             }
         });
     }
+    /**
+ * 通过 RemoteActivityHelper 拉起手机端相机
+ * 替代原有的 MessageClient 发送方式，无需手动获取 nodeId
+ */
+public void openPhoneCamera() {
+    WearLog.w(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    WearLog.w(TAG, "🚀 [远端相机启动] CommManager 开始准备向手机发送 Camera 拉起请求");
+    WearLog.w(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+    try {
+        RemoteActivityHelper helper = new RemoteActivityHelper(context, executor);
+
+        Intent intent = new Intent(Intent.ACTION_VIEW);
+        intent.addCategory(Intent.CATEGORY_BROWSABLE);
+        intent.setPackage("cn.luke.wearsync");
+        intent.setData(Uri.parse("wearsync://camera"));
+
+        WearLog.d(TAG, "🛰️ [发射] 正在调用 RemoteActivityHelper.startRemoteActivity()");
+        
+        ListenableFuture<Void> future = helper.startRemoteActivity(intent);
+
+        future.addListener(() -> {
+            try {
+                future.get();
+                WearLog.w(TAG, "✨ [成功] 手机端远程 Activity 唤醒请求已被 Google 通道确认");
+                
+                // ✅ 修复旧代码笔误：正确拉起本地相机预览界面
+                Intent cameraIntent = new Intent(context, WearCameraActivity.class);
+                cameraIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                context.startActivity(cameraIntent);
+                WearLog.d(TAG, "CAM-W000 WearCameraActivity 已主动拉起");
+                
+            } catch (Exception e) {
+                Throwable cause = e.getCause();
+                String errMsg = cause != null 
+                    ? cause.getClass().getName() + " : " + cause.getMessage()
+                    : e.getClass().getName() + " : " + e.getMessage();
+                WearLog.e(TAG, "🔴 [失败] RemoteActivityHelper 回调异常: " + errMsg, e);
+            }
+        }, executor);
+
+    } catch (Exception e) {
+        WearLog.e(TAG, "🔴 [致命异常] RemoteActivityHelper 初始化/调用失败: " + e.getMessage(), e);
+    }
+}
+    
 }
