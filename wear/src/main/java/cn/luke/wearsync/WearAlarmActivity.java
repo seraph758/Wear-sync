@@ -32,6 +32,14 @@ public class WearAlarmActivity extends ComponentActivity {
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+            // --- 新增的检查逻辑开始 ---
+    // 检查 Intent 中是否包含强制停止的指令
+    if (getIntent() != null && "FORCE_STOP".equals(getIntent().getStringExtra("alarm_action"))) {
+        WearLog.d("WearAlarmActivity", "收到 FORCE_STOP 指令，正在执行 cleanExit...");
+        cleanExit(); // 调用你已有的退出方法，它会停止震动、释放锁等
+        finish();    // 结束当前 Activity
+        return;      // 直接返回，不再执行后面的启动逻辑
+    }
         
         // 1. 基础初始化
         instanceRef = new WeakReference<>(this);
