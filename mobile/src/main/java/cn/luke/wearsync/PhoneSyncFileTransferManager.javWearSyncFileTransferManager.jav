@@ -22,7 +22,7 @@ import java.nio.charset.StandardCharsets;
  * WearSync 跨端文件传输管理器 (手机端)
  * 负责：发送准备信令 -> 等待ACK(简化为延迟) -> 打开Channel -> 推送文件流
  */
-public class WearSyncFileTransferManager {
+public class PhoneSyncFileTransferManager {
 
     private static final String TAG = "WearSyncFileTransfer";
 
