@@ -112,47 +112,31 @@ public class WearSyncListenerService extends WearableListenerService {
                     WearSyncDndManager.executeDndSync(this, dndStatePhone, pullDownDelayMs); // ✅ 透传延迟值
                     return;
                 }
-                // 4. 原有：闹钟拦截控制模组（推荐最终版，纯启动，不提前震动）
-                if ("alarm".equalsIgnoreCase(type)) {
-                WearLog.d(TAG, "⏰ 收到手机闹钟信令，正在将其无损打包并直发 WearAlarmActivity ➔ " + action);
+// 4. 闹钟控制模组 (最终合并版)
+if ("alarm".equalsIgnoreCase(type)) {
+    WearLog.d(TAG, "⏰ 收到手机闹钟信令，action=" + action);
 
-                Intent alarmIntent = new Intent(this, WearAlarmActivity.class);
-
-                // === 关键优化（解决 3\~4 秒延迟）===
-                alarmIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                alarmIntent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
-                alarmIntent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
-                alarmIntent.putExtra("raw_alarm_json", json.toString());
-                alarmIntent.putExtra("alarm_action", action);
-
-                WearLog.d(TAG, "⏰ 准备启动 WearAlarmActivity...");
-                startActivity(alarmIntent);
-                return;
-            }
-                // 5. 新增：处理手机发来的强制停止闹钟指令
-if ("alarm".equalsIgnoreCase(type) && "FORCE_STOP_WEAR_ALARM".equalsIgnoreCase(action)) {
-    WearLog.d(TAG, "🛑 收到手机发来的强制停止闹钟指令，正在关闭 WearAlarmActivity...");
-    
-    // 1. 创建一个 Intent 指向 WearAlarmActivity
-    Intent stopIntent = new Intent(this, WearAlarmActivity.class);
-    
-    // 2. 设置关键 Flags
-    //    NEW_TASK: 因为是从 Service 启动
-    //    CLEAR_TOP: 如果 Activity 已在任务栈中，则将其上方的所有 Activity 都出栈
-    //    SINGLE_TOP: 配合 CLEAR_TOP，确保复用已存在的实例，并触发 onNewIntent
-    stopIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-    
-    // 3. 放入一个“动作”标识，告诉 Activity 这次是来停止的，不是来启动的
-    stopIntent.putExtra("alarm_action", "FORCE_STOP");
-    
-    // 4. 启动 Activity
-    startActivity(stopIntent);
-    
-    // 5. 处理完毕，直接返回，避免执行后续逻辑
-    return; 
+    // ✅ 优先判断：是否是强制停止指令？
+    if ("FORCE_STOP_WEAR_ALARM".equalsIgnoreCase(action) || "FORCE_STOP".equalsIgnoreCase(action)) {
+        WearLog.d(TAG, "🛑 收到强制停止指令，通过 handleIncomingCommand 关闭闹钟界面...");
+        // 统一走重构后的静态方法，不再在 Listener 里手动 startActivity
+        WearAlarmActivity.handleIncomingCommand(this, json);
+    } else {
+        // ✅ 正常启动闹钟：仍然需要 startActivity，因为 Activity 可能尚未创建
+        WearLog.d(TAG, "⏰ 准备启动 WearAlarmActivity...");
+        Intent alarmIntent = new Intent(this, WearAlarmActivity.class);
+        alarmIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK 
+                           | Intent.FLAG_ACTIVITY_SINGLE_TOP 
+                           | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        alarmIntent.putExtra("raw_alarm_json", json.toString());
+        alarmIntent.putExtra("alarm_action", action);
+        startActivity(alarmIntent);
+        
+        // 启动后也将数据传递给静态方法，确保 UI 状态同步
+        WearAlarmActivity.handleIncomingCommand(this, json);
+    }
+    return; // 闹钟逻辑处理完毕，返回
 }
-
-
                 
                 // 6. 原有：相机穿透控制模组
         if ("camera_control".equalsIgnoreCase(type)) {
