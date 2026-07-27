@@ -8,13 +8,7 @@ import android.widget.Button;
 import android.widget.TextView;
 import androidx.annotation.Nullable;
 import androidx.activity.ComponentActivity;
-// ❌ 删除 import androidx.localbroadcastmanager.content.LocalBroadcastManager; (未使用)
-// ❌ 删除 import com.google.android.gms.tasks.Tasks; (未使用)
-// ❌ 删除 import com.google.android.gms.wearable.MessageClient; (未使用)
-// ❌ 删除 import com.google.android.gms.wearable.Node; (未使用)
-// ❌ 删除 import com.google.android.gms.wearable.Wearable; (未使用)
 import java.lang.ref.WeakReference;
-// ❌ 删除 import java.nio.charset.StandardCharsets; (未使用)
 import org.json.JSONObject;
 
 public class WearAlarmActivity extends ComponentActivity {
@@ -52,7 +46,7 @@ public class WearAlarmActivity extends ComponentActivity {
         tvAlarmTime = findViewById(R.id.tv_alarm_time);
         Button btnDismiss = findViewById(R.id.btn_dismiss);
         Button btnSnooze = findViewById(R.id.btn_snooze);
-        
+        handleIncomingTime(getIntent());
         startWatchVibration();
 
         // ❌ 删除：移除所有与 WearSyncCommManager 通信相关的代码
@@ -84,6 +78,37 @@ public class WearAlarmActivity extends ComponentActivity {
             WearAlarmActivity activity = getInstance();
             if (activity != null) {
                 activity.cleanExit();
+            }
+        }
+    }
+    private void handleIncomingTime(Intent intent) {
+        if (intent == null) return;
+
+        // 1. 从 Intent 中获取 JSON 字符串
+        // 注意：这里假设你手表端的 Listener 是用 "raw_alarm_json" 这个 key 传递的
+        // 如果你的 Listener 用的是别的 key (比如 "json")，请相应修改这里
+        String rawJson = intent.getStringExtra("raw_alarm_json");
+
+        if (rawJson != null) {
+            try {
+                JSONObject json = new JSONObject(rawJson);
+                String time = json.optString("time", "00:00");
+                String monthDay = json.optString("month_day", "");
+                String week = json.optString("day_tips", "");
+
+                // 2. 更新 UI
+                if (tvAlarmTime != null) tvAlarmTime.setText(time);
+                if (tvAlarmDay != null) {
+                    if (!monthDay.isEmpty()) {
+                        tvAlarmDay.setText(monthDay + "  " + week);
+                    } else {
+                        tvAlarmDay.setText(week);
+                    }
+                }
+                WearLog.d(TAG, "📦 成功解析并显示手机时间: " + time);
+
+            } catch (Exception e) {
+                WearLog.e(TAG, "🔴 解析手机发来的时间JSON失败", e);
             }
         }
     }
