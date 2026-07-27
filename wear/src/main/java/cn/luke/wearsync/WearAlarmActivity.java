@@ -46,7 +46,7 @@ public class WearAlarmActivity extends ComponentActivity {
         screenManager = new WearSyncScreenManager(this);
         screenManager.bind(this);
         WearLog.d(TAG, "🎬 onCreate: 手表闹钟接管界面启动");
-        screenManager.wakeForSync(3 * 60 * 1000L);
+        screenManager.wakeForSync(1 * 60 * 1000L);
         setContentView(R.layout.activity_wear_alarm);
         
         tvAlarmDay = findViewById(R.id.tv_alarm_day);
