@@ -296,7 +296,9 @@ public void openPhoneCamera() {
     WearLog.w(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
     try {
-        RemoteActivityHelper helper = new RemoteActivityHelper(context, executor);
+        // ✅ 修正后的代码
+RemoteActivityHelper helper = new RemoteActivityHelper(appContext, executor);
+
 
         Intent intent = new Intent(Intent.ACTION_VIEW);
         intent.addCategory(Intent.CATEGORY_BROWSABLE);
