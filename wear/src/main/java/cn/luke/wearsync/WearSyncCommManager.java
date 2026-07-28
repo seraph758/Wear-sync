@@ -81,30 +81,23 @@ private void connect() {
     // ======================== 核心发送方法 ========================
 
        private void refreshConnectedNode() {
-        executor.execute(() -> {
-            try {
-                // ✅ 核心改动：使用 CapabilityClient 查找具备 wear_sync 能力的可达节点
-                CapabilityInfo capabilityInfo = Tasks.await(
-                    Wearable.getCapabilityClient(appContext).getCapability(
-                        CAPABILITY_NAME, CapabilityClient.FILTER_REACHABLE),
-                    5, java.util.concurrent.TimeUnit.SECONDS // 增加5秒超时，防止永久等待
-                );
-
-                if (capabilityInfo.getNodes() != null && !capabilityInfo.getNodes().isEmpty()) {
-                    // 获取第一个可达节点
-                    connectedNode = capabilityInfo.getNodes().iterator().next();
-                    WearLog.d(TAG, "✅ 已缓存连接节点: " + connectedNode.getDisplayName());
-                } else {
-                    connectedNode = null;
-                    WearLog.w(TAG, "⚠️ 无具备 '" + CAPABILITY_NAME + "' 能力的可达节点");
-                }
-            } catch (Exception e) {
+    // ✅ 完全异步，零阻塞，无需 Tasks.await
+    Wearable.getCapabilityClient(appContext)
+        .getCapability(CAPABILITY_NAME, CapabilityClient.FILTER_REACHABLE)
+        .addOnSuccessListener(executor, capabilityInfo -> {
+            if (capabilityInfo.getNodes() != null && !capabilityInfo.getNodes().isEmpty()) {
+                connectedNode = capabilityInfo.getNodes().iterator().next();
+                WearLog.d(TAG, "✅ 已缓存连接节点: " + connectedNode.getDisplayName());
+            } else {
                 connectedNode = null;
-                WearLog.e(TAG, "❌ 获取连接节点失败", e);
+                WearLog.w(TAG, "⚠️ 无具备 '" + CAPABILITY_NAME + "' 能力的可达节点");
             }
+        })
+        .addOnFailureListener(executor, e -> {
+            connectedNode = null;
+            WearLog.e(TAG, "❌ 获取连接节点失败", e);
         });
-    }
-// ... 后续代码保持不变
+       }
 
 
     public void sendCommand(@NonNull String type, @NonNull String action, @Nullable JSONObject extra) {
