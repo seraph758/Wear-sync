@@ -12,7 +12,6 @@ import androidx.lifecycle.LifecycleOwner;
 import java.lang.ref.WeakReference;
 
 public class WearSyncScreenManager implements DefaultLifecycleObserver {
-
     private static final String TAG = "WearSyncScreenMgr";
     private static final long MAX_CPU_WAKE_MS = 3 * 60 * 1000L; // 安全上限3分钟
 
@@ -33,7 +32,7 @@ public class WearSyncScreenManager implements DefaultLifecycleObserver {
         this.activityRef = new WeakReference<>(activity);
         activity.getLifecycle().addObserver(this);
         isBound = true;
-        Log.i(TAG, "Bound to lifecycle");
+        WearLog.i(TAG, "Bound to lifecycle");
     }
 
     /**
@@ -49,7 +48,7 @@ public class WearSyncScreenManager implements DefaultLifecycleObserver {
         activity.setShowWhenLocked(true);
         activity.getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
-        Log.i(TAG, "Screen wake requested (WearOS6+ API)");
+        WearLog.i(TAG, "Screen wake requested (WearOS6+ API)");
     }
 
     /**
@@ -59,7 +58,7 @@ public class WearSyncScreenManager implements DefaultLifecycleObserver {
         ComponentActivity activity = getSafeActivity(); // 💡 修改为 ComponentActivity
         if (activity != null) {
             activity.getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-            Log.i(TAG, "Keep screen on set");
+            WearLog.i(TAG, "Keep screen on set");
         }
     }
 
@@ -74,7 +73,7 @@ public class WearSyncScreenManager implements DefaultLifecycleObserver {
         activity.setShowWhenLocked(false);
         activity.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
-        Log.i(TAG, "Screen control released");
+        WearLog.i(TAG, "Screen control released");
     }
 
     /**
@@ -83,7 +82,7 @@ public class WearSyncScreenManager implements DefaultLifecycleObserver {
     public void acquireCpu(long timeoutMs) {
         if (appContext.checkSelfPermission("android.permission.WAKE_LOCK")
                 != PackageManager.PERMISSION_GRANTED) {
-            Log.e(TAG, "WAKE_LOCK permission missing!");
+            WearLog.e(TAG, "WAKE_LOCK permission missing!");
             return;
         }
 
@@ -91,12 +90,12 @@ public class WearSyncScreenManager implements DefaultLifecycleObserver {
 
         long safeTimeout = Math.min(timeoutMs, MAX_CPU_WAKE_MS);
         if (safeTimeout != timeoutMs) {
-            Log.w(TAG, "CPU timeout clamped: " + timeoutMs + " → " + safeTimeout + "ms");
+            WearLog.w(TAG, "CPU timeout clamped: " + timeoutMs + " → " + safeTimeout + "ms");
         }
 
         PowerManager pm = (PowerManager) appContext.getSystemService(Context.POWER_SERVICE);
         if (pm == null) {
-            Log.e(TAG, "PowerManager unavailable");
+            WearLog.e(TAG, "PowerManager unavailable");
             return;
         }
 
@@ -104,13 +103,13 @@ public class WearSyncScreenManager implements DefaultLifecycleObserver {
         cpuWakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, tag);
         cpuWakeLock.acquire(safeTimeout);
 
-        Log.i(TAG, "CPU WakeLock acquired for " + safeTimeout + "ms");
+        WearLog.i(TAG, "CPU WakeLock acquired for " + safeTimeout + "ms");
     }
 
     public void releaseCpu() {
         if (cpuWakeLock != null && cpuWakeLock.isHeld()) {
             cpuWakeLock.release();
-            Log.i(TAG, "CPU WakeLock released");
+            WearLog.i(TAG, "CPU WakeLock released");
         }
         cpuWakeLock = null;
     }
@@ -121,14 +120,14 @@ public class WearSyncScreenManager implements DefaultLifecycleObserver {
     public void wakeForSync(long cpuTimeMs) {
         wakeScreen();
         acquireCpu(cpuTimeMs);
-        Log.i(TAG, "Wake for sync triggered");
+        WearLog.i(TAG, "Wake for sync triggered");
     }
 
     // --- Lifecycle 自动清理 ---
 
     @Override
     public void onDestroy(@NonNull LifecycleOwner owner) {
-        Log.i(TAG, "Lifecycle destroyed, auto-cleanup");
+        WearLog.i(TAG, "Lifecycle destroyed, auto-cleanup");
         releaseScreen();
         releaseCpu();
         isBound = false;
@@ -136,12 +135,12 @@ public class WearSyncScreenManager implements DefaultLifecycleObserver {
 
     private ComponentActivity getSafeActivity() { // 💡 修改为 ComponentActivity
         if (!isBound || activityRef == null) {
-            Log.w(TAG, "Manager not bound to any Activity!");
+            WearLog.w(TAG, "Manager not bound to any Activity!");
             return null;
         }
         ComponentActivity activity = activityRef.get(); // 💡 修改为 ComponentActivity
         if (activity == null || activity.isFinishing() || activity.isDestroyed()) {
-            Log.w(TAG, "Activity reference invalid");
+            WearLog.w(TAG, "Activity reference invalid");
             return null;
         }
         return activity;
