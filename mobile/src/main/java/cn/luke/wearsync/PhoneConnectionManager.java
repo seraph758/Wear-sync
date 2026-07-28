@@ -14,32 +14,43 @@ import java.util.Set;
 public class PhoneConnectionManager {
     private static final String TAG = "WearSync_ConnMgr";
     private static final String CAPABILITY_NAME = "wear_sync";
-    
-    private static volatile WearConnectionManager instance;
+
+    // ✅ 补全缺失的单例实例变量
+    private static volatile PhoneConnectionManager instance;
+
     private final Context appContext;
 
-    public static WearConnectionManager getInstance(Context context) {
+    // ✅ 补全缺失的私有构造函数
+    private PhoneConnectionManager(Context context) {
+        this.appContext = context.getApplicationContext();
+
+        // ✅ 注册监听器：手表连接/断开时自动更新缓存
+        Wearable.getCapabilityClient(appContext).addListener(
+            this::onCapabilityChanged,
+            CAPABILITY_NAME
+        );
+
+        // ✅ 初始化时主动查询一次
+        discoverAndCacheWatchNode();
+    }
+
+    // ✅ 补全缺失的静态初始化入口
+    public static void init(Context context) {
         if (instance == null) {
-            synchronized (WearConnectionManager.class) {
+            synchronized (PhoneConnectionManager.class) {
                 if (instance == null) {
-                    instance = new WearConnectionManager(context.getApplicationContext());
+                    instance = new PhoneConnectionManager(context);
                 }
             }
         }
-        return instance;
     }
 
-    private WearConnectionManager(Context context) {
-        this.appContext = context;
-        
-        // ✅ 注册监听器：手表连接/断开时自动更新缓存
-        Wearable.getCapabilityClient(appContext).addListener(
-            this::onCapabilityChanged, 
-            CAPABILITY_NAME
-        );
-        
-        // ✅ 初始化时主动查询一次
-        discoverAndCacheWatchNode();
+    // ✅ 补全获取实例的方法（供外部读取状态或手动刷新时使用）
+    public static PhoneConnectionManager getInstance() {
+        if (instance == null) {
+            throw new IllegalStateException("PhoneConnectionManager 尚未初始化，请先在 Application.onCreate() 中调用 init()");
+        }
+        return instance;
     }
 
     private void discoverAndCacheWatchNode() {
