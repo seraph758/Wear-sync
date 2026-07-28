@@ -16,6 +16,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import com.google.android.gms.wearable.CapabilityClient;
+import com.google.android.gms.wearable.CapabilityInfo;
+
 
 /**
  * 信令发送管理器 (Command Sender) - 兼容修复版
@@ -27,7 +30,8 @@ public class WearSyncCommManager {
     private static final String TAG = "WearSyncCommManager";
     private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
     private static volatile WearSyncCommManager instance;
-
+    private static final String CAPABILITY_NAME = "wear_sync"; 
+    
     private final Context appContext;
     private final ExecutorService executor;
     private final ChannelClient channelClient;
@@ -76,29 +80,32 @@ private void connect() {
 
     // ======================== 核心发送方法 ========================
 
-    private void refreshConnectedNode() {
+       private void refreshConnectedNode() {
         executor.execute(() -> {
             try {
-                List<Node> nodes = Wearable.getNodeClient(appContext).getConnectedNodes().getResult();
-                if (nodes != null && !nodes.isEmpty()) {
-                    connectedNode = nodes.get(0);
+                // ✅ 核心改动：使用 CapabilityClient 查找具备 wear_sync 能力的可达节点
+                CapabilityInfo capabilityInfo = Tasks.await(
+                    Wearable.getCapabilityClient(appContext).getCapability(
+                        CAPABILITY_NAME, CapabilityClient.FILTER_REACHABLE),
+                    5, java.util.concurrent.TimeUnit.SECONDS // 增加5秒超时，防止永久等待
+                );
+
+                if (capabilityInfo.getNodes() != null && !capabilityInfo.getNodes().isEmpty()) {
+                    // 获取第一个可达节点
+                    connectedNode = capabilityInfo.getNodes().iterator().next();
                     WearLog.d(TAG, "✅ 已缓存连接节点: " + connectedNode.getDisplayName());
-                    // ❌ 删除：connectionListener 回调
-                    // if (connectionListener != null) connectionListener.onConnected();
                 } else {
                     connectedNode = null;
-                    WearLog.w(TAG, "⚠️ 无已连接的手机节点");
-                    // ❌ 删除：connectionListener 回调
-                    // if (connectionListener != null) connectionListener.onDisconnected();
+                    WearLog.w(TAG, "⚠️ 无具备 '" + CAPABILITY_NAME + "' 能力的可达节点");
                 }
             } catch (Exception e) {
                 connectedNode = null;
                 WearLog.e(TAG, "❌ 获取连接节点失败", e);
-                // ❌ 删除：connectionListener 回调
-                // if (connectionListener != null) connectionListener.onDisconnected();
             }
         });
     }
+// ... 后续代码保持不变
+
 
     public void sendCommand(@NonNull String type, @NonNull String action, @Nullable JSONObject extra) {
         executor.execute(() -> {
