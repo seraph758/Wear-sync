@@ -1,6 +1,8 @@
 <resources xmlns:tools="http://schemas.android.com/tools"
     tools:keep="@array/android_wear_capabilities">
     <string-array name="android_wear_capabilities">
-        <item>dnd_sync</item>
+        <!-- ✅ 将 dnd_sync 改为 wear_sync -->
+        <item>wear_sync</item>
     </string-array>
 </resources>
+
