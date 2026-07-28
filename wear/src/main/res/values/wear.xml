@@ -1,8 +1,7 @@
 <resources xmlns:tools="http://schemas.android.com/tools"
     tools:keep="@array/android_wear_capabilities">
     <string-array name="android_wear_capabilities">
-        <!-- ✅ 将 dnd_sync 改为 wear_sync -->
+        <!-- ✅ 声明手表也具备 wear_sync 能力 -->
         <item>wear_sync</item>
     </string-array>
 </resources>
-
