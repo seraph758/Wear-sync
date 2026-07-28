@@ -340,4 +340,3 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
         return false;
     }
 }
-
