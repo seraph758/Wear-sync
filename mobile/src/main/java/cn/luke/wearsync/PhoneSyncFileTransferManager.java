@@ -4,7 +4,6 @@ import android.content.Context;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
-import android.util.Log;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -21,7 +20,7 @@ import java.nio.charset.StandardCharsets;
 /**
  * WearSync 跨端文件传输管理器 (手机端)
  * 负责：发送准备信令 -> 等待ACK(简化为延迟) -> 打开Channel -> 推送文件流
- * 
+ *
  * 此版本已适配 play-services-wearable 19.0.0
  */
 public class PhoneSyncFileTransferManager {
@@ -33,7 +32,6 @@ public class PhoneSyncFileTransferManager {
     private static final String FILE_TRANSFER_CHANNEL_PATH = "/wear-sync/file-transfer";
 
     // 发送信令后等待手表端就绪的延迟时间(ms)
-    // 生产环境建议改为监听 MessageClient 的 READY_TO_RECEIVE 回调，此处为简化演示使用固定延迟
     private static final long CHANNEL_OPEN_DELAY_MS = 500L;
 
     /**
@@ -63,9 +61,9 @@ public class PhoneSyncFileTransferManager {
      * 向手表端发送文件
      *
      * @param context 应用上下文
-     * @param nodeId 目标手表节点ID (通过 CapabilityClient 或 NodeClient 获取)
+     * @param nodeId 目标手表节点ID
      * @param fileUri 待发送文件的 Content URI
-     * @param fileName 文件名 (用于手表端识别和保存)
+     * @param fileName 文件名
      * @param callback 传输状态回调
      */
     public static void sendFileToWear(
@@ -212,3 +210,4 @@ public class PhoneSyncFileTransferManager {
                 });
     }
 }
+
