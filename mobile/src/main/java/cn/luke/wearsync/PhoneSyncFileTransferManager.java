@@ -1,4 +1,4 @@
-package cn.luke.wearsync; 
+package cn.luke.wearsync; // ⚠️ 请确保此包名与你项目的实际包名一致
 
 import android.content.Context;
 import android.net.Uri;
@@ -21,6 +21,8 @@ import java.nio.charset.StandardCharsets;
 /**
  * WearSync 跨端文件传输管理器 (手机端)
  * 负责：发送准备信令 -> 等待ACK(简化为延迟) -> 打开Channel -> 推送文件流
+ * 
+ * 此版本已适配 play-services-wearable 19.0.0
  */
 public class PhoneSyncFileTransferManager {
 
@@ -83,7 +85,7 @@ public class PhoneSyncFileTransferManager {
                 fileSize = pfd.getStatSize();
             }
         } catch (Exception e) {
-            PhoneLog.e(TAG, "❌ 获取文件大小失败", e); // ✅ 已修正为 PhoneLog
+            PhoneLog.e(TAG, "❌ 获取文件大小失败", e);
             if (callback != null) callback.onError("无法读取文件: " + e.getMessage());
             return;
         }
@@ -97,13 +99,13 @@ public class PhoneSyncFileTransferManager {
             prepareJson.put("fileName", fileName);
             prepareJson.put("fileSize", fileSize);
         } catch (Exception e) {
-            PhoneLog.e(TAG, "❌ 构建信令JSON失败", e); // ✅ 已修正为 PhoneLog
+            PhoneLog.e(TAG, "❌ 构建信令JSON失败", e);
             if (callback != null) callback.onError("信令构建异常");
             return;
         }
 
         // 3. 发送信令到手表端
-        PhoneLog.d(TAG, "✉️ 发送 PREPARE_RECEIVE 信令到节点: " + nodeId); // ✅ 已修正为 PhoneLog
+        PhoneLog.d(TAG, "✉️ 发送 PREPARE_RECEIVE 信令到节点: " + nodeId);
         messageClient.sendMessage(
                         nodeId,
                         UNIVERSAL_SYNC_PATH,
@@ -112,7 +114,7 @@ public class PhoneSyncFileTransferManager {
                 .addOnSuccessListener(new OnSuccessListener<Void>() {
                     @Override
                     public void onSuccess(Void unused) {
-                        PhoneLog.d(TAG, "✅ PREPARE_RECEIVE 已送达，" + CHANNEL_OPEN_DELAY_MS + "ms 后打开 Channel..."); // ✅ 已修正为 PhoneLog
+                        PhoneLog.d(TAG, "✅ PREPARE_RECEIVE 已送达，" + CHANNEL_OPEN_DELAY_MS + "ms 后打开 Channel...");
                         // 延迟后打开 Channel 并推送文件
                         new Handler(Looper.getMainLooper()).postDelayed(() ->
                                         openChannelAndSend(channelClient, nodeId, fileUri, callback),
@@ -123,7 +125,7 @@ public class PhoneSyncFileTransferManager {
                 .addOnFailureListener(new OnFailureListener() {
                     @Override
                     public void onFailure(@NonNull Exception e) {
-                        PhoneLog.e(TAG, "❌ PREPARE_RECEIVE 发送失败", e); // ✅ 已修正为 PhoneLog
+                        PhoneLog.e(TAG, "❌ PREPARE_RECEIVE 发送失败", e);
                         if (callback != null) callback.onError("信令发送失败: " + e.getMessage());
                     }
                 });
@@ -142,14 +144,14 @@ public class PhoneSyncFileTransferManager {
                 .addOnSuccessListener(new OnSuccessListener<ChannelClient.Channel>() {
                     @Override
                     public void onSuccess(ChannelClient.Channel channel) {
-                        PhoneLog.d(TAG, "📡 Channel 已打开，开始推送文件流..."); // ✅ 已修正为 PhoneLog
+                        PhoneLog.d(TAG, "📡 Channel 已打开，开始推送文件流...");
                         pushFile(channelClient, channel, fileUri, callback);
                     }
                 })
                 .addOnFailureListener(new OnFailureListener() {
                     @Override
                     public void onFailure(@NonNull Exception e) {
-                        PhoneLog.e(TAG, "❌ Channel 打开失败", e); // ✅ 已修正为 PhoneLog
+                        PhoneLog.e(TAG, "❌ Channel 打开失败", e);
                         if (callback != null) callback.onError("通道建立失败: " + e.getMessage());
                     }
                 });
@@ -157,6 +159,7 @@ public class PhoneSyncFileTransferManager {
 
     /**
      * 通过已打开的 Channel 推送文件 (内部方法)
+     * 适配 play-services-wearable 19.0.0 的新 API
      */
     private static void pushFile(
             @NonNull ChannelClient channelClient,
@@ -164,27 +167,48 @@ public class PhoneSyncFileTransferManager {
             @NonNull Uri fileUri,
             @Nullable TransferCallback callback) {
 
-        channelClient.sendFile(channel, fileUri, null, new ChannelClient.FileCallback() {
+        // 1. 创建一个 ChannelListener 来监听进度
+        ChannelClient.ChannelListener progressListener = new ChannelClient.ChannelListener() {
             @Override
-            public void onProgressChanged(long bytesTransferred, long totalBytes) {
+            public void onInputClosed(@NonNull ChannelClient.Channel channel) { }
+
+            @Override
+            public void onOutputClosed(@NonNull ChannelClient.Channel channel) { }
+
+            // 这是监听进度的核心方法
+            @Override
+            public void onSendProgress(@NonNull ChannelClient.Channel channel, long bytesTransferred, long totalBytes) {
+                // 确保是我们当前传输的 channel
                 if (callback != null) {
                     callback.onProgress(bytesTransferred, totalBytes);
                 }
             }
+        };
 
-            @Override
-            public void onComplete() {
-                PhoneLog.d(TAG, "✅ 文件推送完成，关闭 Channel"); // ✅ 已修正为 PhoneLog
-                channelClient.close(channel);
-                if (callback != null) callback.onComplete();
-            }
+        // 2. 注册监听器
+        channelClient.registerChannelListener(progressListener);
 
-            @Override
-            public void onFailure(int errorCode) {
-                PhoneLog.e(TAG, "❌ 文件推送失败, errorCode=" + errorCode); // ✅ 已修正为 PhoneLog
-                channelClient.close(channel);
-                if (callback != null) callback.onError("文件传输失败 code=" + errorCode);
-            }
-        });
+        // 3. 调用新的 sendFile 方法，它返回一个 Task<Integer>
+        channelClient.sendFile(channel, fileUri)
+                .addOnSuccessListener(new OnSuccessListener<Integer>() {
+                    @Override
+                    public void onSuccess(Integer bytesSent) {
+                        PhoneLog.d(TAG, "✅ 文件推送完成，共发送 " + bytesSent + " 字节。关闭 Channel");
+                        // 传输完成，移除监听器并关闭通道
+                        channelClient.unregisterChannelListener(progressListener);
+                        channelClient.close(channel);
+                        if (callback != null) callback.onComplete();
+                    }
+                })
+                .addOnFailureListener(new OnFailureListener() {
+                    @Override
+                    public void onFailure(@NonNull Exception e) {
+                        PhoneLog.e(TAG, "❌ 文件推送失败", e);
+                        // 传输失败，同样需要清理资源
+                        channelClient.unregisterChannelListener(progressListener);
+                        channelClient.close(channel);
+                        if (callback != null) callback.onError("文件传输失败: " + e.getMessage());
+                    }
+                });
     }
 }
