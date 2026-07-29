@@ -180,7 +180,10 @@ public void onNotificationPosted(StatusBarNotification sbn) {
         return; 
     }
 
-        PhoneLog.d(TAG, "✅ 确认闹钟通知，准备同步到手表 -> pkg: " + currentPkg);
+    
+    PhoneLog.d(TAG, "✅ 确认闹钟通知，准备同步到手表 -> pkg: " + packageName);
+
+
 
         if (isAlarmCurrentlyRinging) {
             PhoneLog.d(TAG, "闹钟已经运行，忽略重复通知");
