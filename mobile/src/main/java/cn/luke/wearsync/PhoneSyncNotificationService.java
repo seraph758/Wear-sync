@@ -144,36 +144,41 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
         instance = null;
     }
 
-    @Override
-    public void onNotificationPosted(StatusBarNotification sbn) {
-        if (sbn == null) return;
 
-        SharedPreferences prefs = getSharedPreferences("wearsync_prefs", Context.MODE_PRIVATE);
-        boolean isAlarmMasterEnabled = prefs.getBoolean("alarm_proxy_master_switch", true);
-        if (!isAlarmMasterEnabled) {
-            return;
-        }
+@Override
+public void onNotificationPosted(StatusBarNotification sbn) {
+    if (sbn == null) return;
 
-        Notification notification = sbn.getNotification();
-        if (notification == null) return;
+    // 1. 开关检查
+    SharedPreferences prefs = getSharedPreferences("wearsync_prefs", Context.MODE_PRIVATE);
+    if (!prefs.getBoolean("alarm_proxy_master_switch", true)) return;
 
-        String currentPkg = sbn.getPackageName();
-        String selectedPkg = prefs.getString("selected_alarm_package", "com.google.android.deskclock");
-        boolean isTargetPackage = selectedPkg.equalsIgnoreCase(currentPkg);
+    // 2. 包名检查
+    String packageName = sbn.getPackageName();
+    String selectedPkg = prefs.getString("selected_alarm_package", "com.google.android.deskclock");
+    
+    // 注意：这里只检查包名不匹配时返回
+    if (!selectedPkg.equals(packageName)) {
+        return; 
+    }
 
-        if (!isTargetPackage) {
-            return;
-        }
+    // 3. 【修复点】这里绝对不能再有 return 了！
+    // 必须让代码继续往下执行，去检查是不是真的闹钟
 
-        // ⏳ 只要包名匹配就立即记录时间戳，用于后续防抖拦截
-        lastAlarmPackageMatchTime = System.currentTimeMillis();
+    PhoneLog.d(TAG, "⏰检测到目标闹钟包: " + packageName);
+    Notification notification = sbn.getNotification();
+    if (notification == null) return;
 
-        boolean isInsistent = (notification.flags & Notification.FLAG_INSISTENT) != 0;
-        PhoneLog.d(TAG, "🔔 闹钟包名匹配 -> isInsistent: " + isInsistent + ", pkg: " + currentPkg);
-        if (!isInsistent) {
-            PhoneLog.d(TAG, "⚠️ 拦截：目标包名匹配但非持续响铃通知 (isInsistent=false)");
-            return;
-        }
+    // 4. 【新增/恢复】闹钟特征检查 (这是新版的核心逻辑)
+    boolean isInsistent = (notification.flags & Notification.FLAG_INSISTENT) != 0;
+    boolean isOngoing = (notification.flags & Notification.FLAG_ONGOING_EVENT) != 0;
+    boolean isAlarmCategory = Notification.CATEGORY_ALARM.equals(notification.category);
+
+    // 只要满足任意一个特征，就认为是闹钟
+    if (!isInsistent && !isOngoing && !isAlarmCategory) {
+        PhoneLog.d(TAG, "⚠️ 拦截：包名匹配，但通知特征不符合闹钟定义 (非持续、非正在进行、非闹钟类别)");
+        return; 
+    }
 
         PhoneLog.d(TAG, "✅ 确认闹钟通知，准备同步到手表 -> pkg: " + currentPkg);
 
