@@ -66,6 +66,9 @@ import kotlinx.coroutines.tasks.await
 import androidx.compose.ui.text.style.TextAlign
 import kotlinx.coroutines.tasks.await
 import androidx.compose.foundation.layout.widthIn
+import android.net.Uri
+import androidx.activity.result.contract.ActivityResultContracts
+
 
 
 class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListener {
@@ -224,6 +227,45 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                         sp.edit { putInt("KEY_MASK", newMask) }
                         PhoneLog.d("WearSync_Main", "⚙️ 勿扰同步配置已更新：mask=$newMask")
                     }
+                    
+                    private val fileTransferLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+                        uri?.let {
+                            val nodeId = WearSyncState.getNodeId(requireContext())
+                            if (!nodeId.isNullOrEmpty()) {
+                                // 获取文件名
+                                val fileName = requireContext().contentResolver.query(it, null, null, null, null)?.use { cursor ->
+                                    val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                                    cursor.moveToFirst()
+                                    cursor.getString(nameIndex)
+                                } ?: "unknown_file"
+                    
+                                // 调用 Java 传输管理器
+                                PhoneSyncFileTransferManager.sendFileToWear(
+                                    requireContext(),
+                                    nodeId,
+                                    it,
+                                    fileName,
+                                    object : PhoneSyncFileTransferManager.TransferCallback {
+                                        override fun onProgress(bytesTransferred: Long, totalBytes: Long) {
+                                            // 注意：v19.0.0 版本不支持进度回调，此方法不会被调用
+                                        }
+                    
+                                        override fun onComplete() {
+                                            fileTransferStatus.value = "✅ 传输成功"
+                                        }
+                    
+                                        override fun onError(message: String) {
+                                            fileTransferStatus.value = "❌ 传输失败: $message"
+                                        }
+                                    }
+                                )
+                            } else {
+                                fileTransferStatus.value = "❌ 错误：手表未连接"
+                            }
+                        }
+                    }
+                    private val fileTransferStatus = mutableStateOf("等待选择文件...")
+
 
                     var selectedAlarmName by remember { mutableStateOf(sp.getString("selected_alarm_name", "Google 时钟") ?: "Google 时钟") }
                     var selectedAlarmPkg by remember { mutableStateOf(sp.getString("selected_alarm_package", "com.google.android.deskclock") ?: "com.google.android.deskclock") }
@@ -325,118 +367,118 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                 }
 
                      AnimatedVisibility(visible = isDndExpanded) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = cardBgColor)
-    ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            // 主开关
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("启用勿扰主同步", fontWeight = FontWeight.SemiBold, color = textColor, fontSize = 14.sp)
-                Switch(
-                    checked = masterOn,
-                    onCheckedChange = { masterOn = it; updateMask(it, vibrateOn, sleepOn, powerOn) }
-                )
-            }
-
-            // ✅ 子项区域：受 masterOn 控制
-            AnimatedVisibility(visible = masterOn) {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    HorizontalDivider(color = dividerColor)
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("手表端振动反馈", color = textColor, fontSize = 13.sp)
-                        Switch(
-                            checked = vibrateOn,
-                            onCheckedChange = { vibrateOn = it; updateMask(masterOn, it, sleepOn, powerOn) }
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("睡眠模式同步", color = textColor, fontSize = 13.sp)
-                        Switch(
-                            checked = sleepOn,
-                            onCheckedChange = { sleepOn = it; updateMask(masterOn, vibrateOn, it, powerOn) }
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("省电模式同步", color = textColor, fontSize = 13.sp)
-                        Switch(
-                            checked = powerOn,
-                            onCheckedChange = { powerOn = it; updateMask(masterOn, vibrateOn, sleepOn, it) }
-                        )
-                    }
-
-                    // ✅ 新增：下拉菜单间隔（在 masterOn 的 Column 内部）
-                    HorizontalDivider(color = dividerColor, modifier = Modifier.padding(vertical = 4.dp))
-
-                    Text(
-                        text = "亮屏与下拉菜单间隔",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = textColor
-                    )
-                    Text(
-                        text = "手机同步勿扰时，手表亮屏后延迟多久允许下拉菜单响应",
-                        fontSize = 11.sp,
-                        color = subTextColor,
-                        lineHeight = 14.sp
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                    Slider(
-                        value = screenPullDownInterval.toFloat(),
-                        onValueChange = { newValue ->
-                            // ✅ 隨著手指滑動，只即時更新記憶體變量，確保 UI 滑動流暢
-                            screenPullDownInterval = newValue.toInt()
-                        },
-                        onValueChangeFinished = {
-                            // ✅ 當用戶手指抬起、滑動結束時，才執行一次性本地保存
-                            sp.edit { putInt("screen_pull_down_interval", screenPullDownInterval) }
-                        },
-                        valueRange = 0f..2000f,
-                        steps = 19,
-                        modifier = Modifier.weight(1f)
-                    )
-
-
-
-                        Text(
-                            text = "${screenPullDownInterval}ms",
-                            fontSize = 13.sp,
-                            color = textColor,
-                            modifier = Modifier.padding(start = 8.dp).widthIn(min = 56.dp),
-                            textAlign = TextAlign.End
-                        )
-                    }
-                } // ← masterOn 的 Column 结束
-            } // ← masterOn 的 AnimatedVisibility 结束
-        } // ← Card 内部的 Column 结束
-    } // ← Card 结束
-} // ← isDndExpanded 的 AnimatedVisibility 结束
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = cardBgColor)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                // 主开关
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("启用勿扰主同步", fontWeight = FontWeight.SemiBold, color = textColor, fontSize = 14.sp)
+                                    Switch(
+                                        checked = masterOn,
+                                        onCheckedChange = { masterOn = it; updateMask(it, vibrateOn, sleepOn, powerOn) }
+                                    )
+                                }
+                            
+                                        // ✅ 子项区域：受 masterOn 控制
+                                        AnimatedVisibility(visible = masterOn) {
+                                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                                HorizontalDivider(color = dividerColor)
+                            
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text("手表端振动反馈", color = textColor, fontSize = 13.sp)
+                                                    Switch(
+                                                        checked = vibrateOn,
+                                                        onCheckedChange = { vibrateOn = it; updateMask(masterOn, it, sleepOn, powerOn) }
+                                                    )
+                                                }
+                            
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text("睡眠模式同步", color = textColor, fontSize = 13.sp)
+                                                    Switch(
+                                                        checked = sleepOn,
+                                                        onCheckedChange = { sleepOn = it; updateMask(masterOn, vibrateOn, it, powerOn) }
+                                                    )
+                                                }
+                            
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text("省电模式同步", color = textColor, fontSize = 13.sp)
+                                                    Switch(
+                                                        checked = powerOn,
+                                                        onCheckedChange = { powerOn = it; updateMask(masterOn, vibrateOn, sleepOn, it) }
+                                                    )
+                                                }
+                            
+                                                // ✅ 新增：下拉菜单间隔（在 masterOn 的 Column 内部）
+                                                HorizontalDivider(color = dividerColor, modifier = Modifier.padding(vertical = 4.dp))
+                            
+                                                Text(
+                                                    text = "亮屏与下拉菜单间隔",
+                                                    fontSize = 13.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = textColor
+                                                )
+                                                Text(
+                                                    text = "手机同步勿扰时，手表亮屏后延迟多久允许下拉菜单响应",
+                                                    fontSize = 11.sp,
+                                                    color = subTextColor,
+                                                    lineHeight = 14.sp
+                                                )
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                Slider(
+                                                    value = screenPullDownInterval.toFloat(),
+                                                    onValueChange = { newValue ->
+                                                        // ✅ 隨著手指滑動，只即時更新記憶體變量，確保 UI 滑動流暢
+                                                        screenPullDownInterval = newValue.toInt()
+                                                    },
+                                                    onValueChangeFinished = {
+                                                        // ✅ 當用戶手指抬起、滑動結束時，才執行一次性本地保存
+                                                        sp.edit { putInt("screen_pull_down_interval", screenPullDownInterval) }
+                                                    },
+                                                    valueRange = 0f..2000f,
+                                                    steps = 19,
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                            
+                            
+                            
+                                                    Text(
+                                                        text = "${screenPullDownInterval}ms",
+                                                        fontSize = 13.sp,
+                                                        color = textColor,
+                                                        modifier = Modifier.padding(start = 8.dp).widthIn(min = 56.dp),
+                                                        textAlign = TextAlign.End
+                                                    )
+                                                }
+                                            } // ← masterOn 的 Column 结束
+                                        } // ← masterOn 的 AnimatedVisibility 结束
+                                    } // ← Card 内部的 Column 结束
+                                } // ← Card 结束
+                            } // ← isDndExpanded 的 AnimatedVisibility 结束
 
                                 AnimatedVisibility(visible = isAlarmExpanded) {
                                     Card(
@@ -819,23 +861,36 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Column {
-                                            Text("跨端文件传输枢纽 (暂未启用)", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = textColor.copy(alpha = 0.6f))
-                                            Text("双向传输照片、音频及自定义配置文件", fontSize = 12.sp, color = subTextColor.copy(alpha = 0.6f))
+                                            // 1. 标题已更新，移除了 "(暂未启用)"
+                                            Text("跨端文件传输枢纽", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = textColor)
+                                            Text("双向传输照片、音频及自定义配置文件", fontSize = 12.sp, color = subTextColor)
                                         }
-                                        Text(text = "⏳ 预留", fontSize = 14.sp, color = subTextColor.copy(alpha = 0.6f))
+                                        // 2. 图标已更新，不再是 "预留"
+                                        Text(text = "📤", fontSize = 14.sp, color = textColor)
                                     }
-
+                            
                                     AnimatedVisibility(visible = isFileTransferExpanded) {
                                         Column(modifier = Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                             HorizontalDivider(color = dividerColor)
+                                            
+                                            // 3. 移除了旧的提示文本，替换为功能按钮和状态显示
+                                            Button(
+                                                onClick = { fileTransferLauncher.launch("*/*") },
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                Text("选择并发送文件")
+                                            }
+                                            
                                             Text(
-                                                text = "📌 模块提示：前五个核心联动模块（连接、权限、勿扰、闹钟、相机）调通后，取消下方代码注释即可对接底层 ChannelClient 实现双端大文件高速传输。",
-                                                fontSize = 12.sp, color = Color(0xFFFF9800), lineHeight = 16.sp
+                                                text = fileTransferStatus.value,
+                                                fontSize = 12.sp,
+                                                color = if (fileTransferStatus.value.contains("成功")) Color(0xFF4CAF50) else if (fileTransferStatus.value.contains("失败") || fileTransferStatus.value.contains("错误")) Color(0xFFF44336) else subTextColor,
+                                                modifier = Modifier.fillMaxWidth()
                                             )
                                         }
                                     }
                                 }
-                            }
+                             }
                             
                             // ========== 震动反馈设置 ==========
                             Card(
