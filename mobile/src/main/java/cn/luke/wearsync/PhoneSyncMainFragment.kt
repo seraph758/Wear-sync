@@ -67,7 +67,6 @@ import androidx.compose.ui.text.style.TextAlign
 import kotlinx.coroutines.tasks.await
 import androidx.compose.foundation.layout.widthIn
 import android.net.Uri
-import androidx.activity.result.contract.ActivityResultContracts
 
 
 
@@ -159,6 +158,45 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
             PhoneLog.w("WearSync_Main", "⚠️ 相机硬件权限被拒绝")
         }
     }
+    
+    private val fileTransferLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        uri?.let {
+            val nodeId = WearSyncState.getNodeId(requireContext())
+            if (!nodeId.isNullOrEmpty()) {
+                // 获取文件名
+                val fileName = requireContext().contentResolver.query(it, null, null, null, null)?.use { cursor ->
+                    val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    cursor.moveToFirst()
+                    cursor.getString(nameIndex)
+                } ?: "unknown_file"
+    
+                // 调用 Java 传输管理器
+                PhoneSyncFileTransferManager.sendFileToWear(
+                    requireContext(),
+                    nodeId,
+                    it,
+                    fileName,
+                    object : PhoneSyncFileTransferManager.TransferCallback {
+                        override fun onProgress(bytesTransferred: Long, totalBytes: Long) {
+                            // 注意：v19.0.0 版本不支持进度回调，此方法不会被调用
+                        }
+    
+                        override fun onComplete() {
+                            fileTransferStatus.value = "✅ 传输成功"
+                        }
+    
+                        override fun onError(message: String) {
+                            fileTransferStatus.value = "❌ 传输失败: $message"
+                        }
+                    }
+                )
+            } else {
+                fileTransferStatus.value = "❌ 错误：手表未连接"
+            }
+        }
+    }
+    private val fileTransferStatus = mutableStateOf("等待选择文件...")
+
 
     override fun onMessageReceived(messageEvent: MessageEvent) {
         PhoneLog.d("WearSync_Main", "📩 收到原始消息: path=${messageEvent.path}, data=${String(messageEvent.data, StandardCharsets.UTF_8)}")
@@ -228,43 +266,6 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                         PhoneLog.d("WearSync_Main", "⚙️ 勿扰同步配置已更新：mask=$newMask")
                     }
                     
-                    private val fileTransferLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-                        uri?.let {
-                            val nodeId = WearSyncState.getNodeId(requireContext())
-                            if (!nodeId.isNullOrEmpty()) {
-                                // 获取文件名
-                                val fileName = requireContext().contentResolver.query(it, null, null, null, null)?.use { cursor ->
-                                    val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                                    cursor.moveToFirst()
-                                    cursor.getString(nameIndex)
-                                } ?: "unknown_file"
-                    
-                                // 调用 Java 传输管理器
-                                PhoneSyncFileTransferManager.sendFileToWear(
-                                    requireContext(),
-                                    nodeId,
-                                    it,
-                                    fileName,
-                                    object : PhoneSyncFileTransferManager.TransferCallback {
-                                        override fun onProgress(bytesTransferred: Long, totalBytes: Long) {
-                                            // 注意：v19.0.0 版本不支持进度回调，此方法不会被调用
-                                        }
-                    
-                                        override fun onComplete() {
-                                            fileTransferStatus.value = "✅ 传输成功"
-                                        }
-                    
-                                        override fun onError(message: String) {
-                                            fileTransferStatus.value = "❌ 传输失败: $message"
-                                        }
-                                    }
-                                )
-                            } else {
-                                fileTransferStatus.value = "❌ 错误：手表未连接"
-                            }
-                        }
-                    }
-                    private val fileTransferStatus = mutableStateOf("等待选择文件...")
 
 
                     var selectedAlarmName by remember { mutableStateOf(sp.getString("selected_alarm_name", "Google 时钟") ?: "Google 时钟") }
