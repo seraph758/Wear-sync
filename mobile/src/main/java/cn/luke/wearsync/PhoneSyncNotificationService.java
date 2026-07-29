@@ -23,15 +23,12 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
     private static final AtomicLong sLastRemoteActionTimeMs = new AtomicLong(0);
     private static final long REMOTE_ACTION_WINDOW_MS = 3000;
 
-    // ⏳ 新增：用于防止系统闹钟“闪现”通知的防抖机制
-    // 记录闹钟包名首次匹配的时间，用于拦截紧随其后的 REMOVE 事件
+    // ⏳ 用于防止系统闹钟“闪现”通知的防抖机制
     private static volatile long lastAlarmPackageMatchTime = 0;
-    // 防抖窗口：包名匹配后 3 秒内的 REMOVE 事件视为系统过渡通知，直接忽略
     private static final long ALARM_DEBOUNCE_MS = 3000;
 
     /**
      * 🎯 [全步進日誌版] 供 PhoneAlarmManager 調用的即時逆向控制核心方法
-     * 拋棄靜態變數，直接實時全量掃描通知欄
      */
     public static boolean triggerLiveAlarmAction(Context context, boolean isDismissCommand) {
         String cmdName = isDismissCommand ? "【停止/DISMISS】" : "【延後/SNOOZE】";
@@ -43,7 +40,6 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
         }
         PhoneLog.d(TAG, "✅ [即時控制] 核心服務實例健康存在，開始讀取用戶配置...");
         SharedPreferences prefs = context.getSharedPreferences("wearsync_prefs", Context.MODE_PRIVATE);
-        // 🎯【新增拦截逻辑 1】如果总开关关闭，逆向控制也不予执行
         boolean isAlarmMasterEnabled = prefs.getBoolean("alarm_proxy_master_switch", true);
         if (!isAlarmMasterEnabled) {
             PhoneLog.w(TAG, "🎛️ [即時控制熔斷] 闹钟代点总开关已关闭，直接退出，不执行任何逆向点击意图！");
@@ -52,7 +48,6 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
         String targetPkg = prefs.getString("selected_alarm_package", "com.google.android.deskclock");
         String dismissKey = prefs.getString("alarm_dismiss_key", "停止").toLowerCase();
         String snoozeKey = prefs.getString("alarm_snooze_key", "延后").toLowerCase();
-        // 🔒 防止关键字被保存为空
         if (dismissKey.trim().isEmpty()) dismissKey = "停止";
         if (snoozeKey.trim().isEmpty()) snoozeKey = "延后";
         PhoneLog.d(TAG, "📌 [即時控制配置] 目標鬧鐘包名: [" + targetPkg + "], 停止關鍵字: [" + dismissKey + "], 延後關鍵字: [" + snoozeKey + "]");
@@ -64,11 +59,9 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
                 return false;
             }
             PhoneLog.d(TAG, "📊 [即時控制] 當前通知欄總共有 " + activeNotifications.length + " 個活躍通知，開始逐一篩選...");
-            for (int i = 0; i < activeNotifications.length; i++) {
-                StatusBarNotification sbn = activeNotifications[i];
+            for (StatusBarNotification sbn : activeNotifications) {
                 if (sbn == null) continue;
                 String currentPkg = sbn.getPackageName();
-                // 不是目標鬧鐘，跳過
                 if (!targetPkg.equalsIgnoreCase(currentPkg)) continue;
                 PhoneLog.d(TAG, "🎯 [命中目標包] 成功定位到目標鬧鐘通知！開始解析內部的 Notification 物件...");
                 Notification notification = sbn.getNotification();
@@ -81,19 +74,15 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
                     continue;
                 }
                 PhoneLog.d(TAG, "📦 發現該鬧鐘通知包含 " + notification.actions.length + " 個 Action 按鈕，開始逐個匹配字串...");
-                // 遍歷當前這個活著的鬧鐘的所有按鈕
-                for (int j = 0; j < notification.actions.length; j++) {
-                    Notification.Action action = notification.actions[j];
+                for (Notification.Action action : notification.actions) {
                     if (action == null || action.title == null) continue;
                     String title = action.title.toString().toLowerCase();
                     boolean isMatch = false;
                     if (isDismissCommand) {
-                        // 判定為停止指令
                         if (title.contains(dismissKey) || title.contains("stop") || title.contains("关闭") || title.contains("停止") || title.contains("dismiss") || title.contains("清除")) {
                             isMatch = true;
                         }
                     } else {
-                        // 判定為延後指令
                         if (title.contains(snoozeKey) || title.contains("snooze") || title.contains("延后") || title.contains("稍后")) {
                             isMatch = true;
                         }
@@ -107,7 +96,6 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
                         try {
                             PhoneLog.d(TAG, "🚀 [發射] 正在跨進程調用 actionIntent.send()...");
                             action.actionIntent.send();
-                            // ✅ 关键：标记这次操作是远程触发的，防止 onNotificationRemoved 误判
                             sLastRemoteActionTimeMs.set(SystemClock.elapsedRealtime());
                             PhoneLog.d(TAG, "🏁 [結束] 穿透控制圓滿成功！");
                             return true;
@@ -129,12 +117,6 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
     private final Handler alarmWatchdogHandler = new Handler(Looper.getMainLooper());
     private Runnable alarmWatchdogRunnable = null;
     private boolean isAlarmCurrentlyRinging = false;
-    private boolean alarmReady = false;
-    private final Handler readyHandler = new Handler(Looper.getMainLooper());
-    private Runnable pendingAlarmRunnable;
-    private static final int READY_CHECK_INTERVAL = 100;
-    private static final int READY_TIMEOUT = 1500;
-    private int readyCheckElapsed = 0;
 
     public static PhoneSyncNotificationService getInstance() {
         return instance;
@@ -166,31 +148,26 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
     public void onNotificationPosted(StatusBarNotification sbn) {
         if (sbn == null) return;
 
-        // 1. 总开关检查
         SharedPreferences prefs = getSharedPreferences("wearsync_prefs", Context.MODE_PRIVATE);
         boolean isAlarmMasterEnabled = prefs.getBoolean("alarm_proxy_master_switch", true);
         if (!isAlarmMasterEnabled) {
             return;
         }
 
-        // 2. 核心判断：FLAG_INSISTENT + 包名，两者必须同时满足
         Notification notification = sbn.getNotification();
         if (notification == null) return;
 
-        // 1. 第一道门槛：先判断包名（成本最低，快速排除无关通知）
         String currentPkg = sbn.getPackageName();
         String selectedPkg = prefs.getString("selected_alarm_package", "com.google.android.deskclock");
         boolean isTargetPackage = selectedPkg.equalsIgnoreCase(currentPkg);
 
         if (!isTargetPackage) {
-            // 非目标包名，直接静默返回，不打印任何日志
             return;
         }
 
-        // ⏳ 关键改动：只要包名匹配，立即记录时间戳，用于后续的防抖拦截
+        // ⏳ 只要包名匹配就立即记录时间戳，用于后续防抖拦截
         lastAlarmPackageMatchTime = System.currentTimeMillis();
 
-        // 2. 第二道门槛：包名匹配后，再判断 FLAG_INSISTENT
         boolean isInsistent = (notification.flags & Notification.FLAG_INSISTENT) != 0;
         PhoneLog.d(TAG, "🔔 闹钟包名匹配 -> isInsistent: " + isInsistent + ", pkg: " + currentPkg);
         if (!isInsistent) {
@@ -198,16 +175,13 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
             return;
         }
 
-        // ✅ 双重验证通过，确认为真正的闹钟通知
         PhoneLog.d(TAG, "✅ 确认闹钟通知，准备同步到手表 -> pkg: " + currentPkg);
 
-        // 3. 防重复检查
         if (isAlarmCurrentlyRinging) {
             PhoneLog.d(TAG, "闹钟已经运行，忽略重复通知");
             return;
         }
 
-        // 4. 查找按钮关键字
         String dismissKey = prefs.getString("alarm_dismiss_key", "停止").toLowerCase();
         String snoozeKey = prefs.getString("alarm_snooze_key", "延后").toLowerCase();
         if (dismissKey.trim().isEmpty()) dismissKey = "停止";
@@ -224,8 +198,6 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
             }
         }
 
-        // 5. 通知手表
-        alarmReady = true;
         PhoneLog.d(TAG, "✅ 闹钟系统已就绪，开始下发手表");
         PhoneAlarmManager.notifyWatchAlarmRinging(
                 PhoneSyncNotificationService.this,
@@ -243,20 +215,19 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
 
         SharedPreferences prefs = getSharedPreferences("wearsync_prefs", Context.MODE_PRIVATE);
 
-        // 🛡️ 1. 原有的防回弹拦截 (手表控制手机)
+        // 🛡️ 防回弹拦截 (手表控制手机)
         if (sLastRemoteActionTimeMs.get() > 0 && (SystemClock.elapsedRealtime() - sLastRemoteActionTimeMs.get()) < REMOTE_ACTION_WINDOW_MS) {
             PhoneLog.d(TAG, "🛡️ [防回彈攔截] 通知消失是由遠程操作觸發的，跳過後續處理");
             return;
         }
 
-        // ⏳ 2. 新增的防抖拦截 (防止闹钟刚响就被误杀)
+        // ⏳ 防抖拦截 (防止闹钟刚响就被误杀)
         long elapsed = System.currentTimeMillis() - lastAlarmPackageMatchTime;
         if (elapsed >= 0 && elapsed < ALARM_DEBOUNCE_MS) {
             PhoneLog.d(TAG, "⏳ 防抖拦截：REMOVE 距包名匹配仅 " + elapsed + "ms，判定为系统过渡通知，忽略");
             return;
         }
 
-        // 🎯 同样加入开关校验，如果开关此时是关着的，说明手表之前根本没收到过叮咚声，removed 也不必发下发给手表了
         boolean isAlarmMasterEnabled = prefs.getBoolean("alarm_proxy_master_switch", true);
         if (!isAlarmMasterEnabled) {
             return;
@@ -268,7 +239,6 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
             return;
         }
 
-        alarmReady = false;
         stopAlarmWatchdog();
         PhoneSyncAlarmState.enterStopping();
         PhoneAlarmManager.notifyWatchAlarmDismissed(this);
@@ -310,33 +280,5 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
             alarmWatchdogHandler.removeCallbacks(alarmWatchdogRunnable);
             alarmWatchdogRunnable = null;
         }
-    }
-
-    private boolean isAlarmSystemReady() {
-        try {
-            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-            if (nm == null) return false;
-            int filter = nm.getCurrentInterruptionFilter();
-            if (filter == NotificationManager.INTERRUPTION_FILTER_UNKNOWN) {
-                return false;
-            }
-            StatusBarNotification[] active = getActiveNotifications();
-            if (active == null || active.length == 0) {
-                return false;
-            }
-            for (StatusBarNotification sbn : active) {
-                if (sbn == null) continue;
-                Notification n = sbn.getNotification();
-                if (n == null) continue;
-                if (Notification.CATEGORY_ALARM.equals(n.category)) {
-                    if (n.actions != null && n.actions.length > 0) {
-                        return true;
-                    }
-                }
-            }
-        } catch (Exception e) {
-            PhoneLog.e(TAG, "READY CHECK ERROR: " + e.getMessage());
-        }
-        return false;
     }
 }

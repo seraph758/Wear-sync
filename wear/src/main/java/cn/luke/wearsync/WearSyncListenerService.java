@@ -2,6 +2,8 @@ package cn.luke.wearsync;
 
 import android.content.Context;
 import android.content.Intent;
+import android.net.Uri;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 
@@ -13,10 +15,9 @@ import com.google.android.gms.wearable.WearableListenerService;
 
 import org.json.JSONObject;
 
+import java.io.File;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import android.util.Log;
-
 
 
 public class WearSyncListenerService extends WearableListenerService {
@@ -34,6 +35,9 @@ public class WearSyncListenerService extends WearableListenerService {
 
     private static final String CAMERA_PREVIEW_STREAM_PATH = DATA_CHANNEL_BASE_PATH + "/camera";
     private ChannelClient.Channel mLogChannel;
+    // ========== 新增：APK文件传输通道常量 ==========
+    private static final String FILE_TRANSFER_CHANNEL_PATH = "/wear-sync/file-transfer";
+    private static final String APK_SAVE_DIR_NAME = "apk"; // APK固定保存子目录
     @Override
     public void onMessageReceived(@NonNull MessageEvent messageEvent) {
         WearLog.e(TAG, "========== MESSAGE RECEIVED ==========");
@@ -72,12 +76,12 @@ public class WearSyncListenerService extends WearableListenerService {
                     int repeatIndex = configJson.optInt("repeatIndex", -1);
 
                     if ("preview".equalsIgnoreCase(action)) {
-    // ✅ 修复：直接使用从手机端传过来的最新参数进行震动预览
-    // 这样就绕过了读取本地旧配置的步骤
-    WearVibratorHelper.vibratePattern(this, onDuration, offDuration, repeatIndex);
-    
-    WearLog.i(TAG, "🔄 收到预览指令，已触发即时自定义震动: on=" + onDuration + ", off=" + offDuration + ", repeat=" + repeatIndex);
-} else if ("save".equalsIgnoreCase(action)) {
+                        // ✅ 修复：直接使用从手机端传过来的最新参数进行震动预览
+                        // 这样就绕过了读取本地旧配置的步骤
+                        WearVibratorHelper.vibratePattern(this, onDuration, offDuration, repeatIndex);
+
+                        WearLog.i(TAG, "🔄 收到预览指令，已触发即时自定义震动: on=" + onDuration + ", off=" + offDuration + ", repeat=" + repeatIndex);
+                          } else if ("save".equalsIgnoreCase(action)) {
                         // 💾 持久化到手表本地
                         android.content.SharedPreferences sp = getSharedPreferences("wear_vibration_prefs", Context.MODE_PRIVATE);
                         sp.edit().putInt("on_duration", onDuration)
@@ -112,31 +116,31 @@ public class WearSyncListenerService extends WearableListenerService {
                     WearSyncDndManager.executeDndSync(this, dndStatePhone, pullDownDelayMs); // ✅ 透传延迟值
                     return;
                 }
-// 4. 闹钟控制模组 (最终合并版)
-if ("alarm".equalsIgnoreCase(type)) {
-    WearLog.d(TAG, "⏰ 收到手机闹钟信令，action=" + action);
+        // 4. 闹钟控制模组 (最终合并版)
+        if ("alarm".equalsIgnoreCase(type)) {
+            WearLog.d(TAG, "⏰ 收到手机闹钟信令，action=" + action);
 
-    // ✅ 优先判断：是否是强制停止指令？
-    if ("FORCE_STOP_WEAR_ALARM".equalsIgnoreCase(action) || "FORCE_STOP".equalsIgnoreCase(action)) {
-        WearLog.d(TAG, "🛑 收到强制停止指令，通过 handleIncomingCommand 关闭闹钟界面...");
-        // 统一走重构后的静态方法，不再在 Listener 里手动 startActivity
-        WearAlarmActivity.handleIncomingCommand(this, json);
-    } else {
-        // ✅ 正常启动闹钟：仍然需要 startActivity，因为 Activity 可能尚未创建
-        WearLog.d(TAG, "⏰ 准备启动 WearAlarmActivity...");
-        Intent alarmIntent = new Intent(this, WearAlarmActivity.class);
-        alarmIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK 
-                           | Intent.FLAG_ACTIVITY_SINGLE_TOP 
-                           | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-        alarmIntent.putExtra("raw_alarm_json", json.toString());
-        alarmIntent.putExtra("alarm_action", action);
-        startActivity(alarmIntent);
-        
-        // 启动后也将数据传递给静态方法，确保 UI 状态同步
-        WearAlarmActivity.handleIncomingCommand(this, json);
-    }
-    return; // 闹钟逻辑处理完毕，返回
-}
+            // ✅ 优先判断：是否是强制停止指令？
+            if ("FORCE_STOP_WEAR_ALARM".equalsIgnoreCase(action) || "FORCE_STOP".equalsIgnoreCase(action)) {
+                WearLog.d(TAG, "🛑 收到强制停止指令，通过 handleIncomingCommand 关闭闹钟界面...");
+                // 统一走重构后的静态方法，不再在 Listener 里手动 startActivity
+                WearAlarmActivity.handleIncomingCommand(this, json);
+            } else {
+                // ✅ 正常启动闹钟：仍然需要 startActivity，因为 Activity 可能尚未创建
+                WearLog.d(TAG, "⏰ 准备启动 WearAlarmActivity...");
+                Intent alarmIntent = new Intent(this, WearAlarmActivity.class);
+                alarmIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                                   | Intent.FLAG_ACTIVITY_SINGLE_TOP
+                                   | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                alarmIntent.putExtra("raw_alarm_json", json.toString());
+                alarmIntent.putExtra("alarm_action", action);
+                startActivity(alarmIntent);
+
+                // 启动后也将数据传递给静态方法，确保 UI 状态同步
+                WearAlarmActivity.handleIncomingCommand(this, json);
+            }
+            return; // 闹钟逻辑处理完毕，返回
+        }
                 
                 // 6. 原有：相机穿透控制模组
         if ("camera_control".equalsIgnoreCase(type)) {
@@ -162,57 +166,83 @@ if ("alarm".equalsIgnoreCase(type)) {
             }
         }
 
-// 7. 原有：手飙日志无线远程联控模组
-if ("wearlog".equalsIgnoreCase(type)) {
-    boolean wearDebug = json.optBoolean("wear_log_debug", true);
-    WearLog.DEBUG = wearDebug;
+            // 7. 原有：手飙日志无线远程联控模组
+            if ("wearlog".equalsIgnoreCase(type)) {
+                boolean wearDebug = json.optBoolean("wear_log_debug", true);
+                WearLog.DEBUG = wearDebug;
 
-    WearLog.d(TAG, "🎛️ [远程同步] 接收到手机端远程控场，手表日志开闭状态同步修改为 ➔ " + wearDebug);
+                WearLog.d(TAG, "🎛️ [远程同步] 接收到手机端远程控场，手表日志开闭状态同步修改为 ➔ " + wearDebug);
 
-    if (wearDebug) {
-        // ✅ 1. 先建立数据通道
-        String logPath = DATA_CHANNEL_BASE_PATH + "/log";
-        openLogChannelToPhone(messageEvent.getSourceNodeId(), logPath);
+                if (wearDebug) {
+                    // ✅ 1. 先建立数据通道
+                    String logPath = DATA_CHANNEL_BASE_PATH + "/log";
+                    openLogChannelToPhone(messageEvent.getSourceNodeId(), logPath);
 
-        // ✅ 2. 再发送一个手机能识别的“握手”信令
-        try {
-            JSONObject handshakeJson = new JSONObject();
-            handshakeJson.put("sender", "wear");
-            handshakeJson.put("type", "camera");
-            handshakeJson.put("action", "LOG_CHANNEL_HANDSHAKE");
-            Wearable.getMessageClient(this)
-                    .sendMessage(
-                            messageEvent.getSourceNodeId(),
-                            UNIVERSAL_SYNC_PATH,
-                            handshakeJson.toString().getBytes(StandardCharsets.UTF_8)
-                    );
-            WearLog.d(TAG, "📡 已发送日志通道握手信令");
-        } catch (Exception e) {
-            WearLog.e(TAG, "发送日志通道握手信令失败", e);
-        }
-    } 
-    // ✅ 关键：不再用 else！直接在这里写关闭逻辑
-    else {
-        WearLog.d(TAG, "🛑 收到关闭日志指令，正在执行清理...");
+                    // ✅ 2. 再发送一个手机能识别的“握手”信令
+                    try {
+                        JSONObject handshakeJson = new JSONObject();
+                        handshakeJson.put("sender", "wear");
+                        handshakeJson.put("type", "camera");
+                        handshakeJson.put("action", "LOG_CHANNEL_HANDSHAKE");
+                        Wearable.getMessageClient(this)
+                                .sendMessage(
+                                        messageEvent.getSourceNodeId(),
+                                        UNIVERSAL_SYNC_PATH,
+                                        handshakeJson.toString().getBytes(StandardCharsets.UTF_8)
+                                );
+                        WearLog.d(TAG, "📡 已发送日志通道握手信令");
+                    } catch (Exception e) {
+                        WearLog.e(TAG, "发送日志通道握手信令失败", e);
+                    }
+                }
+                // ✅ 关键：不再用 else！直接在这里写关闭逻辑
+                else {
+                    WearLog.d(TAG, "🛑 收到关闭日志指令，正在执行清理...");
 
-        // ✅ 只需这一行：从源头关闭，d/i/w/e 全部静默
-        WearLog.DEBUG = false;
+                    // ✅ 只需这一行：从源头关闭，d/i/w/e 全部静默
+                    WearLog.DEBUG = false;
 
-        // ✅ 保留通道关闭：释放系统资源
-        if (mLogChannel != null) {
-            Wearable.getChannelClient(this).close(mLogChannel)
-                    .addOnSuccessListener(aVoid -> {
-                        mLogChannel = null;
-                    })
-                    .addOnFailureListener((Exception e) -> {
-                        Log.e(TAG, "❌ 关闭日志通道失败", e);
-                    });
-        } else {
-            WearLog.d(TAG, "⚠️ 尝试关闭日志通道，但通道引用为空，可能尚未建立或已关闭");
-        }
-    }
-} 
-// ✅ 缺失的右大括号在这里（已经修复） // 🔴 这里补上缺失的右大括号，用来闭合最外层的 if ("wearlog"...)
+                    // ✅ 保留通道关闭：释放系统资源
+                    if (mLogChannel != null) {
+                        Wearable.getChannelClient(this).close(mLogChannel)
+                                .addOnSuccessListener(aVoid -> {
+                                    mLogChannel = null;
+                                })
+                                .addOnFailureListener((Exception e) -> {
+                                    Log.e(TAG, "❌ 关闭日志通道失败", e);
+                                });
+                    } else {
+                        WearLog.d(TAG, "⚠️ 尝试关闭日志通道，但通道引用为空，可能尚未建立或已关闭");
+                    }
+                }
+            }
+            // ========== 新增：APK文件传输准备信令 ==========
+           if ("file_transfer".equalsIgnoreCase(type)) {
+                if ("PREPARE_RECEIVE".equalsIgnoreCase(action)) {
+                    String fileName = json.optString("fileName", "unknown.apk");
+                    long fileSize = json.optLong("fileSize", 0);
+                    WearLog.i(TAG, "📂 [APK接收] 准备接收: " + fileName + " (" + fileSize + "B)");
+
+                    // 回复ACK通知手机端可以打开Channel
+                    try {
+                        JSONObject ack = new JSONObject();
+                        ack.put("sender", "wear");
+                        ack.put("type", "file_transfer");
+                        ack.put("action", "READY_TO_RECEIVE");
+
+                        Wearable.getMessageClient(this)
+                                .sendMessage(messageEvent.getSourceNodeId(), UNIVERSAL_SYNC_PATH,
+                                        ack.toString().getBytes(StandardCharsets.UTF_8))
+                                .addOnSuccessListener(aVoid ->
+                                        WearLog.d(TAG, "📡 [APK接收] ACK已发送"))
+                                .addOnFailureListener(e ->
+                                        WearLog.e(TAG, "❌ [APK接收] ACK发送失败", e));
+                    } catch (Exception e) {
+                        WearLog.e(TAG, "❌ [APK接收] 构建ACK异常", e);
+                    }
+                }
+                return; // ⚠️ 关键：处理完毕立即return，避免落入下方其他模块的逻辑
+            }
 
             } catch (Exception e) {
                 WearLog.e(TAG, "🔴 解析手机发往手表的指令崩溃: " + e.getMessage(), e);
@@ -229,6 +259,31 @@ if ("wearlog".equalsIgnoreCase(type)) {
             readH264ChannelStream(channel);
         } else {
             WearLog.d(TAG, "CAM-W006 Ignore channel " + path);
+        }
+        // ========== 新增：APK文件传输通道处理 ==========
+        if (FILE_TRANSFER_CHANNEL_PATH.equals(path)) {
+            WearLog.i(TAG, "📡 [APK接收] Channel已建立，开始写入文件...");
+
+            // 确保APK保存目录存在（使用内部存储，无需申请权限）
+            File apkDir = new File(getFilesDir(), APK_SAVE_DIR_NAME);
+            if (!apkDir.exists() && !apkDir.mkdirs()) {
+                WearLog.e(TAG, "❌ [APK接收] 创建目录失败: " + apkDir.getAbsolutePath());
+                return;
+            }
+
+            // 使用时间戳命名避免覆盖
+            File outFile = new File(apkDir, System.currentTimeMillis() + "_incoming.apk");
+            Uri fileUri = Uri.fromFile(outFile);
+
+            Wearable.getChannelClient(this)
+                    .receiveFile(channel, fileUri, false)   // 返回 Task<Void>
+                    .addOnSuccessListener(unused -> {
+                        WearLog.i(TAG, "✅ [APK接收] 保存成功: " + outFile.getAbsolutePath());
+                    })
+                    .addOnFailureListener(e -> {
+                        WearLog.e(TAG, "❌ [APK接收] 接收失败", e);
+                        if (outFile.exists()) outFile.delete();
+                    });
         }
     }
 

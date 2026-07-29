@@ -3,35 +3,36 @@ package cn.luke.wearsync;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.wear.remote.interactions.RemoteActivityHelper; // ✅ 修复1: 正确的导入路径
+import androidx.wear.remote.interactions.RemoteActivityHelper;
+
 import com.google.android.gms.tasks.Task;
+import com.google.android.gms.wearable.CapabilityClient;
 import com.google.android.gms.wearable.ChannelClient;
-import com.google.android.gms.wearable.MessageClient;
 import com.google.android.gms.wearable.Node;
 import com.google.android.gms.wearable.Wearable;
+
 import org.json.JSONObject;
+
 import java.nio.charset.StandardCharsets;
-import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import com.google.android.gms.wearable.CapabilityClient;
-import com.google.android.gms.wearable.CapabilityInfo;
-
 
 /**
  * 信令发送管理器 (Command Sender) - 兼容修复版
  * 职责：仅负责向手机端发送控制指令与打开通道。
  * 注意：已移除所有消息接收逻辑，接收统一由 WearSyncListenerService 处理。
  */
+@SuppressWarnings({"unused", "SpellChecking"})
 public class WearSyncCommManager {
 
     private static final String TAG = "WearSyncCommManager";
     private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
     private static volatile WearSyncCommManager instance;
-    private static final String CAPABILITY_NAME = "wear_sync"; 
-    
+    private static final String CAPABILITY_NAME = "wear_sync";
+
     private final Context appContext;
     private final ExecutorService executor;
     private final ChannelClient channelClient;
@@ -55,18 +56,17 @@ public class WearSyncCommManager {
         return instance;
     }
 
-private void connect() {
-        refreshConnectedNode();
-}
+    // ✅ connect() 已删除：构造函数已调用 refreshConnectedNode()，无需冗余包装
+
     /**
-     * ✅ 修复5: 保留 sendBusinessCommand 方法
+     * 保留 sendBusinessCommand 方法
      */
     public void sendBusinessCommand(@NonNull String type, @NonNull String action) {
         sendCommand(type, action, null);
     }
 
     /**
-     * ✅ 修复6: 保留静态方法 sendDndReverseSync
+     * 保留静态方法 sendDndReverseSync
      */
     public static void sendDndReverseSync(@NonNull Context context, int interruptionFilter) {
         try {
@@ -80,25 +80,25 @@ private void connect() {
 
     // ======================== 核心发送方法 ========================
 
-       private void refreshConnectedNode() {
-    // ✅ 完全异步，零阻塞，无需 Tasks.await
-    Wearable.getCapabilityClient(appContext)
-        .getCapability(CAPABILITY_NAME, CapabilityClient.FILTER_REACHABLE)
-        .addOnSuccessListener(executor, capabilityInfo -> {
-            if (capabilityInfo.getNodes() != null && !capabilityInfo.getNodes().isEmpty()) {
-                connectedNode = capabilityInfo.getNodes().iterator().next();
-                WearLog.d(TAG, "✅ 已缓存连接节点: " + connectedNode.getDisplayName());
-            } else {
-                connectedNode = null;
-                WearLog.w(TAG, "⚠️ 无具备 '" + CAPABILITY_NAME + "' 能力的可达节点");
-            }
-        })
-        .addOnFailureListener(executor, e -> {
-            connectedNode = null;
-            WearLog.e(TAG, "❌ 获取连接节点失败", e);
-        });
-       }
-
+    private void refreshConnectedNode() {
+        // ✅ 完全异步，零阻塞，无需 Tasks.await
+        Wearable.getCapabilityClient(appContext)
+                .getCapability(CAPABILITY_NAME, CapabilityClient.FILTER_REACHABLE)
+                .addOnSuccessListener(executor, capabilityInfo -> {
+                    // ✅ 移除冗余 null 检查：getNodes() 永远返回非 null Set
+                    if (!capabilityInfo.getNodes().isEmpty()) {
+                        connectedNode = capabilityInfo.getNodes().iterator().next();
+                        WearLog.d(TAG, "✅ 已缓存连接节点: " + connectedNode.getDisplayName());
+                    } else {
+                        connectedNode = null;
+                        WearLog.w(TAG, "⚠️ 无具备 '" + CAPABILITY_NAME + "' 能力的可达节点");
+                    }
+                })
+                .addOnFailureListener(executor, e -> {
+                    connectedNode = null;
+                    WearLog.e(TAG, "❌ 获取连接节点失败", e);
+                });
+    }
 
     public void sendCommand(@NonNull String type, @NonNull String action, @Nullable JSONObject extra) {
         executor.execute(() -> {
@@ -127,6 +127,7 @@ private void connect() {
                 byte[] data = payload.toString().getBytes(StandardCharsets.UTF_8);
                 Task<Integer> task = Wearable.getMessageClient(appContext)
                         .sendMessage(connectedNode.getId(), UNIVERSAL_SYNC_PATH, data);
+                // ✅ Statement lambda → Expression lambda
                 task.addOnSuccessListener(result ->
                         WearLog.d(TAG, "✅ 信令已发送 [" + type + "/" + action + "]"));
                 task.addOnFailureListener(e ->
@@ -153,21 +154,20 @@ private void connect() {
                 intent.setPackage("cn.luke.wearsync");
                 intent.setData(Uri.parse("wearsync://camera"));
 
-                // ✅ 使用正确导入的 RemoteActivityHelper
                 RemoteActivityHelper helper = new RemoteActivityHelper(appContext, executor);
-                helper.startRemoteActivity(intent).addListener(() -> {
-                    try {
-                        WearLog.w(TAG, "✨ [成功] 手机端远程 Activity 唤醒请求已被确认");
-                    } catch (Exception e) {
-                        WearLog.e(TAG, "🔴 [失败] RemoteActivityHelper 回调异常", e);
-                    }
-                }, executor);
+                // ✅ Statement lambda → Expression lambda
+                helper.startRemoteActivity(intent).addListener(() ->
+                                WearLog.w(TAG, "✨ [成功] 手机端远程 Activity 唤醒请求已被确认"),
+                        executor);
             } catch (Exception e) {
                 WearLog.e(TAG, "🔴 openPhoneCamera 初始化失败", e);
             }
         });
     }
 
+    /**
+     * 通道打开方法 - 供拍照/日志/文件传输模块使用
+     */
     public void openChannel(String channelPath) {
         if (connectedNode == null) {
             WearLog.w(TAG, "⚠️ 打开通道失败 [" + channelPath + "]：节点未连接");
@@ -176,14 +176,16 @@ private void connect() {
         WearLog.d(TAG, "🔗 正在请求打开通道: " + channelPath);
 
         channelClient.openChannel(connectedNode.getId(), channelPath)
-                .addOnSuccessListener(channel -> {
-                    WearLog.d(TAG, "✅ 通道已打开: " + channelPath);
-                })
-                .addOnFailureListener(e -> {
-                    WearLog.e(TAG, "❌ 打开通道失败 [" + channelPath + "]: " + e.getMessage(), e);
-                });
+                // ✅ Statement lambda → Expression lambda
+                .addOnSuccessListener(channel ->
+                        WearLog.d(TAG, "✅ 通道已打开: " + channelPath))
+                .addOnFailureListener(e ->
+                        WearLog.e(TAG, "❌ 打开通道失败 [" + channelPath + "]: " + e.getMessage(), e));
     }
 
+    /**
+     * DND 状态同步 - 供 DND 维护模块使用
+     */
     public void syncDndState(boolean enabled) {
         try {
             JSONObject extra = new JSONObject();
@@ -194,6 +196,9 @@ private void connect() {
         }
     }
 
+    /**
+     * 生命周期清理 - 应在 Application.onDestroy 或主 Service 销毁时调用
+     */
     public void shutdown() {
         executor.shutdown();
         instance = null;
