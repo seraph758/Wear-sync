@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import android.view.LayoutInflater
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -30,7 +32,9 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -45,29 +49,22 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.edit
 import androidx.core.net.toUri
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
 import com.google.android.gms.wearable.CapabilityClient
 import com.google.android.gms.wearable.MessageClient
 import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.Wearable
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import org.json.JSONObject
 import java.nio.charset.StandardCharsets
-import androidx.compose.material3.Slider
-import androidx.compose.material3.OutlinedButton
-import cn.luke.wearsync.PhoneLog
-import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.tasks.await
-import androidx.compose.ui.text.style.TextAlign
-import kotlinx.coroutines.tasks.await
-import androidx.compose.foundation.layout.widthIn
-import android.net.Uri
-
 
 
 class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListener {
@@ -177,10 +174,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                     it,
                     fileName,
                     object : PhoneSyncFileTransferManager.TransferCallback {
-                        override fun onProgress(bytesTransferred: Long, totalBytes: Long) {
-                            // 注意：v19.0.0 版本不支持进度回调，此方法不会被调用
-                        }
-    
+
                         override fun onComplete() {
                             fileTransferStatus.value = "✅ 传输成功"
                         }
@@ -666,7 +660,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                 checked = uiLogDebugSwitch.value,
                                 onCheckedChange = { isEnabled ->
                                     uiLogDebugSwitch.value = isEnabled
-                                    cn.luke.wearsync.PhoneLog.DEBUG = isEnabled
+                                    PhoneLog.DEBUG = isEnabled
                                     // ✅ 修复：这里只控制本地日志，不启动浮窗
                                     // 如果需要浮窗，让用户点下面的按钮
                                 }
@@ -683,7 +677,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                     sp.edit { putBoolean("wear_log_debug_visible", isChecked)}
                                     PhoneLog.d("WearSync_Main", "用户切换同步监听手表端核心日志开关，当前状态: $isChecked")
                                     try {
-                                        val msgJson = org.json.JSONObject().apply {
+                                        val msgJson = JSONObject().apply {
                                             put("type", "wearlog")
                                             put("wear_log_debug", isChecked)
                                             put("timestamp", System.currentTimeMillis())
@@ -692,13 +686,14 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                         val context = requireContext()
                                         val nodeId = WearSyncState.getNodeId(context)
                                         if (!nodeId.isNullOrEmpty()) {
-                                            kotlinx.coroutines.MainScope().launch(kotlinx.coroutines.Dispatchers.IO) {
+                                            kotlinx.coroutines.MainScope().launch(Dispatchers.IO) {
                                                 try {
-                                                    com.google.android.gms.wearable.Wearable.getMessageClient(context)
+                                                    Wearable.getMessageClient(context)
                                                         .sendMessage(
                                                             nodeId,
                                                             "/wear-universal-sync",
-                                                            msgJson.toString().toByteArray(java.nio.charset.StandardCharsets.UTF_8)
+                                                            msgJson.toString().toByteArray(
+                                                                StandardCharsets.UTF_8)
                                                         )
                                                     PhoneLog.d("WearSync_Main", "日志控制信令已成功送出到消息队列")
                                                 } catch (sendError: Exception) {
@@ -722,9 +717,9 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                             modifier = Modifier.fillMaxWidth(),
                             onClick = {
                                 val context = requireContext()
-                                if (!android.provider.Settings.canDrawOverlays(context)) {
+                                if (!Settings.canDrawOverlays(context)) {
                                     val intent = Intent(
-                                        android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                                         "package:${context.packageName}".toUri()
                                     )
                                     startActivity(intent)

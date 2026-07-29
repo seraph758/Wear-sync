@@ -3,7 +3,6 @@ package cn.luke.wearsync;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
-import android.util.Log;
 
 import androidx.annotation.NonNull;
 
@@ -51,9 +50,9 @@ public class WearSyncListenerService extends WearableListenerService {
         }
 
         byte[] data = messageEvent.getData();
-            if (data == null) return;
+             if (data.length == 0) return;
 
-            try {
+        try {
                 String jsonStr = new String(data, StandardCharsets.UTF_8);
                 JSONObject json = new JSONObject(jsonStr);
                 String sender = json.optString("sender", "");
@@ -128,6 +127,7 @@ public class WearSyncListenerService extends WearableListenerService {
             } else {
                 // ✅ 正常启动闹钟：仍然需要 startActivity，因为 Activity 可能尚未创建
                 WearLog.d(TAG, "⏰ 准备启动 WearAlarmActivity...");
+
                 Intent alarmIntent = new Intent(this, WearAlarmActivity.class);
                 alarmIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
                                    | Intent.FLAG_ACTIVITY_SINGLE_TOP
@@ -205,12 +205,8 @@ public class WearSyncListenerService extends WearableListenerService {
                     // ✅ 保留通道关闭：释放系统资源
                     if (mLogChannel != null) {
                         Wearable.getChannelClient(this).close(mLogChannel)
-                                .addOnSuccessListener(aVoid -> {
-                                    mLogChannel = null;
-                                })
-                                .addOnFailureListener((Exception e) -> {
-                                    Log.e(TAG, "❌ 关闭日志通道失败", e);
-                                });
+                                .addOnSuccessListener(aVoid -> mLogChannel = null)
+                                .addOnFailureListener((Exception e) -> WearLog.e(TAG, "❌ 关闭日志通道失败", e));
                     } else {
                         WearLog.d(TAG, "⚠️ 尝试关闭日志通道，但通道引用为空，可能尚未建立或已关闭");
                     }
@@ -241,8 +237,8 @@ public class WearSyncListenerService extends WearableListenerService {
                         WearLog.e(TAG, "❌ [APK接收] 构建ACK异常", e);
                     }
                 }
-                return; // ⚠️ 关键：处理完毕立即return，避免落入下方其他模块的逻辑
-            }
+               // ⚠️ 关键：处理完毕立即return，避免落入下方其他模块的逻辑
+           }
 
             } catch (Exception e) {
                 WearLog.e(TAG, "🔴 解析手机发往手表的指令崩溃: " + e.getMessage(), e);
@@ -277,12 +273,13 @@ public class WearSyncListenerService extends WearableListenerService {
 
             Wearable.getChannelClient(this)
                     .receiveFile(channel, fileUri, false)   // 返回 Task<Void>
-                    .addOnSuccessListener(unused -> {
-                        WearLog.i(TAG, "✅ [APK接收] 保存成功: " + outFile.getAbsolutePath());
-                    })
+                    .addOnSuccessListener(unused -> WearLog.i(TAG, "✅ [APK接收] 保存成功: " + outFile.getAbsolutePath()))
                     .addOnFailureListener(e -> {
                         WearLog.e(TAG, "❌ [APK接收] 接收失败", e);
-                        if (outFile.exists()) outFile.delete();
+                        if (outFile.exists() && !outFile.delete()) {
+                            WearLog.w(TAG, "删除旧文件失败: " + outFile.getName());
+                        }
+
                     });
         }
     }
@@ -295,8 +292,8 @@ public class WearSyncListenerService extends WearableListenerService {
     private void readH264ChannelStream(ChannelClient.Channel channel) {
         new Thread(() -> {
             WearLog.d(TAG, "CAM-W010 Start H264 reader thread");
-            try {
-                InputStream is = Tasks.await(Wearable.getChannelClient(this).getInputStream(channel));
+            try (InputStream is = Tasks.await(Wearable.getChannelClient(this).getInputStream(channel))) {
+
                 WearLog.d(TAG, "CAM-W011 InputStream ready");
                 byte[] buffer = new byte[40960];
                 long totalBytes = 0;
@@ -321,11 +318,7 @@ public class WearSyncListenerService extends WearableListenerService {
     }
 
     // 修改方法签名，增加 path 参数
-    /**
-     * ⚠️ 仅用于日志传输！
-     * 日志是唯一由手表主动向手机推送的数据流
-     */
-        // 修改方法签名，增加 path 参数
+    // 修改方法签名，增加 path 参数
     /**
      * ⚠️ 仅用于日志传输！
      * 日志是唯一由手表主动向手机推送的数据流
