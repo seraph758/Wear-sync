@@ -223,18 +223,6 @@ public void onNotificationPosted(StatusBarNotification sbn) {
 
         SharedPreferences prefs = getSharedPreferences("wearsync_prefs", Context.MODE_PRIVATE);
 
-        // 🛡️ 防回弹拦截 (手表控制手机)
-        if (sLastRemoteActionTimeMs.get() > 0 && (SystemClock.elapsedRealtime() - sLastRemoteActionTimeMs.get()) < REMOTE_ACTION_WINDOW_MS) {
-            PhoneLog.d(TAG, "🛡️ [防回彈攔截] 通知消失是由遠程操作觸發的，跳過後續處理");
-            return;
-        }
-
-        // ⏳ 防抖拦截 (防止闹钟刚响就被误杀)
-        long elapsed = System.currentTimeMillis() - lastAlarmPackageMatchTime;
-        if (elapsed >= 0 && elapsed < ALARM_DEBOUNCE_MS) {
-            PhoneLog.d(TAG, "⏳ 防抖拦截：REMOVE 距包名匹配仅 " + elapsed + "ms，判定为系统过渡通知，忽略");
-            return;
-        }
 
         boolean isAlarmMasterEnabled = prefs.getBoolean("alarm_proxy_master_switch", true);
         if (!isAlarmMasterEnabled) {

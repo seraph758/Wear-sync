@@ -935,9 +935,9 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                                     onClick = {
                                                         val prefs = requireContext().getSharedPreferences("wear_vibration_prefs", Context.MODE_PRIVATE)
                                                         prefs.edit {
-                                                            putInt("on_duration", patternOnDuration)
-                                                            putInt("off_duration", patternOffDuration)
-                                                            putInt("repeat_index", repeatIndex)
+                                                            putInt("onDuration", patternOnDuration)
+                                                            putInt("offDuration", patternOffDuration)
+                                                            putInt("repeatIndex", repeatIndex)
                                                         }
                                                         PhoneLog.d("WearSync_Main", "💾 震动参数已保存到手机端: on=${patternOnDuration}ms, off=${patternOffDuration}ms, repeat=${repeatIndex}")
                                                         sendVibrationCommand("save", patternOnDuration, patternOffDuration, repeatIndex)
