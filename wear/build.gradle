@@ -73,7 +73,7 @@ android {
 
     // ✅ 修复致命冲突：jvmTarget 必须与 compileOptions 严格对齐
     kotlinOptions {
-        jvmTarget = '25'
+        jvmTarget = '23'
     }
 
     buildFeatures {
