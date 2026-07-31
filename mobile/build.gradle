@@ -89,7 +89,7 @@ android {
 
 // ✅ 混合项目统一使用 Kotlin Toolchain DSL 管理 JDK 26
 kotlin {
-    jvmToolchain(26)
+    jvmToolchain(21)
 }
 
 tasks.withType(JavaCompile).configureEach {

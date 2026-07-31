@@ -76,7 +76,7 @@ android {
     java {
         toolchain {
             // ✅ 匹配你的需求，使用 JDK 26 的工具链
-            languageVersion = JavaLanguageVersion.of(26)
+            languageVersion = JavaLanguageVersion.of(21)
         }
     }
 
