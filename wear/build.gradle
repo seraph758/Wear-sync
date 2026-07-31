@@ -90,7 +90,7 @@ tasks.withType(JavaCompile).configureEach {
 dependencies {
     // ==================== WearOS 专属最新组件 ====================
     // ✅ 替换旧版 wear:1.4.0，使用 2026 年最新的 Wear 基础库
-    implementation 'androidx.wear:wear:1.5.0'
+    implementation 'androidx.wear:wear:1.3.0'
     implementation 'androidx.wear:wear-remote-interactions:1.2.0'
     
     // ✅ 移除已废弃的 percentlayout 和 legacy-support-v4

@@ -49,14 +49,14 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/build.gradle",
       "selection": {
         "end": {
-          "column": 23,
-          "index": 2375,
-          "line": 76
+          "column": 65,
+          "index": 3350,
+          "line": 105
         },
         "start": {
-          "column": 23,
-          "index": 2375,
-          "line": 76
+          "column": 65,
+          "index": 3350,
+          "line": 105
         }
       }
     }
