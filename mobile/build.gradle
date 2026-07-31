@@ -97,6 +97,12 @@ tasks.withType(JavaCompile).configureEach {
     options.deprecation = true
 }
 
+tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+    compilerOptions {
+        // 允许 Kotlin 编译器在使用 JDK 21 预览特性时不会产生警告或冲突
+        freeCompilerArgs.add("-Xjdk-release=21")
+    }
+}
 dependencies {
     // ==================== 核心脱糖依赖 ====================
     // ✅ 手机端同样必须引入此库，负责将 JDK 26 的高端类库降维翻译成手机能跑的格式
