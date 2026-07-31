@@ -67,16 +67,16 @@ android {
     }
 
     compileOptions {
-        // ✅ 目标平台设为 21
-        sourceCompatibility JavaVersion.VERSION_21
-        targetCompatibility JavaVersion.VERSION_21
+        // ✅ 目标平台设为 22
+        sourceCompatibility JavaVersion.VERSION_22
+        targetCompatibility JavaVersion.VERSION_22
         
         // ✅ 核心开启：允许将高版本语法脱糖给更低版本的设备运行
         coreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
-        jvmTarget = '21'
+        jvmTarget = '22'
     }
 
     buildFeatures {

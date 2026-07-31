@@ -1,6 +1,5 @@
 plugins {
     id 'com.android.application'
-    // ❌ 已移除 org.jetbrains.kotlin.android，纯 Java 项目不需要它
 }
 
 // ==================== 签名配置 ====================
@@ -66,8 +65,8 @@ android {
 
     compileOptions {
         // ✅ 目标平台统一调整为 21
-        sourceCompatibility JavaVersion.VERSION_21
-        targetCompatibility JavaVersion.VERSION_21
+        sourceCompatibility JavaVersion.VERSION_22
+        targetCompatibility JavaVersion.VERSION_22
         
         // ✅ 核心开启：允许将高版本语法脱糖翻译给 Wear OS 6 运行
         coreLibraryDesugaringEnabled = true
@@ -92,7 +91,6 @@ tasks.withType(JavaCompile).configureEach {
     options.compilerArgs += [
         '-Xlint:deprecation', 
         '-Xlint:unchecked',
-        '--enable-preview'
     ]
     options.deprecation = true
 }
