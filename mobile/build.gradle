@@ -20,18 +20,17 @@ def githubRunNumber = System.getenv("GITHUB_RUN_NUMBER") ?: "1"
 
 android {
     namespace "cn.luke.wearsync"
-    compileSdk = 36 // ✅ 2026 年最新 SDK
+    compileSdk = 36
 
     defaultConfig {
         applicationId "cn.luke.wearsync"
-        minSdk = 35      // ✅ 放弃向下兼容，直接对齐最新系统
+        minSdk = 35
         targetSdk = 36
         versionCode githubRunNumber.toInteger()
         versionName "1.0.${githubRunNumber}"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    // ✅ 移除过时的 lintOptions，改用现代 lint 块
     lint {
         disable += ['GradleDependency', 'NewerVersionAvailable', 'LockedOrientationActivity']
         checkReleaseBuilds = false
@@ -61,33 +60,37 @@ android {
         }
         release {
             signingConfig usePropertiesSigning ? signingConfigs.release : signingConfigs.debugging
-            minifyEnabled true // ✅ 既然不考虑兼容，Release 建议开启混淆/优化
+            minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
 
-    // ✅ 核心升级：JDK 25 原生支持 Java _ 未命名变量语法
+    // ✅ 核心修复：Java 输出字节码从 25 降为 23，与 Kotlin jvmTarget 严格对齐
+    // source=25 保证 Java 代码仍能使用 _ 等 JDK 25 语法特性
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_25
-        targetCompatibility JavaVersion.VERSION_25
+        targetCompatibility JavaVersion.VERSION_23
     }
 
+    // ✅ 混合项目必须保留，且与 Java target 保持一致
     kotlinOptions {
         jvmTarget = '23'
     }
 
     buildFeatures {
-        buildConfig = true
-        compose = true
-        viewBinding = true
+        buildConfig true
+        compose true
+        viewBinding true
     }
-
-    // ✅ 已移除 composeOptions.kotlinCompilerExtensionVersion
-    // 由 org.jetbrains.kotlin.plugin.compose 插件自动管理版本
 }
 
-// ✅ 保留全局编译参数，但移除了可能干扰高版本 JDK 的过时配置
+// ✅ 混合项目统一使用 Kotlin Toolchain DSL 管理 JDK 25
+// 它会同时作用于 javac 和 kotlinc，确保两者使用相同的 JDK 环境
+kotlin {
+    jvmToolchain(25)
+}
+
 tasks.withType(JavaCompile).configureEach {
     options.compilerArgs += ['-Xlint:deprecation', '-Xlint:unchecked']
     options.deprecation = true
@@ -102,7 +105,6 @@ dependencies {
     implementation 'androidx.core:core-ktx:1.16.0'
 
     // ==================== Compose 最新套件 ====================
-    // ✅ 使用 2026 年最新 BOM，与 JDK 25 / AGP 8.10+ 完美适配
     implementation platform('androidx.compose:compose-bom:2024.09.00')
     implementation 'androidx.activity:activity-compose:1.10.1'
     implementation 'androidx.compose.ui:ui'
@@ -112,7 +114,6 @@ dependencies {
     debugImplementation 'androidx.compose.ui:ui-tooling'
 
     // ==================== Wearable 通讯底层 ====================
-    // ✅ 统一为单一最新版本，彻底消除原文件中 19.0.0 与 18.1.0 的冲突
     implementation 'com.google.android.gms:play-services-wearable:20.0.1'
     implementation 'androidx.wear:wear-remote-interactions:1.2.0'
 

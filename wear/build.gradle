@@ -18,18 +18,17 @@ def githubRunNumber = System.getenv("GITHUB_RUN_NUMBER") ?: "1"
 
 android {
     namespace "cn.luke.wearsync"
-    compileSdk = 36 // ✅ 与 Mobile 端对齐至 2026 最新 SDK
+    compileSdk = 36
 
     defaultConfig {
         applicationId "cn.luke.wearsync"
-        minSdk = 35      // ✅ 放弃向下兼容，与 Mobile 端保持一致
+        minSdk = 35
         targetSdk = 36
         versionCode githubRunNumber.toInteger()
         versionName "1.0.${githubRunNumber}"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    // ✅ 移除过时的 lintOptions，改用现代 lint 块
     lint {
         disable += ['GradleDependency', 'NewerVersionAvailable', 'LockedOrientationActivity']
         checkReleaseBuilds = false
@@ -59,43 +58,42 @@ android {
         }
         release {
             signingConfig usePropertiesSigning ? signingConfigs.release : signingConfigs.debugging
-            minifyEnabled true // ✅ Release 开启优化，与 Mobile 端策略一致
+            minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
 
-    // ✅ 核心对齐：JDK 25 原生支持 Java _ 未命名变量语法
+    // ✅ 核心修复：JDK 25 仅作为编译工具链，输出字节码统一为 23
+    // 这样既支持 Java 25 语法（如 _），又与 Mobile 端 Kotlin jvmTarget 对齐
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_25
-        targetCompatibility JavaVersion.VERSION_25
+        targetCompatibility JavaVersion.VERSION_23
     }
 
-    // ✅ 修复致命冲突：jvmTarget 必须与 compileOptions 严格对齐
-    kotlinOptions {
-        jvmTarget = '23'
+    // ✅ 纯 Java 模块不需要 kotlinOptions/jvmToolchain
+    // 使用标准 Java Toolchain DSL 指定 JDK 25 环境
+    java {
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(25)
+        }
     }
 
     buildFeatures {
-        viewBinding = true
+        viewBinding true // ✅ Groovy DSL 不需要 = 号
     }
 }
 
-// ✅ 保留全局编译参数
 tasks.withType(JavaCompile).configureEach {
     options.compilerArgs += ['-Xlint:deprecation', '-Xlint:unchecked']
     options.deprecation = true
 }
 
 dependencies {
-    // ==================== WearOS 专属最新组件 ====================
-    // ✅ 替换旧版 wear:1.4.0，使用 2026 年最新的 Wear 基础库
+    // ==================== WearOS 专属组件 ====================
     implementation 'androidx.wear:wear:1.3.0'
     implementation 'androidx.wear:wear-remote-interactions:1.2.0'
-    
-    // ✅ 移除已废弃的 percentlayout 和 legacy-support-v4
-    // 现代 WearOS 开发统一使用 ConstraintLayout 或 Compose
-    
+
     // ==================== AndroidX 基础组件 ====================
     implementation 'androidx.appcompat:appcompat:1.7.1'
     implementation 'com.google.android.material:material:1.13.0'
@@ -104,14 +102,13 @@ dependencies {
     implementation 'androidx.core:core-ktx:1.16.0'
 
     // ==================== Wearable 通讯底层 ====================
-    // ✅ 与 Mobile 端保持完全一致的版本，避免跨端协议不匹配
     implementation 'com.google.android.gms:play-services-wearable:20.0.1'
+
+    // ==================== LocalBroadcastManager ====================
+    implementation 'androidx.localbroadcastmanager:localbroadcastmanager:1.1.0'
 
     // ==================== 测试依赖 ====================
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.2.1'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.6.1'
-    // Groovy DSL
-    implementation 'androidx.localbroadcastmanager:localbroadcastmanager:1.1.0'
-
 }

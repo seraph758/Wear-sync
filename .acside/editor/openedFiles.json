@@ -19,14 +19,14 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/build.gradle",
       "selection": {
         "end": {
-          "column": 42,
-          "index": 2722,
-          "line": 92
+          "column": 0,
+          "index": 3670,
+          "line": 114
         },
         "start": {
-          "column": 42,
-          "index": 2722,
-          "line": 92
+          "column": 0,
+          "index": 3670,
+          "line": 114
         }
       }
     },
@@ -49,14 +49,14 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/build.gradle",
       "selection": {
         "end": {
-          "column": 65,
-          "index": 3350,
-          "line": 105
+          "column": 0,
+          "index": 4710,
+          "line": 136
         },
         "start": {
-          "column": 65,
-          "index": 3350,
-          "line": 105
+          "column": 0,
+          "index": 4710,
+          "line": 136
         }
       }
     }
