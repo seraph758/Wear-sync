@@ -100,12 +100,12 @@ public void onMessageReceived(MessageEvent messageEvent) {
 
             case "alarm":
             case "alarm_action":
-                handleAlarm(json, action);
+                handleAlarm(action);
                 break;
 
             case "camera":
             case "camera_control":
-                handleCamera(json, action);
+                handleCamera(action);
                 break;
 
             default:
@@ -136,7 +136,7 @@ public void onMessageReceived(MessageEvent messageEvent) {
     // ============================================================
     // ⏰ Alarm（100% 还原，未动任一字句）
     // ============================================================
-    private void handleAlarm(JSONObject json, String action) {
+    private void handleAlarm(String action) {
         PhoneLog.d(TAG, "⏰ ALARM " + action);
         PhoneAlarmManager.executeAlarmAction(this, action);
     }
@@ -144,133 +144,83 @@ public void onMessageReceived(MessageEvent messageEvent) {
     // ============================================================
     // 📩 Camera Handler（100% 还原，未动任一字句）
     // ============================================================
-    private void handleCamera(JSONObject json, String action) {
+    private void handleCamera(String action) {
+    PhoneLog.d(TAG, "P-080 handleCamera action=" + action);
+    String nodeId = WearSyncState.getNodeId(this);
 
-        PhoneLog.d(TAG, "P-080 handleCamera action=" + action);
-        String nodeId = WearSyncState.getNodeId(this);
-         
-        if ("CAMERA_READY".equalsIgnoreCase(action)) {
-
-            PhoneLog.d(TAG, "P-081 CAMERA_READY branch");
-         
-            PhoneSyncCameraService service = PhoneSyncCameraService.getInstance();
-
-            PhoneLog.d(
-                TAG,
-                "service=" + service
-                        + " nodeId=" + nodeId);
-
-            if (service != null) {
-                PhoneLog.d(TAG, "P-082 about to call startStreaming");
-                service.startStreaming(nodeId);
-            }
-     
-            return;
-        }
-     
-        if ("STREAM_START".equalsIgnoreCase(action)) {
-     
-            PhoneSyncCameraService service = PhoneSyncCameraService.getInstance();
-     
-            if (service != null) {
-                PhoneLog.d(TAG, "P-088 about to call startStreaming");
-                service.startStreaming(nodeId);
-            }
-     
-            return;
-        }
-     
-        if ("START_CAMERA".equalsIgnoreCase(action)
-            
-     || "START_CAMERA_UI".equalsIgnoreCase(action) || 
-        "open_phone_camera".equalsIgnoreCase(action)) {
-     
-            if (nodeId == null || nodeId.isEmpty()) {
-     
-                REMOTE_EXECUTOR.execute(() -> {
-     
-                    try {
-     
-                        List<Node> nodes =
-                                Tasks.await(
-                                        Wearable.getNodeClient(this)
-                                                .getConnectedNodes());
-     
-                        if (nodes == null || nodes.isEmpty()) {
-                            return;
-                        }
-     
-                        String id = nodes.get(0).getId();
-     
-                        WearSyncState.setNodeId(this, id);
-     
-                        executeRemoteActivityLaunch(id);
-     
-                    } catch (Exception e) {
-     
-                        PhoneLog.e(TAG,
-                                "node scan failed",
-                                e);
-     
-                    }
-     
-                });
-     
-            } else {
-     
-                try {
-     
-                    JSONObject handshake = new JSONObject();
-     
-                    handshake.put("sender", "phone");
-                    handshake.put("type", "camera_control");
-                    handshake.put("action", "CAMERA_HANDSHAKE");
-     
-                    Wearable.getMessageClient(this)
-                            .sendMessage(
-                                    nodeId,
-                                    UNIVERSAL_SYNC_PATH,
-                                    handshake.toString().getBytes(StandardCharsets.UTF_8));
-     
-                } catch (Exception e) {
-     
-                    PhoneLog.e(TAG,
-                            "handshake failed",
-                            e);
-     
-                }
-     
-                executeRemoteActivityLaunch(nodeId);
-            }
-     
-            return;
-        }
-     
-        if ("STOP_CAMERA".equalsIgnoreCase(action)
-                || "FORCE_QUIT_CAMERA".equalsIgnoreCase(action)) {
-     
-            Intent stop =
-                    new Intent(this,
-                            PhoneSyncCameraService.class);
-     
-            stop.setAction(
-                    PhoneSyncCameraService.ACTION_STOP_CAMERA);
-     
-            startService(stop);
-     
-            return;
-        }
-        if ("LOG_CHANNEL_HANDSHAKE".equalsIgnoreCase(action)) {
-            PhoneLog.d(TAG, "🤝 收到手表日志通道握手，数据通道已准备就绪！");
-            // 这里不需要做任何事，onChannelOpened 会处理流的读取
-            // 打印这条日志就证明“数据路”也通了
-            return;
-        }
-     
-        PhoneLog.w(TAG,
-                "unknown camera action: "
-                        + action);
+    if ("CAMERA_READY".equalsIgnoreCase(action)) {
+      PhoneLog.d(TAG, "P-081 CAMERA_READY branch");
+      PhoneSyncCameraService service = PhoneSyncCameraService.getInstance();
+      PhoneLog.d(TAG, "service=" + service + " nodeId=" + nodeId);
+      if (service != null) {
+        PhoneLog.d(TAG, "P-082 about to call startStreaming");
+        service.startStreaming(nodeId);
+      }
+      return;
     }
+
+    if ("STREAM_START".equalsIgnoreCase(action)) {
+      PhoneSyncCameraService service = PhoneSyncCameraService.getInstance();
+      if (service != null) {
+        PhoneLog.d(TAG, "P-088 about to call startStreaming");
+        service.startStreaming(nodeId);
+      }
+      return;
+    }
+
+    if ("START_CAMERA".equalsIgnoreCase(action)
+        || "START_CAMERA_UI".equalsIgnoreCase(action)
+        || "open_phone_camera".equalsIgnoreCase(action)) {
+      if (nodeId == null || nodeId.isEmpty()) {
+        REMOTE_EXECUTOR.execute(
+            () -> {
+              try {
+                List<Node> nodes = Tasks.await(Wearable.getNodeClient(this).getConnectedNodes());
+                if (nodes == null || nodes.isEmpty()) {
+                  return;
+                }
+                String id = nodes.get(0).getId();
+                WearSyncState.setNodeId(this, id);
+                executeRemoteActivityLaunch(id);
+              } catch (Exception e) {
+                PhoneLog.e(TAG, "node scan failed", e);
+              }
+            });
+      } else {
+        try {
+          JSONObject handshake = new JSONObject();
+          handshake.put("sender", "phone");
+          handshake.put("type", "camera_control");
+          handshake.put("action", "CAMERA_HANDSHAKE");
+          Wearable.getMessageClient(this)
+              .sendMessage(
+                  nodeId,
+                  UNIVERSAL_SYNC_PATH,
+                  handshake.toString().getBytes(StandardCharsets.UTF_8));
+        } catch (Exception e) {
+          PhoneLog.e(TAG, "handshake failed", e);
+        }
+        executeRemoteActivityLaunch(nodeId);
+      }
+      return;
+    }
+
+    if ("STOP_CAMERA".equalsIgnoreCase(action) || "FORCE_QUIT_CAMERA".equalsIgnoreCase(action)) {
+      Intent stop = new Intent(this, PhoneSyncCameraService.class);
+      stop.setAction(PhoneSyncCameraService.ACTION_STOP_CAMERA);
+      startService(stop);
+      return;
+    }
+
+    if ("LOG_CHANNEL_HANDSHAKE".equalsIgnoreCase(action)) {
+      PhoneLog.d(TAG, "🤝 收到手表日志通道握手，数据通道已准备就绪！");
+      // 这里不需要做任何事，onChannelOpened 会处理流的读取
+      // 打印这条日志就证明“数据路”也通了
+      return;
+    }
+
+    PhoneLog.w(TAG, "unknown camera action: " + action);
+  }
 
     // ============================================================
     // 🚀 Remote Activity（100% 还原，未动任一字句）
