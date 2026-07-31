@@ -157,13 +157,28 @@ public class WearSyncListenerService extends WearableListenerService {
                 return;
             }
             // ✅ 新增：处理开启手机相机的动作
+            // ✅ 修复：处理开启手机相机的动作，并主动连接手机
             if ("open_phone_camera".equalsIgnoreCase(action)) {
-                WearLog.d(TAG, "📸 收到开启手机相机信令，准备启动 WearCameraActivity...");
+                WearLog.d(TAG, "📸 收到开启手机相机信令，准备启动 WearCameraActivity 并连接手机...");
+                
+                // 1. 启动手表上的相机预览界面
                 Intent cameraIntent = new Intent(this, WearCameraActivity.class);
                 cameraIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 startActivity(cameraIntent);
+            
+                // 2. 【关键修复】主动向手机发起 Channel 连接，触发手机开始推流
+                // 注意：这里的 CAMERA_PREVIEW_STREAM_PATH 必须和手机端的 UNIVERSAL_SYNC_PATH + "/camera" 完全一致
+                // 根据你之前的代码，手机端的完整路径是 "/wear-universal-sync/camera"
+                String cameraStreamPath = "/wear-universal-sync/camera"; 
+                
+                Wearable.getChannelClient(this)
+                    .openChannel(messageEvent.getSourceNodeId(), cameraStreamPath)
+                    .addOnSuccessListener(channel -> WearLog.d(TAG, "✅ 相机数据通道连接请求已发送"))
+                    .addOnFailureListener(e -> WearLog.e(TAG, "❌ 发送相机数据通道连接请求失败", e));
+            
                 return;
             }
+
         }
 
             // 7. 原有：手飙日志无线远程联控模组
