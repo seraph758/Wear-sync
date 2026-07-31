@@ -1,32 +1,17 @@
 {
   "allFiles": [
     {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncMainFragment.kt",
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/build.gradle",
       "selection": {
         "end": {
           "column": 0,
-          "index": 63606,
-          "line": 993
+          "index": 755,
+          "line": 21
         },
         "start": {
           "column": 0,
-          "index": 63606,
-          "line": 993
-        }
-      }
-    },
-    {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncMainFragment.java",
-      "selection": {
-        "end": {
-          "column": 40,
-          "index": 1261,
-          "line": 34
-        },
-        "start": {
-          "column": 35,
-          "index": 1256,
-          "line": 34
+          "index": 755,
+          "line": 21
         }
       }
     },
@@ -35,46 +20,46 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 0,
-          "line": 0
+          "index": 3685,
+          "line": 114
         },
         "start": {
           "column": 0,
-          "index": 0,
-          "line": 0
+          "index": 3685,
+          "line": 114
         }
       }
     },
     {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/res/values/strings.xml",
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/.github/workflows/android-build.yml",
       "selection": {
         "end": {
-          "column": 12,
-          "index": 1106,
-          "line": 23
+          "column": 25,
+          "index": 1539,
+          "line": 52
         },
         "start": {
-          "column": 0,
-          "index": 0,
-          "line": 0
+          "column": 25,
+          "index": 1539,
+          "line": 52
         }
       }
     },
     {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/res/xml/root_preferences.xml",
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/build.gradle",
       "selection": {
         "end": {
-          "column": 3,
-          "index": 1350,
-          "line": 46
+          "column": 0,
+          "index": 4853,
+          "line": 135
         },
         "start": {
-          "column": 3,
-          "index": 1350,
-          "line": 46
+          "column": 0,
+          "index": 4853,
+          "line": 135
         }
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncMainFragment.java"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/build.gradle"
 }

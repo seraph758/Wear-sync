@@ -3,6 +3,7 @@ plugins {
     id 'org.jetbrains.kotlin.android'
 }
 
+// ==================== 签名配置 ====================
 def signingPropsFile = rootProject.file('signing.properties')
 def signingProps = new Properties()
 def usePropertiesSigning = false
@@ -17,21 +18,24 @@ def githubRunNumber = System.getenv("GITHUB_RUN_NUMBER") ?: "1"
 
 android {
     namespace "cn.luke.wearsync"
-    compileSdk = 35
+    compileSdk = 36 // ✅ 与 Mobile 端对齐至 2026 最新 SDK
 
     defaultConfig {
         applicationId "cn.luke.wearsync"
-        minSdk = 30
-        targetSdk = 35
+        minSdk = 35      // ✅ 放弃向下兼容，与 Mobile 端保持一致
+        targetSdk = 36
         versionCode githubRunNumber.toInteger()
         versionName "1.0.${githubRunNumber}"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
-    lintOptions {
-        disable 'GradleDependency', 'NewerVersionAvailable', 'LockedOrientationActivity'
-        checkReleaseBuilds false
-        abortOnError false
+
+    // ✅ 移除过时的 lintOptions，改用现代 lint 块
+    lint {
+        disable += ['GradleDependency', 'NewerVersionAvailable', 'LockedOrientationActivity']
+        checkReleaseBuilds = false
+        abortOnError = false
     }
+
     signingConfigs {
         debugging {
             storeFile file('../debug.keystore')
@@ -55,42 +59,56 @@ android {
         }
         release {
             signingConfig usePropertiesSigning ? signingConfigs.release : signingConfigs.debugging
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt')
+            minifyEnabled true // ✅ Release 开启优化，与 Mobile 端策略一致
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
 
+    // ✅ 核心对齐：JDK 25 原生支持 Java _ 未命名变量语法
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+        sourceCompatibility JavaVersion.VERSION_25
+        targetCompatibility JavaVersion.VERSION_25
     }
 
+    // ✅ 修复致命冲突：jvmTarget 必须与 compileOptions 严格对齐
     kotlinOptions {
-        jvmTarget = '1.8'
+        jvmTarget = '25'
+    }
+
+    buildFeatures {
+        viewBinding = true
     }
 }
 
-// 全局 Java 编译配置
+// ✅ 保留全局编译参数
 tasks.withType(JavaCompile).configureEach {
     options.compilerArgs += ['-Xlint:deprecation', '-Xlint:unchecked']
     options.deprecation = true
 }
 
 dependencies {
-    implementation 'androidx.appcompat:appcompat:1.6.1'
-    implementation 'com.google.android.material:material:1.12.0'
+    // ==================== WearOS 专属最新组件 ====================
+    // ✅ 替换旧版 wear:1.4.0，使用 2026 年最新的 Wear 基础库
+    implementation 'androidx.wear:wear:1.5.0'
+    implementation 'androidx.wear:wear-remote-interactions:1.2.0'
+    
+    // ✅ 移除已废弃的 percentlayout 和 legacy-support-v4
+    // 现代 WearOS 开发统一使用 ConstraintLayout 或 Compose
+    
+    // ==================== AndroidX 基础组件 ====================
+    implementation 'androidx.appcompat:appcompat:1.7.1'
+    implementation 'com.google.android.material:material:1.13.0'
     implementation 'androidx.preference:preference-ktx:1.2.1'
+    implementation 'androidx.constraintlayout:constraintlayout:2.2.1'
+    implementation 'androidx.core:core-ktx:1.16.0'
 
-    implementation 'androidx.wear:wear:1.4.0'
-    implementation "androidx.wear:wear-remote-interactions:1.2.0"
-    implementation 'androidx.percentlayout:percentlayout:1.0.0'
-    implementation 'androidx.legacy:legacy-support-v4:1.0.0'
-    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
-    implementation 'androidx.core:core-ktx:1.12.0'
-
+    // ==================== Wearable 通讯底层 ====================
+    // ✅ 与 Mobile 端保持完全一致的版本，避免跨端协议不匹配
     implementation 'com.google.android.gms:play-services-wearable:20.0.1'
 
+    // ==================== 测试依赖 ====================
     testImplementation 'junit:junit:4.13.2'
-    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
-    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.6.1'
 }

@@ -47,10 +47,10 @@ jobs:
         sed -i "s/versionCode [0-9]\+/versionCode $GITHUB_RUN_NUMBER/" wear/build.gradle
         sed -i "s/versionName \".*\"/versionName \"1.0.$GITHUB_RUN_NUMBER\"/" wear/build.gradle
 
-    - name: Set up JDK 17
+    - name: Set up JDK 25
       uses: actions/setup-java@v4
       with:
-        java-version: '17'
+        java-version: '25'
         distribution: 'temurin'
         cache: gradle
 
