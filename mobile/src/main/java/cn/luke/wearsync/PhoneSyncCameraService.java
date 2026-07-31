@@ -74,7 +74,8 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
             );
             channel.setDescription("用于保持相机推流服务在后台运行");
             
-            NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            NotificationManager manager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+
             if (manager != null) {
                 manager.createNotificationChannel(channel);
             }
