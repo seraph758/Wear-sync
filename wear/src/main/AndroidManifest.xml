@@ -22,6 +22,11 @@
         android:label="Wear Sync"
         android:supportsRtl="true"
         android:theme="@style/Theme.WearSync">
+        <!-- ✅ 关键修复：添加以下 meta-data 标签 -->
+        <meta-data
+            android:name="com.google.android.wearable.capability.resource"
+            android:resource="@xml/wear" />
+
 
         <uses-library
             android:name="com.google.android.wearable"

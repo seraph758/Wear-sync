@@ -1,4 +1,4 @@
-name: Build and Release APKs
+Name: Build and Release APKs
 
 on:
   workflow_dispatch:
@@ -26,26 +26,14 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      # ✅ 移除强制 Node24 变量，让官方组件按其默认最稳健的环境去跑，警告自然消失
       GITHUB_RUN_NUMBER: ${{ github.run_number }}
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v5
 
-    - name: Update Mobile build.gradle version
-      if: ${{ github.event.inputs.build_mobile == 'true' }}
-      run: |
-        echo "更新 Mobile build.gradle 版本号为 $GITHUB_RUN_NUMBER"
-        sed -i "s/versionCode [0-9]\+/versionCode $GITHUB_RUN_NUMBER/" mobile/build.gradle
-        sed -i "s/versionName \".*\"/versionName \"1.0.$GITHUB_RUN_NUMBER\"/" mobile/build.gradle
-
-    - name: Update Wear build.gradle version
-      if: ${{ github.event.inputs.build_wear == 'true' }}
-      run: |
-        echo "更新 Wear build.gradle 版本号为 $GITHUB_RUN_NUMBER"
-        sed -i "s/versionCode [0-9]\+/versionCode $GITHUB_RUN_NUMBER/" wear/build.gradle
-        sed -i "s/versionName \".*\"/versionName \"1.0.$GITHUB_RUN_NUMBER\"/" wear/build.gradle
+    # ✂️ 已彻底移除原先的 sed Update 步骤，build.gradle 会自动动态读取 GITHUB_RUN_NUMBER
 
     - name: Set up JDK 22
       uses: actions/setup-java@v5

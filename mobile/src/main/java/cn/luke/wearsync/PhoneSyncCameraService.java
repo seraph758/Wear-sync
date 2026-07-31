@@ -1,6 +1,8 @@
 package cn.luke.wearsync;
 
 import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.app.Service;
 import android.content.Intent;
 import android.graphics.SurfaceTexture;
@@ -57,13 +59,35 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
     @Override
     public void onCreate() {
         super.onCreate();
-        sInstance = this; // 在创建时赋值给静态变量
+        sInstance = this;
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE);
-        
-        Notification notification = new NotificationCompat.Builder(this, "camera_channel")
+    
+        // 1. 定义渠道 ID
+        String channelId = "camera_channel";
+    
+        // 2. 创建通知渠道 (Android 8.0+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel channel = new NotificationChannel(
+                    channelId,
+                    "相机同步服务", // 渠道名称
+                    NotificationManager.IMPORTANCE_LOW // 重要性：低（不会弹出横幅，但在状态栏可见）
+            );
+            channel.setDescription("用于保持相机推流服务在后台运行");
+            
+            NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            if (manager != null) {
+                manager.createNotificationChannel(channel);
+            }
+        }
+    
+        // 3. 构建通知
+        Notification notification = new NotificationCompat.Builder(this, channelId) // 使用刚才定义的 channelId
                 .setContentTitle("相机服务运行中")
-                .setSmallIcon(android.R.drawable.ic_menu_camera)
+                .setContentText("正在同步相机画面...") // 建议添加内容文本
+                .setSmallIcon(android.R.drawable.ic_menu_camera) // 确保这个图标存在
                 .build();
+    
+        // 4. 启动前台服务
         startForeground(1, notification);
     }
 
