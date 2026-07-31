@@ -25,7 +25,7 @@
         <!-- ✅ 关键修复：添加以下 meta-data 标签 -->
         <meta-data
             android:name="com.google.android.wearable.capability.resource"
-            android:resource="@xml/wear" />
+            android:resource="@array/android_wear_capabilities" />
 
 
         <uses-library

@@ -29,7 +29,7 @@
         android:theme="@style/Theme.WearSync">
         <meta-data
             android:name="com.google.android.wearable.capability.resource"
-            android:resource="@xml/wear" />
+            android:resource="@array/android_wear_capabilities" />
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="cn.luke.wearsync.fileprovider"
