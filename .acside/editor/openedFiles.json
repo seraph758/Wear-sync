@@ -80,16 +80,31 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 16461,
-          "line": 427
+          "index": 16308,
+          "line": 404
         },
         "start": {
           "column": 0,
-          "index": 0,
-          "line": 0
+          "index": 16308,
+          "line": 404
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncListenerService.java",
+      "selection": {
+        "end": {
+          "column": 5,
+          "index": 7135,
+          "line": 205
+        },
+        "start": {
+          "column": 4,
+          "index": 5780,
+          "line": 170
         }
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncCameraService.java"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncListenerService.java"
 }
