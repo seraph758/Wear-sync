@@ -976,13 +976,13 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
 
     private fun registerConnectivityListener() {
         val context = requireContext()
-        Wearable.getCapabilityClient(context).getCapability("dnd_sync", CapabilityClient.FILTER_REACHABLE).addOnSuccessListener {
+        Wearable.getCapabilityClient(context).getCapability("wear_sync", CapabilityClient.FILTER_REACHABLE).addOnSuccessListener {
             isConnectedState.value = it.nodes.isNotEmpty()
         }
         capabilityChangedListener = CapabilityClient.OnCapabilityChangedListener {
             isConnectedState.value = it.nodes.isNotEmpty()
         }
-        capabilityChangedListener?.let { Wearable.getCapabilityClient(context).addListener(it, "dnd_sync") }
+        capabilityChangedListener?.let { Wearable.getCapabilityClient(context).addListener(it, "wear_sync") }
     }
 
     private fun unregisterConnectivityListener() {

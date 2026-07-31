@@ -6,29 +6,31 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.widget.Toast;
-
 import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
-
 import com.google.android.gms.wearable.CapabilityClient;
 import com.google.android.gms.wearable.Wearable;
-
 
 /**
  * 🎬 WearOS 手表端主控制与权限状态 Fragment 面板
  * 极致动态日志全步进版：微秒级动态追踪无障碍、DND权限轮询、谷歌微端链路突变及监听器生命周期挂载。
  */
 public class WearSyncMainFragment extends PreferenceFragmentCompat {
+
     private static final String TAG = "WearSync_MainFragment";
+    
+    // ✅ 1. 统一能力名称为 wearsync
+    private static final String CAPABILITY_NAME = "wearsync";
+
     private Preference connectivityPref;
     private Preference dndPref;
     private Preference accPref;
     private CapabilityClient.OnCapabilityChangedListener capabilityChangedListener;
 
     @Override
+    @SuppressWarnings("unused") // ✅ 4. 消除 savedInstanceState 未使用警告
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
         WearLog.d(TAG, "① [生命周期] onCreatePreferences 点火 ─── 开始组装手表 Preference 树阵 ───");
-        
         // 从 XML 载入 Preference 结构
         setPreferencesFromResource(R.xml.root_preferences, rootKey);
 
@@ -60,60 +62,54 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
                 return true;
             });
         }
-        
-               // ========================================================================
-        // 📸 远端相机控制入口 (🟢 完美修復：已正確將其納入 onCreatePreferences 方法體內)
+
         // ========================================================================
-Preference cameraPref = findPreference("camera_control_key");
-if (cameraPref != null) {
-    WearLog.d(TAG, "📸 [交互挂载] 成功找到 camera_control_key，正在注册点击监听器...");
-
-    cameraPref.setOnPreferenceClickListener(preference -> {
-        WearLog.w(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        WearLog.w(TAG, "📸 [远端相机入口] 用户点击【远端相机控制】");
-        WearLog.w(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-
-        // ① 拉起手表本地相机预览界面（原有逻辑完整保留）
-        try {
-            WearLog.d(TAG, "① 正在准备启动本地 WearCameraActivity...");
-            Intent localIntent = new Intent(requireContext(), WearCameraActivity.class);
-            localIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            startActivity(localIntent);
-            WearLog.d(TAG, "✅ 本地 WearCameraActivity 启动请求已发出。");
-        } catch (Exception e) {
-            WearLog.e(TAG, "❌ 本地 WearCameraActivity 启动失败：" + e.getMessage(), e);
+        // 📸 远端相机控制入口
+        // ========================================================================
+        Preference cameraPref = findPreference("camera_control_key");
+        if (cameraPref != null) {
+            WearLog.d(TAG, "📸 [交互挂载] 成功找到 camera_control_key，正在注册点击监听器...");
+            // ✅ 4. 将未使用的 'preference' 替换为 '_'
+            cameraPref.setOnPreferenceClickListener(_ -> {
+                WearLog.w(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                WearLog.w(TAG, "📸 [远端相机入口] 用户点击【远端相机控制】");
+                WearLog.w(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                // ① 拉起手表本地相机预览界面（原有逻辑完整保留）
+                try {
+                    WearLog.d(TAG, "① 正在准备启动本地 WearCameraActivity...");
+                    Intent localIntent = new Intent(requireContext(), WearCameraActivity.class);
+                    localIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(localIntent);
+                    WearLog.d(TAG, "✅ 本地 WearCameraActivity 启动请求已发出。");
+                } catch (Exception e) {
+                    WearLog.e(TAG, "❌ 本地 WearCameraActivity 启动失败：" + e.getMessage(), e);
+                }
+                // ② 通过 CommManager 统一发送远程相机指令
+                try {
+                    WearLog.d(TAG, "② 正在调用 CommManager.openPhoneCamera()...");
+                    WearSyncCommManager.getInstance(requireContext()).openPhoneCamera();
+                    WearLog.d(TAG, "✅ CommManager.openPhoneCamera() 已调用完成");
+                } catch (Exception e) {
+                    WearLog.e(TAG, "❌ CommManager.openPhoneCamera() 调用失败：" + e.getMessage(), e);
+                }
+                WearLog.w(TAG, "📸 [远端相机入口] 点击事件处理结束。");
+                return true;
+            });
+        } else {
+            WearLog.e(TAG, "❌ [交互挂载失败] 未找到 Preference：camera_control_key");
         }
 
-        // ② 通过 CommManager 统一发送远程相机指令（替代原独立 Handler）
-        try {
-            WearLog.d(TAG, "② 正在调用 CommManager.openPhoneCamera()...");
-            WearSyncCommManager.getInstance(requireContext()).openPhoneCamera();
-            WearLog.d(TAG, "✅ CommManager.openPhoneCamera() 已调用完成");
-        } catch (Exception e) {
-            WearLog.e(TAG, "❌ CommManager.openPhoneCamera() 调用失败：" + e.getMessage(), e);
-        }
-
-        WearLog.w(TAG, "📸 [远端相机入口] 点击事件处理结束。");
-        return true;
-    });
-} else {
-    WearLog.e(TAG, "❌ [交互挂载失败] 未找到 Preference：camera_control_key");
-}
-
-                
         WearLog.d(TAG, "⚙️ [底层初始化] 正在引导加载谷歌微端物理链路异步探针...");
         setupConnectionCheck();
         WearLog.d(TAG, "① [生命周期] onCreatePreferences 配置完毕。");
-    } // 🟢 onCreatePreferences 在這裡正確閉合
+    }
 
     @Override
     public void onResume() {
         super.onResume();
         WearLog.d(TAG, "🔄 [生命周期] onResume 触发：UI 叠层重回焦点。开始激活全量数据轮询与动态监听器...");
-        
         WearLog.d(TAG, "🔄 [权限轮询] 💡 准备刷新当前系统的权限状态快照...");
         updatePermissionStatus();
-        
         WearLog.d(TAG, "📡 [链路监听] 💡 准备向谷歌微端框架动态注册联络链路突变哨兵...");
         registerConnectivityListener();
     }
@@ -124,14 +120,14 @@ if (cameraPref != null) {
             WearLog.w(TAG, "⚠️ [权限轮询终止] 检测到当前 Fragment 处于脱离托管上下文状态 (getContext == null)，终止刷新。");
             return;
         }
-
         WearLog.d(TAG, "🔍 [系统权限检索] ─── 开始核对系统底层权限白名单 ───");
         NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
-
+        
         if (dndPref != null && nm != null) {
             boolean hasDnd = nm.isNotificationPolicyAccessGranted();
             WearLog.d(TAG, "🌓 [系统权限检索] 📋 勿扰模式(DND/系统通知)权限最新状态: 【" + (hasDnd ? "已授权/TRUE" : "未授权/FALSE") + "】");
-            dndPref.setSummary(hasDnd ? getString(R.string.dnd_granted) : getString(R.string.dnd_denied));
+            // ✅ 2. 添加 (CharSequence) 强制转换以消除 setSummary 警告
+            dndPref.setSummary((CharSequence) (hasDnd ? getString(R.string.dnd_granted) : getString(R.string.dnd_denied)));
         } else {
             WearLog.w(TAG, "⚠️ [系统权限检索] 边缘跳过：dndPref 或 NotificationManager 实体不存续。");
         }
@@ -139,9 +135,9 @@ if (cameraPref != null) {
         // 判定服务活体句柄是否就绪
         boolean hasAccessibility = WearSyncAccessService.getSharedInstance() != null;
         WearLog.d(TAG, "♿ [系统权限检索] 📋 无障碍辅助功能服务实时活体状态: 【" + (hasAccessibility ? "服务已激活/TRUE" : "服务死亡/FALSE") + "】");
-        
         if (accPref != null) {
-            accPref.setSummary(hasAccessibility ?  getString(R.string.acc_activated) : getString(R.string.acc_deactivated));
+            // ✅ 2. 添加 (CharSequence) 强制转换以消除 setSummary 警告
+            accPref.setSummary((CharSequence) (hasAccessibility ? getString(R.string.acc_activated) : getString(R.string.acc_deactivated)));
         }
     }
 
@@ -155,16 +151,15 @@ if (cameraPref != null) {
     private void setupConnectionCheck() {
         Context ctx = getContext();
         Context targetContext = (ctx != null) ? ctx : (getActivity() != null ? getActivity().getApplicationContext() : null);
-        
         if (targetContext == null) {
             WearLog.e(TAG, "🔴 [链路点火阻断] 极其严重的生命周期错位：无法获取合法的 Context 实体，setupConnectionCheck 宣告流产！");
             return;
         }
-
-        WearLog.d(TAG, "📡 [链路点火] 正在向谷歌微端中心发射一次性异步 Capability 状态扫描求助... 目标能力名: [dnd_sync]");
+        WearLog.d(TAG, "📡 [链路点火] 正在向谷歌微端中心发射一次性异步 Capability 状态扫描求助... 目标能力名: [" + CAPABILITY_NAME + "]");
         try {
+            // ✅ 1. 使用统一的 CAPABILITY_NAME
             Wearable.getCapabilityClient(targetContext)
-                    .getCapability("dnd_sync", CapabilityClient.FILTER_REACHABLE)
+                    .getCapability(CAPABILITY_NAME, CapabilityClient.FILTER_REACHABLE)
                     .addOnSuccessListener(capabilityInfo -> {
                         if (capabilityInfo != null && capabilityInfo.getNodes() != null) {
                             int nodeCount = capabilityInfo.getNodes().size();
@@ -201,9 +196,10 @@ if (cameraPref != null) {
     private void registerConnectivityListener() {
         Context ctx = getContext();
         if (ctx != null && capabilityChangedListener != null) {
-            WearLog.d(TAG, "📡 [接线员挂载] 🚀 正在物理挂载 addListener() 到 CapabilityClient，锁死 [dnd_sync] 频道...");
+            // ✅ 1. 使用统一的 CAPABILITY_NAME
+            WearLog.d(TAG, "📡 [接线员挂载] 🚀 正在物理挂载 addListener() 到 CapabilityClient，锁死 [" + CAPABILITY_NAME + "] 频道...");
             try {
-                Wearable.getCapabilityClient(ctx).addListener(capabilityChangedListener, "dnd_sync");
+                Wearable.getCapabilityClient(ctx).addListener(capabilityChangedListener, CAPABILITY_NAME);
                 WearLog.d(TAG, "📡 [接线员挂载] 挂载命令成功扔进系统总线。");
             } catch (Exception e) {
                 WearLog.e(TAG, "🔴 [接线员挂载失败] 执行 addListener 遭遇底层死锁拦截: " + e.getMessage());
@@ -230,7 +226,8 @@ if (cameraPref != null) {
 
     private void updateConnectionUI(boolean connected) {
         if (connectivityPref != null) {
-            connectivityPref.setSummary(connected ? getString(R.string.connectivity_connected) : getString(R.string.connectivity_disconnected));
+            // ✅ 2. 添加 (CharSequence) 强制转换以消除 setSummary 警告
+            connectivityPref.setSummary((CharSequence) (connected ? getString(R.string.connectivity_connected) : getString(R.string.connectivity_disconnected)));
             WearLog.w(TAG, "📡 [UI渲染变更] ─── 联络链路状态突变探查 ➔ 在线=[" + connected + "] ───");
         } else {
             WearLog.e(TAG, "❌ [UI渲染失败] 试图将联络状态 [" + connected + "] 推送至卡面，但 connectivityPref 组件尚未加载，数据流丢失！");
