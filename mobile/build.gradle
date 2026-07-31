@@ -68,8 +68,8 @@ android {
 
     compileOptions {
         // ✅ 统一调整为 26，允许在手机端 Java 代码中使用最新的 Java 26 语法
-        sourceCompatibility JavaVersion.VERSION_26
-        targetCompatibility JavaVersion.VERSION_26
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
         
         // ✅ 核心开启：允许将 Java/Kotlin 的 26 字节码通过 D8/R8 脱糖翻译，确保在手机端稳定运行
         coreLibraryDesugaringEnabled = true
@@ -77,7 +77,7 @@ android {
 
     kotlinOptions {
         // ✅ 统一改为 26
-        jvmTarget = '26'
+        jvmTarget = '21'
     }
 
     buildFeatures {

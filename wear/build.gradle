@@ -1,6 +1,6 @@
 plugins {
     id 'com.android.application'
-    // ❌ 已移除 org.jetbrains.kotlin.android，纯 Java 
+    // ❌ 已移除 org.jetbrains.kotlin.android，纯 Java 项目不需要它
 }
 
 // ==================== 签名配置 ====================
@@ -65,17 +65,17 @@ android {
     }
 
     compileOptions {
-        // ✅ 统一调整为 26，确保 javac 顺利编译通过并支持 Java 26 语法（如 _）
-        sourceCompatibility JavaVersion.VERSION_26
-        targetCompatibility JavaVersion.VERSION_26
+        // ✅ 统一调整为 25，确保 javac 顺利编译通过并支持 Java 25 语法（如 _）
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
         
-        // ✅ 核心开启：允许将 Java 26 语法脱糖翻译给 Wear OS 6 运行
+        // ✅ 核心开启：允许将 Java 25 语法脱糖翻译给 Wear OS 6 运行
         coreLibraryDesugaringEnabled = true
     }
 
     java {
         toolchain {
-            // ✅ 匹配你的需求，使用 JDK 26 的工具链
+            // ✅ 匹配你的需求，使用 JDK 25 的工具链
             languageVersion = JavaLanguageVersion.of(21)
         }
     }
@@ -92,7 +92,7 @@ tasks.withType(JavaCompile).configureEach {
 
 dependencies {
     // ==================== 核心脱糖依赖 ====================
-    // ✅ 必须引入此库，作为“翻译官”把 Java 26 字节码重写为手表兼容的格式
+    // ✅ 必须引入此库，作为“翻译官”把 Java 25 字节码重写为手表兼容的格式
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'
 
     // ==================== WearOS 专属组件 ====================

@@ -34,14 +34,14 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/.github/workflows/android-build.yml",
       "selection": {
         "end": {
-          "column": 42,
-          "index": 4184,
-          "line": 129
+          "column": 25,
+          "index": 1539,
+          "line": 52
         },
         "start": {
-          "column": 42,
-          "index": 4184,
-          "line": 129
+          "column": 25,
+          "index": 1539,
+          "line": 52
         }
       }
     },
@@ -49,17 +49,17 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/build.gradle",
       "selection": {
         "end": {
-          "column": 19,
-          "index": 2574,
-          "line": 91
+          "column": 50,
+          "index": 2149,
+          "line": 70
         },
         "start": {
-          "column": 19,
-          "index": 2574,
-          "line": 91
+          "column": 39,
+          "index": 2084,
+          "line": 69
         }
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/build.gradle"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/build.gradle"
 }
