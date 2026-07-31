@@ -96,7 +96,6 @@ tasks.withType(JavaCompile).configureEach {
     options.compilerArgs += [
         '-Xlint:deprecation', 
         '-Xlint:unchecked', 
-        '--enable-preview'
     ]
     options.deprecation = true
 }
@@ -104,7 +103,7 @@ tasks.withType(JavaCompile).configureEach {
 tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
     compilerOptions {
         // 允许 Kotlin 编译器在混编环境中稳定对齐 JDK 21 预览特性
-        freeCompilerArgs.add("-Xjdk-release=21")
+        freeCompilerArgs.add("-Xjdk-release=22")
     }
 }
 
