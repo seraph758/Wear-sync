@@ -38,41 +38,54 @@ public class PhoneSyncListenerService extends WearableListenerService {
     // ============================================================
     // 📩 主入口（100% 还原，未动任一字句）
     // ============================================================
-    @Override
-    public void onMessageReceived(MessageEvent messageEvent) {
-
-        if (messageEvent != null && messageEvent.getSourceNodeId() != null) {
-            WearSyncState.setNodeId(this, messageEvent.getSourceNodeId());
-        }
- String receivedPath = (messageEvent != null) ? messageEvent.getPath() : "null";
+ @Override
+public void onMessageReceived(MessageEvent messageEvent) {
+    // 1. 更新节点ID
+    if (messageEvent != null && messageEvent.getSourceNodeId() != null) {
+        WearSyncState.setNodeId(this, messageEvent.getSourceNodeId());
+    }
+    
+    // 2. 路径校验
+    String receivedPath = (messageEvent != null) ? messageEvent.getPath() : "null";
     PhoneLog.d(TAG, "🔍 收到消息，路径为: [" + receivedPath + "]，期望路径: [" + UNIVERSAL_SYNC_PATH + "]");
+    
+    if (messageEvent == null || !UNIVERSAL_SYNC_PATH.equals(messageEvent.getPath())) {
+        super.onMessageReceived(messageEvent);
+        return;
+    }
 
-
-        if (messageEvent == null || !UNIVERSAL_SYNC_PATH.equals(messageEvent.getPath())) {
-            super.onMessageReceived(messageEvent);
-            return;
-        }
-
-        MESSAGE_EXECUTOR.execute(() -> {
+    // 3. 在后台线程处理消息
+    MESSAGE_EXECUTOR.execute(() -> {
         try {
             String jsonStr = new String(messageEvent.getData(), StandardCharsets.UTF_8);
             JSONObject json = new JSONObject(jsonStr);
-
+            
+            // 4. 忽略来自手机自身的消息
             String sender = json.optString("sender", "");
             if ("phone".equalsIgnoreCase(sender)) return;
 
+            // 5. 解析消息类型和动作
             String type = json.optString("type", "");
             String action = json.optString("action", "");
-
             PhoneLog.d(TAG, "📥 [信令] type=" + type + " action=" + action);
 
+            // 🚀 新增：监听手表的“准备就绪”信号
+            if ("READY_TO_RECEIVE".equalsIgnoreCase(action)) {
+                PhoneLog.d(TAG, "✅ 收到手表 ACK，触发文件传输");
+                // 调用文件传输管理器的静态方法，开始真正的文件发送
+                PhoneSyncFileTransferManager.onWearReadyToReceive();
+                return; // 处理完毕，直接返回
+            }
+
+            // 6. 其他消息按原有逻辑分发
             routeMessage(json, type, action);
 
         } catch (Exception e) {
             PhoneLog.e(TAG, "后台解析信令失败", e);
-          }
-        });
-    }
+        }
+    });
+}
+
 
     // ============================================================
     // 📡 路由分发（100% 还原，未动任一字句）
