@@ -31,7 +31,7 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     - name: Update Mobile build.gradle version
       if: ${{ github.event.inputs.build_mobile == 'true' }}
@@ -47,10 +47,10 @@ jobs:
         sed -i "s/versionCode [0-9]\+/versionCode $GITHUB_RUN_NUMBER/" wear/build.gradle
         sed -i "s/versionName \".*\"/versionName \"1.0.$GITHUB_RUN_NUMBER\"/" wear/build.gradle
 
-    - name: Set up JDK 25
-      uses: actions/setup-java@v4
+    - name: Set up JDK 26
+      uses: actions/setup-java@v5
       with:
-        java-version: '25'
+        java-version: '26'
         distribution: 'temurin'
         cache: gradle
 
@@ -116,7 +116,7 @@ jobs:
         fi
 
     - name: Upload Artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: wear-sync-v1.0.${{ github.run_number }}
         path: |
@@ -127,7 +127,7 @@ jobs:
     - name: Create Release
       if: ${{ github.event.inputs.push_release == 'true' }}
       id: create_release
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@v3
       with:
         tag_name: v1.0.${{ github.run_number }}
         name: Release v1.0.${{ github.run_number }}

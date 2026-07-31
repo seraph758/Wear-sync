@@ -18,6 +18,12 @@ pluginManagement {
     }
 }
 
+plugins {
+    // ✅ 核心修復：引入 Foojay 工具鏈解析插件，賦予 Gradle 智能下載 JDK 26 的能力
+    // 它會自動去網路上下載適合你當前系統架構（例如 Linux aarch64 或 Windows x64）的 JDK
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '0.8.0'
+}
+
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {

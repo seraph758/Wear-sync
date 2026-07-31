@@ -5,12 +5,12 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 755,
+          "index": 789,
           "line": 21
         },
         "start": {
           "column": 0,
-          "index": 755,
+          "index": 789,
           "line": 21
         }
       }
@@ -19,14 +19,14 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/build.gradle",
       "selection": {
         "end": {
-          "column": 0,
-          "index": 3670,
-          "line": 114
+          "column": 4,
+          "index": 47,
+          "line": 2
         },
         "start": {
-          "column": 0,
-          "index": 3670,
-          "line": 114
+          "column": 4,
+          "index": 47,
+          "line": 2
         }
       }
     },
@@ -34,14 +34,14 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/.github/workflows/android-build.yml",
       "selection": {
         "end": {
-          "column": 25,
-          "index": 1539,
-          "line": 52
+          "column": 42,
+          "index": 4184,
+          "line": 129
         },
         "start": {
-          "column": 25,
-          "index": 1539,
-          "line": 52
+          "column": 42,
+          "index": 4184,
+          "line": 129
         }
       }
     },
@@ -50,16 +50,31 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 4710,
-          "line": 136
+          "index": 4869,
+          "line": 141
         },
         "start": {
           "column": 0,
-          "index": 4710,
-          "line": 136
+          "index": 4869,
+          "line": 141
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/settings.gradle",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 1725,
+          "line": 48
+        },
+        "start": {
+          "column": 0,
+          "index": 1725,
+          "line": 48
         }
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/build.gradle"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/settings.gradle"
 }

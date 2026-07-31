@@ -1,7 +1,7 @@
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
-    // ✅ AGP 8.10+ 内置 Compose 编译器插件，彻底替代旧的 kotlinCompilerExtensionVersion
+    // ✅ AGP 8.10+ / Kotlin 2.4+ 时代的 Compose 编译器插件
     id 'org.jetbrains.kotlin.plugin.compose'
 }
 
@@ -66,16 +66,18 @@ android {
         }
     }
 
-    // ✅ 核心修复：Java 输出字节码从 25 降为 23，与 Kotlin jvmTarget 严格对齐
-    // source=25 保证 Java 代码仍能使用 _ 等 JDK 25 语法特性
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_25
-        targetCompatibility JavaVersion.VERSION_23
+        // ✅ 统一调整为 26，允许在手机端 Java 代码中使用最新的 Java 26 语法
+        sourceCompatibility JavaVersion.VERSION_26
+        targetCompatibility JavaVersion.VERSION_26
+        
+        // ✅ 核心开启：允许将 Java/Kotlin 的 26 字节码通过 D8/R8 脱糖翻译，确保在手机端稳定运行
+        coreLibraryDesugaringEnabled = true
     }
 
-    // ✅ 混合项目必须保留，且与 Java target 保持一致
     kotlinOptions {
-        jvmTarget = '23'
+        // ✅ 统一改为 26
+        jvmTarget = '26'
     }
 
     buildFeatures {
@@ -85,10 +87,9 @@ android {
     }
 }
 
-// ✅ 混合项目统一使用 Kotlin Toolchain DSL 管理 JDK 25
-// 它会同时作用于 javac 和 kotlinc，确保两者使用相同的 JDK 环境
+// ✅ 混合项目统一使用 Kotlin Toolchain DSL 管理 JDK 26
 kotlin {
-    jvmToolchain(25)
+    jvmToolchain(26)
 }
 
 tasks.withType(JavaCompile).configureEach {
@@ -97,6 +98,10 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 dependencies {
+    // ==================== 核心脱糖依赖 ====================
+    // ✅ 手机端同样必须引入此库，负责将 JDK 26 的高端类库降维翻译成手机能跑的格式
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'
+
     // ==================== AndroidX 基础组件 ====================
     implementation 'androidx.appcompat:appcompat:1.7.1'
     implementation 'com.google.android.material:material:1.13.0'
