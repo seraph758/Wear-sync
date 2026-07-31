@@ -65,34 +65,41 @@ android {
     }
 
     compileOptions {
-        // ✅ 统一调整为 25，确保 javac 顺利编译通过并支持 Java 25 语法（如 _）
+        // ✅ 目标平台统一调整为 21
         sourceCompatibility JavaVersion.VERSION_21
         targetCompatibility JavaVersion.VERSION_21
         
-        // ✅ 核心开启：允许将 Java 25 语法脱糖翻译给 Wear OS 6 运行
+        // ✅ 核心开启：允许将高版本语法脱糖翻译给 Wear OS 6 运行
         coreLibraryDesugaringEnabled = true
     }
 
-    java {
-        toolchain {
-            // ✅ 匹配你的需求，使用 JDK 25 的工具链
-            languageVersion = JavaLanguageVersion.of(21)
-        }
-    }
+    // ========================================================
+    // ❌ 彻底删除了原先内部的 java { toolchain { ... } } 块！
+    // ========================================================
 
     buildFeatures {
         viewBinding true 
     }
 }
 
+// ========================================================
+// ❌ 彻底删除了底部的 if (System.getenv("GITHUB_ACTIONS") == "true") 判定块！
+// 手机本地与 GitHub 云端彻底摆脱 Foojay 联网下载工具，直接对齐默认环境。
+// ========================================================
+
+// ✅ 保持 Java 编译器的预览特性开启（让手表端 Java 代码顺利识别下划线 _ 语法）
 tasks.withType(JavaCompile).configureEach {
-    options.compilerArgs += ['-Xlint:deprecation', '-Xlint:unchecked','--enable-preview']
+    options.compilerArgs += [
+        '-Xlint:deprecation', 
+        '-Xlint:unchecked',
+        '--enable-preview'
+    ]
     options.deprecation = true
 }
 
 dependencies {
     // ==================== 核心脱糖依赖 ====================
-    // ✅ 必须引入此库，作为“翻译官”把 Java 25 字节码重写为手表兼容的格式
+    // ✅ 必须引入此库，作为“翻译官”把高版本字节码重写为手表兼容的格式
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'
 
     // ==================== WearOS 专属组件 ====================

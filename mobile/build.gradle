@@ -67,16 +67,15 @@ android {
     }
 
     compileOptions {
-        // ✅ 统一调整为 26，允许在手机端 Java 代码中使用最新的 Java 26 语法
+        // ✅ 目标平台设为 21
         sourceCompatibility JavaVersion.VERSION_21
         targetCompatibility JavaVersion.VERSION_21
         
-        // ✅ 核心开启：允许将 Java/Kotlin 的 26 字节码通过 D8/R8 脱糖翻译，确保在手机端稳定运行
+        // ✅ 核心开启：允许将高版本语法脱糖给更低版本的设备运行
         coreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
-        // ✅ 统一改为 26
         jvmTarget = '21'
     }
 
@@ -87,25 +86,30 @@ android {
     }
 }
 
-// ✅ 混合项目统一使用 Kotlin Toolchain DSL 管理 JDK 26
-kotlin {
-    jvmToolchain(21)
-}
+// ========================================================
+// ❌ 彻底删除了原先所有的 kotlin { jvmToolchain(21) } 块与环境判断逻辑！
+// 不再依赖任何 Foojay 联网下载工具，直接使用系统或 AndroidIDE 默认提供的本地 JDK 21 环境。
+// ========================================================
 
+// ✅ 保持 Java 编译器的预览特性开启（让手机端 Java 代码也能顺利识别下划线 _ 语法）
 tasks.withType(JavaCompile).configureEach {
-    options.compilerArgs += ['-Xlint:deprecation', '-Xlint:unchecked']
+    options.compilerArgs += [
+        '-Xlint:deprecation', 
+        '-Xlint:unchecked', 
+        '--enable-preview'
+    ]
     options.deprecation = true
 }
 
 tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
     compilerOptions {
-        // 允许 Kotlin 编译器在使用 JDK 21 预览特性时不会产生警告或冲突
+        // 允许 Kotlin 编译器在混编环境中稳定对齐 JDK 21 预览特性
         freeCompilerArgs.add("-Xjdk-release=21")
     }
 }
+
 dependencies {
     // ==================== 核心脱糖依赖 ====================
-    // ✅ 手机端同样必须引入此库，负责将 JDK 26 的高端类库降维翻译成手机能跑的格式
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'
 
     // ==================== AndroidX 基础组件 ====================
