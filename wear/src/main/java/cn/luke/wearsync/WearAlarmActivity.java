@@ -122,36 +122,30 @@ public class WearAlarmActivity extends ComponentActivity {
      */(TAG, "🔊 闹钟震动循环已启动 (On: " + onDuration + ", Off: " + offDuration + ")");
     }
     private void startWatchVibration() {
-        // 1. 读取最新的震动配置
+    // ✅ 从本地 SharedPreferences 读取（保存按钮已确保这里是最新的）
         WearVibratorHelper.initFromPhone(this);
         
-        // ✅ 加上 final 关键字
         final int onDuration = WearVibratorHelper.getOnDuration();
         final int offDuration = WearVibratorHelper.getOffDuration();
         
         // 防止配置错误导致不震动
-        if (onDuration <= 0) onDuration = 500;
+        if (onDuration <= 0) return; 
         if (offDuration < 0) offDuration = 200;
-    
+        
         vibrationHandler = new Handler(Looper.getMainLooper());
         vibrationRunnable = new Runnable() {
             @Override
             public void run() {
                 if (!isVibrating) return;
-                
-                // 现在可以正常访问 onDuration 了
                 WearVibratorHelper.vibrateOnce(WearAlarmActivity.this, onDuration);
-                
-                // 现在可以正常访问 onDuration 和 offDuration 了
                 vibrationHandler.postDelayed(this, onDuration + offDuration);
             }
         };
-    
         isVibrating = true;
-        vibrationRunnable.run(); // 立即开始第一次
+        vibrationRunnable.run();
         WearLog.d(TAG, "🔊 闹钟震动循环已启动 (On: " + onDuration + ", Off: " + offDuration + ")");
     }
-
+    
    
     /**
      * ✅ 停止震动循环

@@ -4,14 +4,14 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearAlarmActivity.java",
       "selection": {
         "end": {
-          "column": 0,
-          "index": 6227,
-          "line": 196
+          "column": 24,
+          "index": 5369,
+          "line": 157
         },
         "start": {
-          "column": 0,
-          "index": 6227,
-          "line": 196
+          "column": 24,
+          "index": 5369,
+          "line": 157
         }
       }
     },
@@ -34,14 +34,14 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncMainFragment.kt",
       "selection": {
         "end": {
-          "column": 22,
-          "index": 62014,
-          "line": 951
+          "column": 136,
+          "index": 61652,
+          "line": 942
         },
         "start": {
-          "column": 27,
-          "index": 57240,
-          "line": 891
+          "column": 136,
+          "index": 61652,
+          "line": 942
         }
       }
     },
@@ -57,6 +57,21 @@
           "column": 41,
           "index": 3937,
           "line": 88
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneAlarmManager.java",
+      "selection": {
+        "end": {
+          "column": 26,
+          "index": 1472,
+          "line": 44
+        },
+        "start": {
+          "column": 4,
+          "index": 1353,
+          "line": 43
         }
       }
     }
