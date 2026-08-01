@@ -119,36 +119,40 @@ public class WearAlarmActivity extends ComponentActivity {
     /**
      * ✅ 核心修改：使用 Handler 实现应用层循环震动
      * 逻辑：Activity 在 -> 震动在；Activity 销毁 -> 震动停
-     */
+     */(TAG, "🔊 闹钟震动循环已启动 (On: " + onDuration + ", Off: " + offDuration + ")");
+    }
     private void startWatchVibration() {
         // 1. 读取最新的震动配置
         WearVibratorHelper.initFromPhone(this);
-        int onDuration = WearVibratorHelper.getOnDuration();
-        int offDuration = WearVibratorHelper.getOffDuration();
+        
+        // ✅ 加上 final 关键字
+        final int onDuration = WearVibratorHelper.getOnDuration();
+        final int offDuration = WearVibratorHelper.getOffDuration();
         
         // 防止配置错误导致不震动
         if (onDuration <= 0) onDuration = 500;
         if (offDuration < 0) offDuration = 200;
-
+    
         vibrationHandler = new Handler(Looper.getMainLooper());
         vibrationRunnable = new Runnable() {
             @Override
             public void run() {
                 if (!isVibrating) return;
                 
-                // 2. 触发一次短震动（不循环）
+                // 现在可以正常访问 onDuration 了
                 WearVibratorHelper.vibrateOnce(WearAlarmActivity.this, onDuration);
                 
-                // 3. 等待 (震动时长 + 间隔时长) 后，再次执行自己，形成循环
+                // 现在可以正常访问 onDuration 和 offDuration 了
                 vibrationHandler.postDelayed(this, onDuration + offDuration);
             }
         };
-
+    
         isVibrating = true;
         vibrationRunnable.run(); // 立即开始第一次
         WearLog.d(TAG, "🔊 闹钟震动循环已启动 (On: " + onDuration + ", Off: " + offDuration + ")");
     }
 
+   
     /**
      * ✅ 停止震动循环
      */

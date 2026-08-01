@@ -19,14 +19,14 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearVibratorHelper.java",
       "selection": {
         "end": {
-          "column": 5,
-          "index": 4119,
-          "line": 116
+          "column": 0,
+          "index": 2534,
+          "line": 77
         },
         "start": {
-          "column": 7,
-          "index": 3141,
-          "line": 92
+          "column": 0,
+          "index": 2534,
+          "line": 77
         }
       }
     },
@@ -61,5 +61,5 @@
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearVibratorHelper.java"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearAlarmActivity.java"
 }
