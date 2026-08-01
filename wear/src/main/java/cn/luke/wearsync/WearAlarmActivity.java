@@ -115,12 +115,7 @@ public class WearAlarmActivity extends ComponentActivity {
             }
         }
     }
-
-    /**
-     * ✅ 核心修改：使用 Handler 实现应用层循环震动
-     * 逻辑：Activity 在 -> 震动在；Activity 销毁 -> 震动停
-     */(TAG, "🔊 闹钟震动循环已启动 (On: " + onDuration + ", Off: " + offDuration + ")");
-    }
+ 
     private void startWatchVibration() {
     // ✅ 从本地 SharedPreferences 读取（保存按钮已确保这里是最新的）
         WearVibratorHelper.initFromPhone(this);
