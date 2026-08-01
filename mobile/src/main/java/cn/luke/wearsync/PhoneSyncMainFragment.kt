@@ -223,9 +223,9 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                     val isDark = isSystemInDarkTheme()
                     val backgroundColor = if (isDark) Color(0xFF121214) else Color(0xFFF4F4F6)
                     var screenPullDownInterval by remember { 
-        mutableIntStateOf(sp.getInt("screen_pull_down_interval", 500)) 
-    }
-                        
+                        mutableIntStateOf(sp.getInt("screen_pull_down_interval", 500)) 
+                    }
+                                        
                     val cardBgColor = if (isDark) Color(0xFF1E1E24) else Color(0xFFFFFFFF)
                     val textColor = if (isDark) Color.White else Color(0xFF1C1C1E)
                     val subTextColor = if (isDark) Color.Gray else Color(0xFF757575)
@@ -244,6 +244,9 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                     var isConnectionExpanded by remember { mutableStateOf(false) }
                     var isPermissionExpanded by remember { mutableStateOf(false) }
                     var isFileTransferExpanded by remember { mutableStateOf(false) }
+                    
+                    // ⚠️ 注意：必须在 Composable 顶层获取 Context，不能在 onClick 内部获取
+                    val context = LocalContext.current
 
                     var mask by remember { mutableIntStateOf (sp.getInt("KEY_MASK", 15)) }
                     var masterOn by remember(mask) { mutableStateOf((mask and 1) != 0) }
@@ -605,27 +608,47 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
                                             Button(
-                                                modifier = Modifier.weight(1f),
-                                                colors = ButtonDefaults.buttonColors(containerColor = if (isCameraAllowedState.value) Color(0xFF2E7D32) else Color(0xFF333333)),
-                                                onClick = {
-                                                    if (!isCameraAllowedState.value) {
-                                                        requestCameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-                                                        return@Button
-                                                    }
-                                                    val nodeId = WearSyncState.getNodeId(requireContext())
-                                                    requireContext().startService(Intent(requireContext(), PhoneSyncCameraService::class.java).setAction(PhoneSyncCameraService.ACTION_START_CAMERA))
-                                                    if (!nodeId.isNullOrEmpty()) {
-                                                        Thread {
-                                                            try {
-                                                                val json = JSONObject().apply { put("sender", "phone"); put("type", "camera_control"); put("action", "START_CAMERA"); put("timestamp", System.currentTimeMillis()) }
-                                                                Wearable.getMessageClient(requireContext()).sendMessage(nodeId, "/wear-universal-sync", json.toString().toByteArray(StandardCharsets.UTF_8))
-                                                            } catch (_: Exception) {}
-                                                        }.start()
-                                                    }
+                                            modifier = Modifier.weight(1f),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = if (isCameraAllowedState.value) Color(0xFF2E7D32) else Color(0xFF333333)
+                                            ),
+                                            onClick = {
+                                                // 1. 权限检查
+                                                if (!isCameraAllowedState.value) {
+                                                    requestCameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                                                    return@Button
                                                 }
-                                            ) { Text("呼叫手表相机", color = Color.White, fontSize = 12.sp) }
-
-                                            Button(
+                                        
+                                                // 2. ✅ 直接启动本地 Camera Service（不经过透明窗口）
+                                                val serviceIntent = Intent(context, PhoneSyncCameraService::class.java).apply {
+                                                    action = PhoneSyncCameraService.ACTION_START_CAMERA
+                                                }
+                                                ContextCompat.startForegroundService(context, serviceIntent)
+                                        
+                                                // 3. ✅ 向手表发送启动相机 Activity 的指令
+                                                val nodeId = WearSyncState.getNodeId(context)
+                                                if (!nodeId.isNullOrEmpty()) {
+                                                    Thread {
+                                                        try {
+                                                            val json = JSONObject().apply {
+                                                                put("sender", "phone")
+                                                                put("type", "camera_control")
+                                                                put("action", "open_phone_camera")
+                                                                put("timestamp", System.currentTimeMillis())
+                                                            }
+                                                            Wearable.getMessageClient(context).sendMessage(
+                                                                nodeId,
+                                                                "/wear-universal-sync",
+                                                                json.toString().toByteArray(StandardCharsets.UTF_8)
+                                                            )
+                                                        } catch (_: Exception) {}
+                                                    }.start()
+                                                }
+                                            }
+                                        ) {
+                                            Text("呼叫手表相机", color = Color.White, fontSize = 12.sp)
+                                        }
+                                        Button(
                                                 modifier = Modifier.weight(1f),
                                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7F1D1D)),
                                                 onClick = {
@@ -642,10 +665,10 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                                 }
                                             ) { Text("强制关闭相机", color = Color.White, fontSize = 12.sp) }
                                         }
+                                        
                                     }
                                 }
 
-                                // ... 其他代码 ...
 
             AnimatedVisibility(visible = isLogExpanded) {
                 Card(
