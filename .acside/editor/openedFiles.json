@@ -29,7 +29,67 @@
           "line": 149
         }
       }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/AndroidManifest.xml",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 5403,
+          "line": 122
+        },
+        "start": {
+          "column": 0,
+          "index": 0,
+          "line": 0
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/proguard-rules.pro",
+      "selection": {
+        "end": {
+          "column": 38,
+          "index": 750,
+          "line": 20
+        },
+        "start": {
+          "column": 0,
+          "index": 0,
+          "line": 0
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncNotificationService.java",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 12461,
+          "line": 327
+        },
+        "start": {
+          "column": 0,
+          "index": 12461,
+          "line": 327
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearCameraActivity.java",
+      "selection": {
+        "end": {
+          "column": 36,
+          "index": 4755,
+          "line": 109
+        },
+        "start": {
+          "column": 36,
+          "index": 4755,
+          "line": 109
+        }
+      }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncMainFragment.kt"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearCameraActivity.java"
 }
