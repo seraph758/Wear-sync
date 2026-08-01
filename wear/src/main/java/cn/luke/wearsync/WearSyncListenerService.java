@@ -15,7 +15,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import org.json.JSONObject;
-import android.net.Uri; 
+import android.net.Uri;
 import android.os.Environment;
 
 
