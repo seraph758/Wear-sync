@@ -119,9 +119,18 @@ public class WearAlarmActivity extends ComponentActivity {
     private void startWatchVibration() {
     // ✅ 从本地 SharedPreferences 读取（保存按钮已确保这里是最新的）
         WearVibratorHelper.initFromPhone(this);
+            // ✅ 先读取原始值
+        int rawOnDuration = WearVibratorHelper.getOnDuration();
+        int rawOffDuration = WearVibratorHelper.getOffDuration();
         
-        final int onDuration = WearVibratorHelper.getOnDuration();
-        final int offDuration = WearVibratorHelper.getOffDuration();
+        // ✅ 防御性检查在 final 赋值之前完成
+        if (rawOnDuration <= 0) return; 
+        if (rawOffDuration < 0) rawOffDuration = 200;
+        
+        // ✅ final 变量只赋值一次，之后不再修改
+        final int onDuration = rawOnDuration;
+        final int offDuration = rawOffDuration;
+        
         
         // 防止配置错误导致不震动
         if (onDuration <= 0) return; 
