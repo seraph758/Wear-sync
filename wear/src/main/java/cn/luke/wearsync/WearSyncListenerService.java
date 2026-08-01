@@ -13,9 +13,11 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.Uri;
 import java.nio.charset.StandardCharsets;
 import org.json.JSONObject;
+import android.net.Uri; 
+import android.os.Environment;
+
 
 public class WearSyncListenerService extends WearableListenerService {
 
@@ -423,7 +425,6 @@ public class WearSyncListenerService extends WearableListenerService {
     }
     
 
-    // 修改方法签名，增加 path 参数
     // 修改方法签名，增加 path 参数
     /**
      * ⚠️ 仅用于日志传输！
