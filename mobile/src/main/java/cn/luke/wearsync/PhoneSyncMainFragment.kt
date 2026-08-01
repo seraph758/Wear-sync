@@ -65,6 +65,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import org.json.JSONObject
 import java.nio.charset.StandardCharsets
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
+
 
 
 class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListener {
