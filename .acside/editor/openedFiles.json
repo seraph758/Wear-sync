@@ -154,29 +154,14 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncListenerService.java",
       "selection": {
         "end": {
-          "column": 9,
-          "index": 14129,
-          "line": 310
+          "column": 128,
+          "index": 16214,
+          "line": 350
         },
         "start": {
-          "column": 44,
-          "index": 12335,
-          "line": 271
-        }
-      }
-    },
-    {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/FileReceiverService.java",
-      "selection": {
-        "end": {
-          "column": 32,
-          "index": 733,
-          "line": 26
-        },
-        "start": {
-          "column": 13,
-          "index": 714,
-          "line": 26
+          "column": 128,
+          "index": 16214,
+          "line": 350
         }
       }
     },

@@ -3,21 +3,19 @@ package cn.luke.wearsync;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
-
 import androidx.annotation.NonNull;
-
 import com.google.android.gms.tasks.Tasks;
 import com.google.android.gms.wearable.ChannelClient;
 import com.google.android.gms.wearable.MessageEvent;
 import com.google.android.gms.wearable.Wearable;
 import com.google.android.gms.wearable.WearableListenerService;
-
-import org.json.JSONObject;
-
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.Uri;
 import java.nio.charset.StandardCharsets;
-
+import org.json.JSONObject;
 
 public class WearSyncListenerService extends WearableListenerService {
 
@@ -349,7 +347,9 @@ public class WearSyncListenerService extends WearableListenerService {
      * 此方法应在后台线程中调用
      */
     private void receiveFileFromChannel(ChannelClient.Channel channel, String fileName, String nodeId, long expectedSize) {
-        File receivedDir = new File(getFilesDir(), "Received"); // 使用应用私有目录，无需额外权限
+        // 修改为：使用公共的 Downloads 目录
+        File receivedDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Received");
+
         File file = new File(receivedDir, fileName);
 
         try {
