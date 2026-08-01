@@ -37,6 +37,10 @@ public class WearSyncListenerService extends WearableListenerService {
     // ========== 新增：APK文件传输通道常量 ==========
     private static final String FILE_TRANSFER_CHANNEL_PATH = "/wear-sync/file-transfer";
     private static final String APK_SAVE_DIR_NAME = "apk"; // APK固定保存子目录
+    
+    // 新增：用于向手机端回传文件接收状态
+    private static final String FILE_TRANSFER_STATUS_PATH = "/file-transfer-status";
+
     @Override
     public void onMessageReceived(@NonNull MessageEvent messageEvent) {
         WearLog.e(TAG, "========== MESSAGE RECEIVED ==========");
@@ -263,44 +267,49 @@ public class WearSyncListenerService extends WearableListenerService {
             }
         }
 
-    @Override
-    public void onChannelOpened(@NonNull ChannelClient.Channel channel) {
-        String path = channel.getPath();
-        WearLog.d(TAG, "CAM-W004 Channel opened path=" + path);
-        super.onChannelOpened(channel);
-        if (CAMERA_PREVIEW_STREAM_PATH.equals(path)) {
-            WearLog.d(TAG, "CAM-W005 Camera stream channel matched");
-            readH264ChannelStream(channel);
-        } else {
-            WearLog.d(TAG, "CAM-W006 Ignore channel " + path);
-        }
-        // ========== 新增：APK文件传输通道处理 ==========
-        if (FILE_TRANSFER_CHANNEL_PATH.equals(path)) {
-            WearLog.i(TAG, "📡 [APK接收] Channel已建立，开始写入文件...");
-
-            // 确保APK保存目录存在（使用内部存储，无需申请权限）
-            File apkDir = new File(getFilesDir(), APK_SAVE_DIR_NAME);
-            if (!apkDir.exists() && !apkDir.mkdirs()) {
-                WearLog.e(TAG, "❌ [APK接收] 创建目录失败: " + apkDir.getAbsolutePath());
-                return;
+        @Override
+        public void onChannelOpened(@NonNull ChannelClient.Channel channel) {
+            String path = channel.getPath();
+            WearLog.d(TAG, "CAM-W004 Channel opened path=" + path);
+            super.onChannelOpened(channel);
+    
+            if (CAMERA_PREVIEW_STREAM_PATH.equals(path)) {
+                WearLog.d(TAG, "CAM-W005 Camera stream channel matched");
+                readH264ChannelStream(channel);
+            } else if (FILE_TRANSFER_CHANNEL_PATH.equals(path)) {
+                // ========== 修改：处理文件传输通道 ==========
+                WearLog.i(TAG, "📡 [文件接收] Channel已建立，准备在后台线程接收文件...");
+    
+                // 解析路径中的元数据：/wear-sync/file-transfer/{size}/{encodedFileName}
+                // 注意：这里的路径必须和手机端打开Channel时使用的路径完全一致
+                String pathData = path.substring(FILE_TRANSFER_CHANNEL_PATH.length() + 1);
+                long expectedSize = -1L;
+                String fileName = "unknown_file";
+    
+                int slashIndex = pathData.indexOf('/');
+                if (slashIndex != -1) {
+                    try {
+                        expectedSize = Long.parseLong(pathData.substring(0, slashIndex));
+                    } catch (NumberFormatException e) {
+                        WearLog.w(TAG, "无法解析文件大小，将跳过完整性校验");
+                    }
+                    fileName = Uri.decode(pathData.substring(slashIndex + 1));
+                } else {
+                    fileName = Uri.decode(pathData);
+                }
+    
+                final String finalFileName = fileName;
+                final long finalExpectedSize = expectedSize;
+                final String nodeId = channel.getNodeId();
+    
+                // 启动后台线程执行耗时的文件IO操作
+                new Thread(() -> receiveFileFromChannel(channel, finalFileName, nodeId, finalExpectedSize)).start();
+    
+            } else {
+                WearLog.d(TAG, "CAM-W006 Ignore channel " + path);
             }
-
-            // 使用时间戳命名避免覆盖
-            File outFile = new File(apkDir, System.currentTimeMillis() + "_incoming.apk");
-            Uri fileUri = Uri.fromFile(outFile);
-
-            Wearable.getChannelClient(this)
-                    .receiveFile(channel, fileUri, false)   // 返回 Task<Void>
-                    .addOnSuccessListener(unused -> WearLog.i(TAG, "✅ [APK接收] 保存成功: " + outFile.getAbsolutePath()))
-                    .addOnFailureListener(e -> {
-                        WearLog.e(TAG, "❌ [APK接收] 接收失败", e);
-                        if (outFile.exists() && !outFile.delete()) {
-                            WearLog.w(TAG, "删除旧文件失败: " + outFile.getName());
-                        }
-
-                    });
         }
-    }
+
 
     @Override
     public void onChannelClosed(@NonNull ChannelClient.Channel channel, int closeReason, int appSpecificErrorCode) {
@@ -334,6 +343,85 @@ public class WearSyncListenerService extends WearableListenerService {
             }
         }).start();
     }
+    
+        /**
+     * 核心方法：从已建立的Channel中接收文件流并保存到本地
+     * 此方法应在后台线程中调用
+     */
+    private void receiveFileFromChannel(ChannelClient.Channel channel, String fileName, String nodeId, long expectedSize) {
+        File receivedDir = new File(getFilesDir(), "Received"); // 使用应用私有目录，无需额外权限
+        File file = new File(receivedDir, fileName);
+
+        try {
+            // 1. 确保目录存在
+            if (!receivedDir.exists() && !receivedDir.mkdirs()) {
+                throw new Exception("无法创建接收目录: " + receivedDir.getAbsolutePath());
+            }
+
+            WearLog.i(TAG, "📥 [文件接收] 开始接收文件: " + fileName + " 到 " + file.getAbsolutePath());
+
+            // 2. 获取输入流 (Tasks.await 会阻塞当前线程，所以必须在后台线程调用)
+            InputStream inputStream = Tasks.await(Wearable.getChannelClient(this).getInputStream(channel));
+
+            // 3. 流式写入文件
+            long bytesReceived = 0L;
+            try (OutputStream outputStream = new FileOutputStream(file);
+                 InputStream input = inputStream) {
+
+                byte[] buffer = new byte[32768]; // 32KB缓冲区
+                int bytesRead;
+                while ((bytesRead = input.read(buffer)) != -1) {
+                    outputStream.write(buffer, 0, bytesRead);
+                    bytesReceived += bytesRead;
+                }
+                outputStream.flush();
+            }
+
+            // 4. ✅ 完整性校验
+            if (expectedSize != -1L && bytesReceived != expectedSize) {
+                throw new Exception("文件不完整: 期望 " + expectedSize + "B, 实际收到 " + bytesReceived + "B");
+            }
+
+            WearLog.i(TAG, "✅ [文件接收] 成功! 大小: " + bytesReceived + "B");
+            sendFileTransferStatus(nodeId, "success:" + fileName);
+
+        } catch (Exception e) {
+            WearLog.e(TAG, "❌ [文件接收] 失败", e);
+
+            // 失败时删除残缺文件
+            if (file.exists()) {
+                boolean deleted = file.delete();
+                WearLog.d(TAG, "已删除残缺文件: " + deleted);
+            }
+
+            sendFileTransferStatus(nodeId, "error:" + fileName);
+        } finally {
+            // 5. 关闭Channel
+            try {
+                Tasks.await(Wearable.getChannelClient(this).close(channel));
+                WearLog.d(TAG, "Channel已关闭");
+            } catch (Exception e) {
+                WearLog.w(TAG, "关闭Channel时出错: " + e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * 向手机端发送文件传输状态回执
+     */
+    private void sendFileTransferStatus(String nodeId, String status) {
+        try {
+            Tasks.await(Wearable.getMessageClient(this).sendMessage(
+                    nodeId,
+                    FILE_TRANSFER_STATUS_PATH,
+                    status.getBytes(StandardCharsets.UTF_8)
+            ));
+            WearLog.d(TAG, "📤 [文件接收] 状态回执已发送: " + status);
+        } catch (Exception e) {
+            WearLog.w(TAG, "发送状态回执失败: " + e.getMessage());
+        }
+    }
+    
 
     // 修改方法签名，增加 path 参数
     // 修改方法签名，增加 path 参数

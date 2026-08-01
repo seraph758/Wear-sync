@@ -101,6 +101,11 @@
             android:enabled="true"   
             android:foregroundServiceType="camera"
             android:exported="false" />
+        <service
+            android:name=".PhoneSyncFileTransferService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
 
         <service
             android:name="cn.luke.wearsync.PhoneSyncListenerService"

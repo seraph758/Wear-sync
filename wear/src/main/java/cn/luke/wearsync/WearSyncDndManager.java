@@ -148,7 +148,7 @@ public class WearSyncDndManager {
                 } catch (Exception e) {
                     WearLog.e(TAG, "❌ [省电同步失败] " + e.getMessage());
                 }
-            }, 5500);
+            }, 3000);
         }
 
         // 4. 最终设置手表的DND状态

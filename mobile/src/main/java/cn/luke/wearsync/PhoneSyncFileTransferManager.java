@@ -1,6 +1,7 @@
-package cn.luke.wearsync; // 请根据你的实际包名确认
+package cn.luke.wearsync; // 请根据你的实际包名修改
 
 import android.content.Context;
+import android.content.Intent;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
@@ -10,33 +11,26 @@ import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.google.android.gms.wearable.ChannelClient;
 import com.google.android.gms.wearable.MessageClient;
 import com.google.android.gms.wearable.Wearable;
 
 import org.json.JSONObject;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
-import android.os.Environment;
-
 
 public class PhoneSyncFileTransferManager {
-
     private static final String TAG = "WearSyncFileTransfer";
     private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
-    private static final String FILE_TRANSFER_CHANNEL_PATH = "/wear-sync/file-transfer";
+
     private static final long ACK_TIMEOUT_MS = 10_000L;
 
+    // 暂存数据，用于等待手表回复
     private static String sPendingNodeId;
     private static Uri sPendingFileUri;
     private static String sPendingFileName;
     private static TransferCallback sPendingCallback;
-    private static File sPendingTempFile;
     private static Context sAppContext;
+
     private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
 
     public interface TransferCallback {
@@ -47,13 +41,11 @@ public class PhoneSyncFileTransferManager {
     /**
      * 发送文件到手表（握手机制）
      */
-    public static void sendFileToWear(
-            @NonNull Context context,
-            @NonNull String nodeId,
-            @NonNull Uri fileUri,
-            @NonNull String fileName,
-            @Nullable TransferCallback callback) {
-
+    public static void sendFileToWear(@NonNull Context context,
+                                      @NonNull String nodeId,
+                                      @NonNull Uri fileUri,
+                                      @NonNull String fileName,
+                                      @Nullable TransferCallback callback) {
         sAppContext = context.getApplicationContext();
         MessageClient messageClient = Wearable.getMessageClient(context);
 
@@ -89,11 +81,9 @@ public class PhoneSyncFileTransferManager {
 
         PhoneLog.d(TAG, "✉️ 发送 PREPARE_RECEIVE 信令到节点: " + nodeId);
 
-        // 4. 发送信令（已修复链式调用截断问题）
+        // 4. 发送信令
         messageClient.sendMessage(nodeId, UNIVERSAL_SYNC_PATH, prepareJson.toString().getBytes(StandardCharsets.UTF_8))
-                .addOnSuccessListener(statusCode -> {
-                    PhoneLog.d(TAG, "✅ PREPARE_RECEIVE 信令已发出，等待手表 ACK...");
-                })
+                .addOnSuccessListener(statusCode -> PhoneLog.d(TAG, "✅ PREPARE_RECEIVE 信令已发出，等待手表 ACK..."))
                 .addOnFailureListener(e -> {
                     PhoneLog.e(TAG, "❌ PREPARE_RECEIVE 发送失败", e);
                     if (sPendingCallback != null) sPendingCallback.onError("信令发送失败: " + e.getMessage());
@@ -116,7 +106,6 @@ public class PhoneSyncFileTransferManager {
     public static void onWearReadyToReceive() {
         // 收到ACK，取消超时计时器
         MAIN_HANDLER.removeCallbacksAndMessages(null);
-        
         PhoneLog.d(TAG, "🚀 收到手表准备就绪信号，开始传输文件...");
 
         if (sPendingFileUri == null || sPendingNodeId == null) {
@@ -124,123 +113,32 @@ public class PhoneSyncFileTransferManager {
             return;
         }
 
-        new Thread(() -> {
-            try {
-                File tempFile = copyUriToCacheFile(sAppContext, sPendingFileUri, sPendingFileName);
-                sPendingTempFile = tempFile;
-
-                Uri fileUriForSending = Uri.fromFile(tempFile);
-                ChannelClient channelClient = Wearable.getChannelClient(sAppContext);
-
-                openChannelAndSend(channelClient, sPendingNodeId, fileUriForSending, sPendingCallback, tempFile);
-            } catch (Exception e) {
-                PhoneLog.e(TAG, "❌ 准备临时文件失败", e);
-                if (sPendingCallback != null) sPendingCallback.onError("文件准备失败: " + e.getMessage());
-                clearPendingData();
-            }
-        }).start();
-    }
-
-    private static void openChannelAndSend(
-            @NonNull ChannelClient channelClient,
-            @NonNull String nodeId,
-            @NonNull Uri fileUri,
-            @Nullable TransferCallback callback,
-            @NonNull File tempFile) {
-
-        channelClient.openChannel(nodeId, FILE_TRANSFER_CHANNEL_PATH)
-                .addOnSuccessListener(channel -> pushFile(channelClient, channel, fileUri, callback, tempFile))
-                .addOnFailureListener(e -> {
-                    PhoneLog.e(TAG, "❌ Channel 打开失败", e);
-                    if (callback != null) callback.onError("通道建立失败: " + e.getMessage());
-                    safeDeleteTempFile(tempFile);
-                    clearPendingData();
-                });
-    }
-
-    private static void pushFile(
-            @NonNull ChannelClient channelClient,
-            @NonNull ChannelClient.Channel channel,
-            @NonNull Uri fileUri,
-            @Nullable TransferCallback callback,
-            @NonNull File tempFile) {
-
-        channelClient.sendFile(channel, fileUri)
-                .addOnSuccessListener(unused -> {
-                    PhoneLog.d(TAG, "✅ 文件推送完成，关闭 Channel");
-                    channelClient.close(channel);
-                    if (callback != null) callback.onComplete();
-                    safeDeleteTempFile(tempFile);
-                    clearPendingData();
-                })
-                .addOnFailureListener(e -> {
-                    PhoneLog.e(TAG, "❌ 文件推送失败", e);
-                    channelClient.close(channel);
-                    if (callback != null) callback.onError("文件传输失败: " + e.getMessage());
-                    safeDeleteTempFile(tempFile);
-                    clearPendingData();
-                });
-    }
-    /**
-     * 将文件复制到手表的公共下载目录
-     */
-    private static File copyUriToCacheFile(Context context, Uri sourceUri, String fileName) throws Exception {
-        // 1. 获取公共下载目录
-        File downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+        // 启动后台服务进行传输
+        Intent serviceIntent = new Intent(sAppContext, PhoneSyncFileTransferService.class);
+        serviceIntent.setAction(PhoneSyncFileTransferService.ACTION_ADD_TRANSFER);
+        serviceIntent.putExtra(PhoneSyncFileTransferService.EXTRA_NODE_ID, sPendingNodeId);
+        serviceIntent.putExtra(PhoneSyncFileTransferService.EXTRA_FILE_URI, sPendingFileUri);
+        serviceIntent.putExtra(PhoneSyncFileTransferService.EXTRA_FILE_NAME, sPendingFileName);
         
-        // 2. 确保目录存在
-        if (!downloadsDir.exists()) {
-            downloadsDir.mkdirs();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            sAppContext.startForegroundService(serviceIntent);
+        } else {
+            sAppContext.startService(serviceIntent);
         }
 
-        // 3. 创建一个不会重名的文件
-        File targetFile = new File(downloadsDir, fileName);
-        int suffix = 1;
-        String nameOnly = fileName;
-        String extension = "";
-        int dotIndex = fileName.lastIndexOf('.');
-        if (dotIndex > 0) {
-            nameOnly = fileName.substring(0, dotIndex);
-            extension = fileName.substring(dotIndex);
+        // 通知调用方任务已移交后台服务处理
+        if (sPendingCallback != null) {
+            sPendingCallback.onComplete();
         }
         
-        // 如果文件已存在，则在文件名后添加 (1), (2) 等后缀
-        while (targetFile.exists()) {
-            targetFile = new File(downloadsDir, nameOnly + "(" + suffix + ")" + extension);
-            suffix++;
-        }
-
-        // 4. 执行文件复制
-        try (
-                InputStream inputStream = context.getContentResolver().openInputStream(sourceUri);
-                OutputStream outputStream = new FileOutputStream(targetFile)
-        ) {
-            if (inputStream == null) {
-                throw new Exception("无法打开源文件输入流");
-            }
-            byte[] buffer = new byte[4096];
-            int bytesRead;
-            while ((bytesRead = inputStream.read(buffer)) != -1) {
-                outputStream.write(buffer, 0, bytesRead);
-            }
-        }
-        
-        PhoneLog.d(TAG, "✅ 文件已保存至公共目录: " + targetFile.getAbsolutePath());
-        return targetFile;
+        // 清理暂存数据
+        clearPendingData();
     }
-
 
     private static void clearPendingData() {
         sPendingNodeId = null;
         sPendingFileUri = null;
         sPendingFileName = null;
         sPendingCallback = null;
-        sPendingTempFile = null;
-    }
-
-    private static void safeDeleteTempFile(@NonNull File file) {
-        if (!file.delete() && file.exists()) {
-            PhoneLog.w(TAG, "⚠️ 临时文件删除失败: " + file.getAbsolutePath());
-        }
     }
 }
