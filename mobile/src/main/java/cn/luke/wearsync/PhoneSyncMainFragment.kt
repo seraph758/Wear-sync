@@ -124,8 +124,9 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                     val configJson = JSONObject().apply {
                         put("mode", 0)
                         // 使用传入的参数，而不是直接引用 UI 变量
-                        put("pattern", intArrayOf(0, onDuration, offDuration, onDuration))
-                        put("repeatIndex", if (action == "preview") -1 else repeat)
+                       put("onDuration", onDuration)
+                       put("offDuration", offDuration)
+                       put("repeatIndex", if (action == "preview") -1 else repeat)
                     }
                     val json = JSONObject().apply {
                         put("sender", "phone")
@@ -736,7 +737,6 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                 }
             }
 
-// ... 其他代码 ...
 
                             }
 

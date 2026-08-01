@@ -19,8 +19,8 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
 
     private static final String TAG = "WearSync_MainFragment";
     
-    // ✅ 1. 统一能力名称为 wearsync
-    private static final String CAPABILITY_NAME = "wearsync";
+    // ✅ 1. 统一能力名称为 wear_sync
+    private static final String CAPABILITY_NAME = "wear_sync";
 
     private Preference connectivityPref;
     private Preference dndPref;
