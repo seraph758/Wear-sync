@@ -34,14 +34,14 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/AndroidManifest.xml",
       "selection": {
         "end": {
-          "column": 0,
-          "index": 4231,
-          "line": 92
+          "column": 86,
+          "index": 1344,
+          "line": 18
         },
         "start": {
-          "column": 0,
-          "index": 4231,
-          "line": 92
+          "column": 86,
+          "index": 1344,
+          "line": 18
         }
       }
     },
@@ -125,13 +125,13 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 5153,
-          "line": 144
+          "index": 4956,
+          "line": 139
         },
         "start": {
           "column": 0,
-          "index": 5153,
-          "line": 144
+          "index": 4956,
+          "line": 139
         }
       }
     },
@@ -181,5 +181,5 @@
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncFileTransferService.java"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/AndroidManifest.xml"
 }
