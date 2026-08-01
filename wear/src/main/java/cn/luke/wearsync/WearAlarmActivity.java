@@ -132,9 +132,6 @@ public class WearAlarmActivity extends ComponentActivity {
         final int offDuration = rawOffDuration;
         
         
-        // 防止配置错误导致不震动
-        if (onDuration <= 0) return; 
-        if (offDuration < 0) offDuration = 200;
         
         vibrationHandler = new Handler(Looper.getMainLooper());
         vibrationRunnable = new Runnable() {
