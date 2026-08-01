@@ -83,9 +83,12 @@ public class WearSyncListenerService extends WearableListenerService {
                           } else if ("save".equalsIgnoreCase(action)) {
                         // 💾 持久化到手表本地
                         android.content.SharedPreferences sp = getSharedPreferences("wear_vibration_prefs", Context.MODE_PRIVATE);
-                        sp.edit().putInt("on_duration", onDuration)
-                                .putInt("off_duration", offDuration)
-                                .putInt("repeat_index", repeatIndex)
+                        sp.edit().putInt("onDuration", onDuration)
+                                .putInt("offDuration", offDuration)
+                                .putInt("repeatIndex", repeatIndex)
+                                .remove("on_duration")
+                                .remove("off_duration")
+                                .remove("repeat_index")
                                 .apply();
                         // 刷新内存配置
                         WearVibratorHelper.initFromPhone(this);

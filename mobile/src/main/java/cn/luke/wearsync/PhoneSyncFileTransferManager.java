@@ -21,6 +21,8 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import android.os.Environment;
+
 
 public class PhoneSyncFileTransferManager {
 
@@ -179,12 +181,39 @@ public class PhoneSyncFileTransferManager {
                     clearPendingData();
                 });
     }
-
+    /**
+     * 将文件复制到手表的公共下载目录
+     */
     private static File copyUriToCacheFile(Context context, Uri sourceUri, String fileName) throws Exception {
-        File cacheFile = new File(context.getCacheDir(), fileName);
+        // 1. 获取公共下载目录
+        File downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+        
+        // 2. 确保目录存在
+        if (!downloadsDir.exists()) {
+            downloadsDir.mkdirs();
+        }
+
+        // 3. 创建一个不会重名的文件
+        File targetFile = new File(downloadsDir, fileName);
+        int suffix = 1;
+        String nameOnly = fileName;
+        String extension = "";
+        int dotIndex = fileName.lastIndexOf('.');
+        if (dotIndex > 0) {
+            nameOnly = fileName.substring(0, dotIndex);
+            extension = fileName.substring(dotIndex);
+        }
+        
+        // 如果文件已存在，则在文件名后添加 (1), (2) 等后缀
+        while (targetFile.exists()) {
+            targetFile = new File(downloadsDir, nameOnly + "(" + suffix + ")" + extension);
+            suffix++;
+        }
+
+        // 4. 执行文件复制
         try (
                 InputStream inputStream = context.getContentResolver().openInputStream(sourceUri);
-                OutputStream outputStream = new FileOutputStream(cacheFile)
+                OutputStream outputStream = new FileOutputStream(targetFile)
         ) {
             if (inputStream == null) {
                 throw new Exception("无法打开源文件输入流");
@@ -195,8 +224,11 @@ public class PhoneSyncFileTransferManager {
                 outputStream.write(buffer, 0, bytesRead);
             }
         }
-        return cacheFile;
+        
+        PhoneLog.d(TAG, "✅ 文件已保存至公共目录: " + targetFile.getAbsolutePath());
+        return targetFile;
     }
+
 
     private static void clearPendingData() {
         sPendingNodeId = null;

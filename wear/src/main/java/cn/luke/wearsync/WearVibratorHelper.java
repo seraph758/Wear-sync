@@ -52,9 +52,9 @@ public final class WearVibratorHelper {
     /** 从手机端 SharedPreferences 读取震动参数 */
     public static void initFromPhone(Context context) {
         SharedPreferences sp = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        sOnDuration = sp.getInt("on_duration", 500);
-        sOffDuration = sp.getInt("off_duration", 200);
-        sRepeatIndex = sp.getInt("repeat_index", -1);
+        sOnDuration = sp.getInt("onDuration", 500);
+        sOffDuration = sp.getInt("offDuration", 200);
+        sRepeatIndex = sp.getInt("repeatIndex", -1);
         WearLog.d(TAG, "📥 震动参数: on=" + sOnDuration + "ms, off=" + sOffDuration 
                 + "ms, repeat=" + sRepeatIndex);
     }
@@ -90,31 +90,31 @@ public final class WearVibratorHelper {
             WearLog.e(TAG, "💥 触发震动异常: " + e.getMessage(), e);
         }
     }
-/**
- * 新增：使用传入的参数直接触发震动
- * 用于处理手表的“预览”指令
- */
-public static void vibratePattern(Context context, int onDuration, int offDuration, int repeatIndex) {
-    Vibrator vibrator = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
-    if (vibrator == null || !vibrator.hasVibrator()) {
-        WearLog.e(TAG, "❌ 震动失败：Vibrator null 或不支持");
-        return;
-    }
-
-    // 构建震动模式：等待0ms -> 震动onDuration -> 等待offDuration -> 震动onDuration
-    long[] pattern = {0, onDuration, offDuration, onDuration};
+    /**
+     * 新增：使用传入的参数直接触发震动
+     * 用于处理手表的“预览”指令
+     */
+    public static void vibratePattern(Context context, int onDuration, int offDuration, int repeatIndex) {
+        Vibrator vibrator = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
+        if (vibrator == null || !vibrator.hasVibrator()) {
+            WearLog.e(TAG, "❌ 震动失败：Vibrator null 或不支持");
+            return;
+        }
     
-    WearLog.d(TAG, "📳 触发预览波形震动 length=" + pattern.length + ", repeat=" + repeatIndex);
-
-    try {
-        vibrator.cancel();
-        VibrationEffect effect = VibrationEffect.createWaveform(pattern, repeatIndex);
-        vibrator.vibrate(effect);
-        WearLog.i(TAG, "✅ 预览波形震动已触发");
-    } catch (Exception e) {
-        WearLog.e(TAG, "💥 触发预览震动异常: " + e.getMessage(), e);
+        // 构建震动模式：等待0ms -> 震动onDuration -> 等待offDuration -> 震动onDuration
+        long[] pattern = {0, onDuration, offDuration, onDuration};
+        
+        WearLog.d(TAG, "📳 触发预览波形震动 length=" + pattern.length + ", repeat=" + repeatIndex);
+    
+        try {
+            vibrator.cancel();
+            VibrationEffect effect = VibrationEffect.createWaveform(pattern, repeatIndex);
+            vibrator.vibrate(effect);
+            WearLog.i(TAG, "✅ 预览波形震动已触发");
+        } catch (Exception e) {
+            WearLog.e(TAG, "💥 触发预览震动异常: " + e.getMessage(), e);
+        }
     }
-}
 
     /**
      * 🛑 停止所有震动
@@ -149,4 +149,21 @@ public static void vibratePattern(Context context, int onDuration, int offDurati
             WearLog.e(TAG, "预定义震动失败: " + e.getMessage(), e);
         }
     }
+    // 在 WearVibratorHelper.java 中添加此方法
+
+    /**
+     * 仅触发一次指定时长的震动，不循环
+     * 专用于闹钟 Activity 的手动循环控制
+     */
+    public static void vibrateOnce(Context context, int durationMs) {
+        Vibrator v = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
+        if (v == null || !v.hasVibrator()) return;
+    
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            v.vibrate(VibrationEffect.createOneShot(durationMs, VibrationEffect.DEFAULT_AMPLITUDE));
+        } else {
+            v.vibrate(durationMs);
+        }
+    }
+
 }

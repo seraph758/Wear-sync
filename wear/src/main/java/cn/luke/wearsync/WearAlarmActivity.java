@@ -3,20 +3,29 @@ package cn.luke.wearsync;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 import android.widget.Button;
 import android.widget.TextView;
 import androidx.annotation.Nullable;
 import androidx.activity.ComponentActivity;
-import java.lang.ref.WeakReference;
 import org.json.JSONObject;
+import java.lang.ref.WeakReference;
 
 public class WearAlarmActivity extends ComponentActivity {
+
     private static final String TAG = "WearSync_WearAlarmUI";
     private static WeakReference<WearAlarmActivity> instanceRef;
+
     private TextView tvAlarmDay;
     private TextView tvAlarmTime;
     private WearSyncScreenManager screenManager;
+
+    // 震动循环控制
+    private Handler vibrationHandler;
+    private Runnable vibrationRunnable;
+    private boolean isVibrating = false;
 
     public static WearAlarmActivity getInstance() {
         return (instanceRef != null) ? instanceRef.get() : null;
@@ -25,7 +34,7 @@ public class WearAlarmActivity extends ComponentActivity {
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        
+
         // --- 检查 FORCE_STOP 指令 ---
         if (getIntent() != null && "FORCE_STOP".equals(getIntent().getStringExtra("alarm_action"))) {
             WearLog.d("WearAlarmActivity", "收到 FORCE_STOP 指令，正在执行 cleanExit...");
@@ -39,38 +48,38 @@ public class WearAlarmActivity extends ComponentActivity {
         screenManager = new WearSyncScreenManager(this);
         screenManager.bind(this);
         WearLog.d(TAG, "🎬 onCreate: 手表闹钟接管界面启动");
-        screenManager.wakeForSync(1 * 60 * 1000L);
-        setContentView(R.layout.activity_wear_alarm);
         
+        // 保持屏幕常亮 1 分钟
+        screenManager.wakeForSync(1 * 60 * 1000L);
+        
+        setContentView(R.layout.activity_wear_alarm);
         tvAlarmDay = findViewById(R.id.tv_alarm_day);
         tvAlarmTime = findViewById(R.id.tv_alarm_time);
         Button btnDismiss = findViewById(R.id.btn_dismiss);
         Button btnSnooze = findViewById(R.id.btn_snooze);
-        handleIncomingTime(getIntent());
-        startWatchVibration();
 
-        // ❌ 删除：移除所有与 WearSyncCommManager 通信相关的代码
-        // WearSyncCommManager.getInstance(this).setConnectionListener(...);
-        // WearSyncCommManager.getInstance(this).connect();
+        handleIncomingTime(getIntent());
+        
+        // ✅ 启动应用层循环震动
+        startWatchVibration();
 
         // 3. 按钮逻辑
         btnDismiss.setOnClickListener(v -> {
             WearLog.d(TAG, "🔘 用户点击 [关闭]");
-            // ✅ 调用 CommManager 发送指令
+            // 发送关闭指令给手机
             WearSyncCommManager.getInstance(this).dismissPhoneAlarm();
             cleanExit();
         });
 
         btnSnooze.setOnClickListener(v -> {
             WearLog.d(TAG, "🔘 用户点击 [延后]");
-            // ✅ 调用 CommManager 发送指令
+            // 发送延后指令给手机
             WearSyncCommManager.getInstance(this).snoozePhoneAlarm();
             cleanExit();
         });
     }
 
     // ✅ 修改：handleIncomingCommand 变为纯粹的 UI 更新方法
-    // 职责：只负责根据指令更新界面，不涉及任何通信逻辑
     public static void handleIncomingCommand(Context context, JSONObject json) {
         WearLog.d(TAG, "收到闹钟控制指令: " + json.toString());
         String action = json.optString("action");
@@ -81,45 +90,81 @@ public class WearAlarmActivity extends ComponentActivity {
             }
         }
     }
+
     private void handleIncomingTime(Intent intent) {
         if (intent == null) return;
-
-        // 1. 从 Intent 中获取 JSON 字符串
-        // 注意：这里假设你手表端的 Listener 是用 "raw_alarm_json" 这个 key 传递的
-        // 如果你的 Listener 用的是别的 key (比如 "json")，请相应修改这里
         String rawJson = intent.getStringExtra("raw_alarm_json");
-
         if (rawJson != null) {
             try {
                 JSONObject json = new JSONObject(rawJson);
                 String time = json.optString("time", "00:00");
                 String monthDay = json.optString("month_day", "");
                 String week = json.optString("day_tips", "");
-
-                // 2. 更新 UI
+                
                 if (tvAlarmTime != null) tvAlarmTime.setText(time);
                 if (tvAlarmDay != null) {
                     if (!monthDay.isEmpty()) {
-                        tvAlarmDay.setText(monthDay + "  " + week);
+                        tvAlarmDay.setText(monthDay + " " + week);
                     } else {
                         tvAlarmDay.setText(week);
                     }
                 }
                 WearLog.d(TAG, "📦 成功解析并显示手机时间: " + time);
-
             } catch (Exception e) {
                 WearLog.e(TAG, "🔴 解析手机发来的时间JSON失败", e);
             }
         }
     }
 
+    /**
+     * ✅ 核心修改：使用 Handler 实现应用层循环震动
+     * 逻辑：Activity 在 -> 震动在；Activity 销毁 -> 震动停
+     */
     private void startWatchVibration() {
-        WearVibratorHelper.vibratePattern(this);
+        // 1. 读取最新的震动配置
+        WearVibratorHelper.initFromPhone(this);
+        int onDuration = WearVibratorHelper.getOnDuration();
+        int offDuration = WearVibratorHelper.getOffDuration();
+        
+        // 防止配置错误导致不震动
+        if (onDuration <= 0) onDuration = 500;
+        if (offDuration < 0) offDuration = 200;
+
+        vibrationHandler = new Handler(Looper.getMainLooper());
+        vibrationRunnable = new Runnable() {
+            @Override
+            public void run() {
+                if (!isVibrating) return;
+                
+                // 2. 触发一次短震动（不循环）
+                WearVibratorHelper.vibrateOnce(WearAlarmActivity.this, onDuration);
+                
+                // 3. 等待 (震动时长 + 间隔时长) 后，再次执行自己，形成循环
+                vibrationHandler.postDelayed(this, onDuration + offDuration);
+            }
+        };
+
+        isVibrating = true;
+        vibrationRunnable.run(); // 立即开始第一次
+        WearLog.d(TAG, "🔊 闹钟震动循环已启动 (On: " + onDuration + ", Off: " + offDuration + ")");
+    }
+
+    /**
+     * ✅ 停止震动循环
+     */
+    private void stopWatchVibration() {
+        isVibrating = false;
+        if (vibrationHandler != null) {
+            vibrationHandler.removeCallbacks(vibrationRunnable);
+        }
+        // 立即取消当前正在进行的震动
+        WearVibratorHelper.cancelVibration(this);
+        WearLog.d(TAG, "🔇 闹钟震动已停止");
     }
 
     private void cleanExit() {
         try {
-            WearVibratorHelper.cancelVibration(this);
+            stopWatchVibration(); // ✅ 确保退出前停止震动
         } catch (Exception e) {
             WearLog.e(TAG, "❌ cleanExit 停止震动异常", e);
         }
@@ -133,16 +178,19 @@ public class WearAlarmActivity extends ComponentActivity {
     @Override
     protected void onStop() {
         super.onStop();
-        WearVibratorHelper.cancelVibration(this);
+        // ✅ 界面不可见时也停止震动，节省电量
+        stopWatchVibration();
     }
 
     @Override
     protected void onDestroy() {
+        // ✅ 最终保险：Activity 销毁时必须停止震动
+        stopWatchVibration();
+        
         if (instanceRef != null) {
             instanceRef.clear();
             instanceRef = null;
         }
-        WearVibratorHelper.cancelVibration(this);
         super.onDestroy();
     }
 }
