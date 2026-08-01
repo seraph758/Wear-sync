@@ -64,14 +64,14 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncNotificationService.java",
       "selection": {
         "end": {
-          "column": 0,
-          "index": 12461,
-          "line": 327
+          "column": 1,
+          "index": 11828,
+          "line": 279
         },
         "start": {
-          "column": 0,
-          "index": 12461,
-          "line": 327
+          "column": 1,
+          "index": 11828,
+          "line": 279
         }
       }
     },
@@ -89,7 +89,22 @@
           "line": 109
         }
       }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncCameraService.java",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 0,
+          "line": 0
+        },
+        "start": {
+          "column": 0,
+          "index": 0,
+          "line": 0
+        }
+      }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearCameraActivity.java"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncCameraService.java"
 }
