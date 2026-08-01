@@ -66,6 +66,16 @@ public final class WearVibratorHelper {
     public static int getRepeatIndex() {
         return sRepeatIndex;
     }
+    
+    public static int getOnDuration() {
+        return sOnDuration;
+    }
+    
+    public static int getOffDuration() {
+        return sOffDuration;
+    }
+    
+
 
     /** 🎯 播放自定义波形震动（统一入口） */
     public static void vibratePattern(Context context) {
