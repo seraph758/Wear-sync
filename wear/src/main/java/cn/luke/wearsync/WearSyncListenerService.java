@@ -348,27 +348,41 @@ public class WearSyncListenerService extends WearableListenerService {
      * 核心方法：从已建立的Channel中接收文件流并保存到本地
      * 此方法应在后台线程中调用
      */
+        /**
+     * 核心方法：从已建立的Channel中接收文件流并保存到本地
+     * 此方法应在后台线程中调用
+     */
     private void receiveFileFromChannel(ChannelClient.Channel channel, String fileName, String nodeId, long expectedSize) {
-        // 修改为：使用公共的 Downloads 目录
-        File receivedDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Received");
+        // 使用 MediaStore 保存到公共的 Downloads 目录
+        Uri collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
 
-        File file = new File(receivedDir, fileName);
+        ContentValues values = new ContentValues();
+        values.put(MediaStore.Downloads.DISPLAY_NAME, fileName);
+        values.put(MediaStore.Downloads.MIME_TYPE, "application/vnd.android.package-archive"); // APK的MIME类型
+        values.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/Received"); // 保存在 Downloads/Received 目录下
+
+        Uri fileUri = getContentResolver().insert(collection, values);
+        
+        if (fileUri == null) {
+            WearLog.e(TAG, "❌ [文件接收] 无法创建文件 Uri");
+            sendFileTransferStatus(nodeId, "error:" + fileName);
+            return;
+        }
 
         try {
-            // 1. 确保目录存在
-            if (!receivedDir.exists() && !receivedDir.mkdirs()) {
-                throw new Exception("无法创建接收目录: " + receivedDir.getAbsolutePath());
-            }
+            WearLog.i(TAG, "📥 [文件接收] 开始接收文件: " + fileName);
 
-            WearLog.i(TAG, "📥 [文件接收] 开始接收文件: " + fileName + " 到 " + file.getAbsolutePath());
-
-            // 2. 获取输入流 (Tasks.await 会阻塞当前线程，所以必须在后台线程调用)
+            // 2. 获取输入流
             InputStream inputStream = Tasks.await(Wearable.getChannelClient(this).getInputStream(channel));
 
             // 3. 流式写入文件
             long bytesReceived = 0L;
-            try (OutputStream outputStream = new FileOutputStream(file);
+            try (OutputStream outputStream = getContentResolver().openOutputStream(fileUri);
                  InputStream input = inputStream) {
+                
+                if (outputStream == null) {
+                    throw new Exception("无法打开输出流");
+                }
 
                 byte[] buffer = new byte[32768]; // 32KB缓冲区
                 int bytesRead;
@@ -379,23 +393,18 @@ public class WearSyncListenerService extends WearableListenerService {
                 outputStream.flush();
             }
 
-            // 4. ✅ 完整性校验
+            // 4. 完整性校验
             if (expectedSize != -1L && bytesReceived != expectedSize) {
                 throw new Exception("文件不完整: 期望 " + expectedSize + "B, 实际收到 " + bytesReceived + "B");
             }
-
+            
             WearLog.i(TAG, "✅ [文件接收] 成功! 大小: " + bytesReceived + "B");
             sendFileTransferStatus(nodeId, "success:" + fileName);
 
         } catch (Exception e) {
             WearLog.e(TAG, "❌ [文件接收] 失败", e);
-
-            // 失败时删除残缺文件
-            if (file.exists()) {
-                boolean deleted = file.delete();
-                WearLog.d(TAG, "已删除残缺文件: " + deleted);
-            }
-
+            // 失败时删除文件
+            getContentResolver().delete(fileUri, null);
             sendFileTransferStatus(nodeId, "error:" + fileName);
         } finally {
             // 5. 关闭Channel
@@ -407,6 +416,7 @@ public class WearSyncListenerService extends WearableListenerService {
             }
         }
     }
+
 
     /**
      * 向手机端发送文件传输状态回执
