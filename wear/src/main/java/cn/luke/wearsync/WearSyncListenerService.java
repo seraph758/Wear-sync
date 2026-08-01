@@ -17,6 +17,8 @@ import java.nio.charset.StandardCharsets;
 import org.json.JSONObject;
 import android.net.Uri;
 import android.os.Environment;
+import android.content.ContentValues;
+import android.provider.MediaStore;
 
 
 public class WearSyncListenerService extends WearableListenerService {
