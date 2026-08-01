@@ -1,20 +1,20 @@
 {
   "allFiles": [
     {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncListenerService.java",
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncRemoteCameraActivity.java",
       "selection": {
         "end": {
           "column": 0,
-          "index": 723,
-          "line": 21
+          "index": 0,
+          "line": 0
         },
         "start": {
           "column": 0,
-          "index": 723,
-          "line": 21
+          "index": 0,
+          "line": 0
         }
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncListenerService.java"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncRemoteCameraActivity.java"
 }
