@@ -1,8 +1,9 @@
-package cn.luke.wearsync; // 请根据你的实际包名修改
+package cn.luke.wearsync;
 
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
+import android.os.Build; // 修复：添加缺失的导入
 import android.os.Handler;
 import android.os.Looper;
 import android.os.ParcelFileDescriptor;
@@ -21,7 +22,6 @@ import java.nio.charset.StandardCharsets;
 public class PhoneSyncFileTransferManager {
     private static final String TAG = "WearSyncFileTransfer";
     private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
-
     private static final long ACK_TIMEOUT_MS = 10_000L;
 
     // 暂存数据，用于等待手表回复
@@ -30,7 +30,6 @@ public class PhoneSyncFileTransferManager {
     private static String sPendingFileName;
     private static TransferCallback sPendingCallback;
     private static Context sAppContext;
-
     private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
 
     public interface TransferCallback {
@@ -41,11 +40,7 @@ public class PhoneSyncFileTransferManager {
     /**
      * 发送文件到手表（握手机制）
      */
-    public static void sendFileToWear(@NonNull Context context,
-                                      @NonNull String nodeId,
-                                      @NonNull Uri fileUri,
-                                      @NonNull String fileName,
-                                      @Nullable TransferCallback callback) {
+    public static void sendFileToWear(@NonNull Context context, @NonNull String nodeId, @NonNull Uri fileUri, @NonNull String fileName, @Nullable TransferCallback callback) {
         sAppContext = context.getApplicationContext();
         MessageClient messageClient = Wearable.getMessageClient(context);
 
@@ -54,7 +49,7 @@ public class PhoneSyncFileTransferManager {
         try (ParcelFileDescriptor pfd = context.getContentResolver().openFileDescriptor(fileUri, "r")) {
             if (pfd != null) fileSize = pfd.getStatSize();
         } catch (Exception e) {
-            PhoneLog.e(TAG, "❌ 获取文件大小失败", e);
+            Log.e(TAG, "获取文件大小失败", e);
             if (callback != null) callback.onError("无法读取文件: " + e.getMessage());
             return;
         }
@@ -74,18 +69,18 @@ public class PhoneSyncFileTransferManager {
             prepareJson.put("fileName", fileName);
             prepareJson.put("fileSize", fileSize);
         } catch (Exception e) {
-            PhoneLog.e(TAG, "❌ 构建信令JSON失败", e);
+            Log.e(TAG, "构建信令JSON失败", e);
             if (callback != null) callback.onError("信令构建异常");
             return;
         }
 
-        PhoneLog.d(TAG, "✉️ 发送 PREPARE_RECEIVE 信令到节点: " + nodeId);
+        Log.d(TAG, "发送 PREPARE_RECEIVE 信令到节点: " + nodeId);
 
         // 4. 发送信令
         messageClient.sendMessage(nodeId, UNIVERSAL_SYNC_PATH, prepareJson.toString().getBytes(StandardCharsets.UTF_8))
-                .addOnSuccessListener(statusCode -> PhoneLog.d(TAG, "✅ PREPARE_RECEIVE 信令已发出，等待手表 ACK..."))
+                .addOnSuccessListener(statusCode -> Log.d(TAG, "PREPARE_RECEIVE 信令已发出，等待手表 ACK..."))
                 .addOnFailureListener(e -> {
-                    PhoneLog.e(TAG, "❌ PREPARE_RECEIVE 发送失败", e);
+                    Log.e(TAG, "PREPARE_RECEIVE 发送失败", e);
                     if (sPendingCallback != null) sPendingCallback.onError("信令发送失败: " + e.getMessage());
                     clearPendingData();
                 });
@@ -93,7 +88,7 @@ public class PhoneSyncFileTransferManager {
         // 5. 启动超时计时器
         MAIN_HANDLER.postDelayed(() -> {
             if (sPendingFileUri != null) {
-                PhoneLog.w(TAG, "⏰ 等待手表 ACK 超时(10s)，取消传输");
+                Log.w(TAG, "等待手表 ACK 超时(10s)，取消传输");
                 if (sPendingCallback != null) sPendingCallback.onError("手表响应超时");
                 clearPendingData();
             }
@@ -106,10 +101,10 @@ public class PhoneSyncFileTransferManager {
     public static void onWearReadyToReceive() {
         // 收到ACK，取消超时计时器
         MAIN_HANDLER.removeCallbacksAndMessages(null);
-        PhoneLog.d(TAG, "🚀 收到手表准备就绪信号，开始传输文件...");
+        Log.d(TAG, "收到手表准备就绪信号，开始传输文件...");
 
         if (sPendingFileUri == null || sPendingNodeId == null) {
-            PhoneLog.w(TAG, "⚠️ 收到就绪信号，但无待传输任务");
+            Log.w(TAG, "收到就绪信号，但无待传输任务");
             return;
         }
 
@@ -119,7 +114,7 @@ public class PhoneSyncFileTransferManager {
         serviceIntent.putExtra(PhoneSyncFileTransferService.EXTRA_NODE_ID, sPendingNodeId);
         serviceIntent.putExtra(PhoneSyncFileTransferService.EXTRA_FILE_URI, sPendingFileUri);
         serviceIntent.putExtra(PhoneSyncFileTransferService.EXTRA_FILE_NAME, sPendingFileName);
-        
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             sAppContext.startForegroundService(serviceIntent);
         } else {

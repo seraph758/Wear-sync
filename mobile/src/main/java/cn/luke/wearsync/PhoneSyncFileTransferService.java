@@ -1,239 +1,265 @@
-package cn.luke.wearsync; // 请根据你的实际包名修改
+package cn.luke.wearsync;
 
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.app.Service;
-import android.content.ContentResolver;
+import android.content.Context;
 import android.content.Intent;
-import android.content.pm.ServiceInfo;
-import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
 import android.os.IBinder;
-import android.provider.OpenableColumns;
 import android.util.Log;
 
-import androidx.annotation.Nullable;
+import androidx.annotation.NonNull;
 import androidx.core.app.NotificationCompat;
 
 import com.google.android.gms.tasks.Tasks;
 import com.google.android.gms.wearable.Channel;
+import com.google.android.gms.wearable.ChannelClient;
+import com.google.android.gms.wearable.Node;
 import com.google.android.gms.wearable.Wearable;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.URLEncoder;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.function.Consumer;
 
 public class PhoneSyncFileTransferService extends Service {
 
-    private static final String TAG = "FileTransferService";
-    private static final String CHANNEL_ID = "file_transfer_channel";
-    private static final int NOTIFICATION_ID = 1;
+    private static final String TAG = "WearSyncFileTransferService";
+    private static final String CHANNEL_ID = "transfer_channel";
+    private static final int NOTIFICATION_ID = 2;
 
-    private static final String ACTION_ADD_TRANSFER = "ACTION_ADD_TRANSFER";
-    private static final String ACTION_CANCEL_TRANSFER = "ACTION_CANCEL_TRANSFER";
-
-    private static final String EXTRA_NODE_ID = "extra_node_id";
-    private static final String EXTRA_FILE_URI = "extra_file_uri";
-    private static final String EXTRA_FILE_NAME = "extra_file_name";
-    private static final String EXTRA_ITEM_ID = "extra_item_id";
+    // --- 必须公开，供 Manager 调用 ---
+    public static final String ACTION_ADD_TRANSFER = "cn.luke.wearsync.action.ADD_TRANSFER";
+    public static final String EXTRA_NODE_ID = "extra_node_id";
+    public static final String EXTRA_FILE_URI = "extra_file_uri";
+    public static final String EXTRA_FILE_NAME = "extra_file_name";
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
-    private boolean isProcessing = false;
-
-    @Nullable
-    @Override
-    public IBinder onBind(Intent intent) {
-        return null;
-    }
+    private final TransferRepository repository = TransferRepository.getInstance();
 
     @Override
     public void onCreate() {
         super.onCreate();
         createNotificationChannel();
+        startForeground(NOTIFICATION_ID, buildNotification("服务已启动"));
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent == null) return START_NOT_STICKY;
-
-        String action = intent.getAction();
-        if (ACTION_CANCEL_TRANSFER.equals(action)) {
-            String id = intent.getStringExtra(EXTRA_ITEM_ID);
-            if (id != null) {
-                TransferRepository.getInstance().removeItem(id);
-            }
-        } else if (ACTION_ADD_TRANSFER.equals(action)) {
-            Uri uri = intent.getParcelableExtra(EXTRA_FILE_URI);
-            String fileName = intent.getStringExtra(EXTRA_FILE_NAME);
+        if (intent != null && ACTION_ADD_TRANSFER.equals(intent.getAction())) {
             String nodeId = intent.getStringExtra(EXTRA_NODE_ID);
+            Uri fileUri = intent.getParcelableExtra(EXTRA_FILE_URI);
+            String fileName = intent.getStringExtra(EXTRA_FILE_NAME);
 
-            if (uri != null && nodeId != null) {
-                if (fileName == null) fileName = "unknown_file";
-
-                TransferItem newItem = new TransferItem(
-                        UUID.randomUUID().toString(),
-                        nodeId,
-                        uri,
-                        fileName
-                );
-                TransferRepository.getInstance().addItem(newItem);
-                startProcessing();
+            if (nodeId != null && fileUri != null && fileName != null) {
+                TransferItem item = new TransferItem(UUID.randomUUID().toString(), nodeId, fileUri, fileName, 0);
+                repository.addItem(item);
+                executor.submit(this::processQueue);
             }
         }
-        return START_NOT_STICKY;
+        return START_STICKY;
     }
 
-    private void startProcessing() {
-        if (isProcessing) return;
-        isProcessing = true;
-
-        Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("文件正在传输")
-                .setContentText("正在处理队列...")
-                .setSmallIcon(android.R.drawable.stat_sys_download) // 替换为你自己的图标
-                .setOngoing(true)
-                .build();
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
-        } else {
-            startForeground(NOTIFICATION_ID, notification);
-        }
-
-        executor.submit(this::processQueue);
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        executor.shutdownNow();
     }
+
+    @Override
+    public IBinder onBind(Intent intent) {
+        return null;
+    }
+
+    // --- 核心逻辑 ---
 
     private void processQueue() {
-        try {
-            while (true) {
-                List<TransferItem> queue = TransferRepository.getInstance().getQueue();
-                TransferItem nextItem = null;
-                for (TransferItem item : queue) {
-                    if (item.getStatus() == TransferStatus.PENDING) {
-                        nextItem = item;
-                        break;
-                    }
-                }
-
-                if (nextItem == null) {
-                    isProcessing = false;
-                    stopForeground(STOP_FOREGROUND_DETACH);
-                    stopSelf();
+        while (true) {
+            TransferItem item = null;
+            List<TransferItem> queue = repository.getQueue();
+            for (TransferItem i : queue) {
+                if (i.getStatus() == TransferStatus.PENDING) {
+                    item = i;
                     break;
                 }
-
-                processItem(nextItem);
             }
-        } catch (Exception e) {
-            Log.e(TAG, "队列处理出错", e);
+
+            if (item == null) {
+                // 队列空了或没有待处理任务
+                stopSelf();
+                return;
+            }
+
+            processItem(item);
         }
     }
 
     private void processItem(TransferItem item) {
+        repository.updateItem(item.getId(), it -> it.setStatus(TransferStatus.SENDING));
+        startForeground(NOTIFICATION_ID, buildNotification("正在发送: " + item.getFileName()));
+
         try {
-            // 1. 更新状态为发送中
-            TransferRepository.getInstance().updateItem(item.getId(), it -> {
-                it.setStatus(TransferStatus.SENDING);
-                return it;
-            });
+            // 1. 找到节点
+            Node node = Tasks.await(Wearable.getNodeClient(this).getConnectedNodes())
+                    .stream()
+                    .filter(n -> n.getId().equals(item.getNodeId()))
+                    .findFirst()
+                    .orElse(null);
 
-            // 2. 获取文件大小
-            long totalSize = getFileSize(item.getUri());
+            if (node == null) throw new IOException("Node not found");
 
-            // 3. 打开 Wear OS 通道
-            String encodedName = URLEncoder.encode(item.getFileName(), "UTF-8");
-            String path = "/wear-sync/file-transfer/" + totalSize + "/" + encodedName;
-            Channel channel = Tasks.await(Wearable.getChannelClient(this).openChannel(item.getTargetNodeId(), path));
+            // 2. 打开文件输入流
+            InputStream inputStream = getContentResolver().openInputStream(item.getFileUri());
+            if (inputStream == null) throw new IOException("Cannot open file input stream");
 
-            // 4. 开始流式传输
-            try (InputStream inputStream = getContentResolver().openInputStream(item.getUri());
-                 OutputStream outputStream = Tasks.await(Wearable.getChannelClient(this).getOutputStream(channel))) {
+            // 3. 打开 Wearable 通道
+            ChannelClient.Channel channel = Tasks.await(Wearable.getChannelClient(this)
+                    .openChannel(node.getId(), "/wear-universal-sync/file-transfer"));
 
-                if (inputStream == null) throw new Exception("无法打开源文件");
-
-                byte[] buffer = new byte[32768]; // 32KB 缓冲区
-                long bytesWritten = 0;
-                long lastUpdate = 0;
+            // 4. 获取输出流并传输
+            try (OutputStream outputStream = Tasks.await(Wearable.getChannelClient(this).getOutputStream(channel))) {
+                byte[] buffer = new byte[4096];
                 int len;
+                long totalRead = 0;
 
                 while ((len = inputStream.read(buffer)) != -1) {
-                    // 检查任务是否被取消
-                    boolean isCancelled = TransferRepository.getInstance().getQueue().stream()
-                            .noneMatch(i -> i.getId().equals(item.getId()));
-                    if (isCancelled) throw new Exception("传输已取消");
+                    // 检查是否被取消
+                    boolean isCancelled = repository.getQueue().stream()
+                            .anyMatch(i -> i.getId().equals(item.getId()) && i.getStatus() == TransferStatus.CANCELLED);
+                    if (isCancelled) break;
 
                     outputStream.write(buffer, 0, len);
-                    bytesWritten += len;
-
-                    // 更新进度
-                    long now = System.currentTimeMillis();
-                    if (now - lastUpdate > 300) {
-                        int progress = totalSize > 0 ? (int) ((bytesWritten * 100) / totalSize) : 0;
-                        final int finalProgress = progress;
-                        TransferRepository.getInstance().updateItem(item.getId(), it -> {
-                            it.setProgress(finalProgress);
-                            return it;
-                        });
-                        lastUpdate = now;
-                    }
+                    totalRead += len;
+                    
+                    // 更新进度 (简单计算)
+                    int progress = (int) ((totalRead * 100) / (item.getFileSize() > 0 ? item.getFileSize() : totalRead));
+                    final int finalProgress = Math.min(progress, 100);
+                    repository.updateItem(item.getId(), it -> it.setProgress(finalProgress));
                 }
                 outputStream.flush();
-            } finally {
-                // 5. 关闭通道
-                try {
-                    Tasks.await(Wearable.getChannelClient(this).close(channel));
-                } catch (Exception e) {
-                    Log.w(TAG, "关闭通道时出错", e);
-                }
             }
 
-            // 6. 传输完成
-            TransferRepository.getInstance().updateItem(item.getId(), it -> {
-                it.setStatus(TransferStatus.SUCCESS);
-                it.setProgress(100);
-                return it;
-            });
+            // 5. 关闭通道
+            Tasks.await(Wearable.getChannelClient(this).close(channel));
+            inputStream.close();
+
+            // 6. 完成
+            boolean isCancelled = repository.getQueue().stream()
+                    .anyMatch(i -> i.getId().equals(item.getId()) && i.getStatus() == TransferStatus.CANCELLED);
+
+            if (isCancelled) {
+                repository.updateItem(item.getId(), it -> it.setStatus(TransferStatus.CANCELLED));
+            } else {
+                repository.updateItem(item.getId(), it -> it.setStatus(TransferStatus.SUCCESS));
+            }
+            repository.removeItem(item.getId());
 
         } catch (Exception e) {
-            Log.e(TAG, "传输文件失败: " + item.getFileName(), e);
-            TransferRepository.getInstance().updateItem(item.getId(), it -> {
-                it.setStatus(TransferStatus.ERROR);
-                return it;
-            });
+            Log.e(TAG, "传输失败", e);
+            repository.updateItem(item.getId(), it -> it.setStatus(TransferStatus.ERROR));
+            // 失败不移除，或者根据需求移除
         }
     }
 
-    private long getFileSize(Uri uri) {
-        long size = -1;
-        try (Cursor cursor = getContentResolver().query(uri, null, null, null, null)) {
-            if (cursor != null && cursor.moveToFirst()) {
-                int sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE);
-                if (sizeIndex != -1) {
-                    size = cursor.getLong(sizeIndex);
-                }
-            }
-        } catch (Exception e) {
-            Log.w(TAG, "获取文件大小失败", e);
-        }
-        return size;
-    }
+    // --- 辅助方法 ---
 
     private void createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel channel = new NotificationChannel(
-                    CHANNEL_ID,
-                    "文件传输",
-                    NotificationManager.IMPORTANCE_LOW
-            );
+            NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "文件传输服务", NotificationManager.IMPORTANCE_LOW);
             NotificationManager manager = getSystemService(NotificationManager.class);
-            if (manager != null) {
-                manager.createNotificationChannel(channel);
+            if (manager != null) manager.createNotificationChannel(channel);
+        }
+    }
+
+    private Notification buildNotification(String text) {
+        return new NotificationCompat.Builder(this, CHANNEL_ID)
+                .setContentTitle("Wear 文件同步")
+                .setContentText(text)
+                .setSmallIcon(android.R.drawable.stat_sys_download)
+                .setOngoing(true)
+                .build();
+    }
+
+    // ==========================================
+    // 内部类：TransferStatus (枚举)
+    // ==========================================
+    public enum TransferStatus {
+        PENDING, SENDING, SUCCESS, ERROR, CANCELLED
+    }
+
+    // ==========================================
+    // 内部类：TransferItem (数据模型)
+    // ==========================================
+    public static class TransferItem {
+        private final String id;
+        private final String nodeId;
+        private final Uri fileUri;
+        private final String fileName;
+        private final long fileSize;
+        private TransferStatus status;
+        private int progress;
+
+        public TransferItem(String id, String nodeId, Uri fileUri, String fileName, long fileSize) {
+            this.id = id;
+            this.nodeId = nodeId;
+            this.fileUri = fileUri;
+            this.fileName = fileName;
+            this.fileSize = fileSize;
+            this.status = TransferStatus.PENDING;
+            this.progress = 0;
+        }
+
+        public String getId() { return id; }
+        public String getNodeId() { return nodeId; }
+        public Uri getFileUri() { return fileUri; }
+        public String getFileName() { return fileName; }
+        public long getFileSize() { return fileSize; }
+        public TransferStatus getStatus() { return status; }
+        public void setStatus(TransferStatus status) { this.status = status; }
+        public int getProgress() { return progress; }
+        public void setProgress(int progress) { this.progress = progress; }
+    }
+
+    // ==========================================
+    // 内部类：TransferRepository (单例仓库)
+    // ==========================================
+    private static class TransferRepository {
+        private static volatile TransferRepository instance;
+        private final List<TransferItem> queue = new CopyOnWriteArrayList<>();
+
+        private TransferRepository() {}
+
+        public static TransferRepository getInstance() {
+            if (instance == null) {
+                synchronized (TransferRepository.class) {
+                    if (instance == null) instance = new TransferRepository();
+                }
+            }
+            return instance;
+        }
+
+        public void addItem(TransferItem item) { queue.add(item); }
+        public void removeItem(String id) { queue.removeIf(item -> item.getId().equals(id)); }
+        public List<TransferItem> getQueue() { return Collections.unmodifiableList(queue); }
+        
+        public void updateItem(String id, Consumer<TransferItem> updater) {
+            for (TransferItem item : queue) {
+                if (item.getId().equals(id)) {
+                    updater.accept(item);
+                    break;
+                }
             }
         }
     }

@@ -140,13 +140,13 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 8661,
-          "line": 240
+          "index": 9966,
+          "line": 266
         },
         "start": {
           "column": 0,
-          "index": 8661,
-          "line": 240
+          "index": 9966,
+          "line": 266
         }
       }
     },
@@ -181,5 +181,5 @@
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncListenerService.java"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncFileTransferService.java"
 }
