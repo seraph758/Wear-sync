@@ -1,7 +1,5 @@
 plugins {
     id 'com.android.application'
-    id 'org.jetbrains.kotlin.android'
-    // ✅ AGP 8.10+ / Kotlin 2.4+ 时代的 Compose 编译器插件
     id 'org.jetbrains.kotlin.plugin.compose'
 }
 
@@ -75,8 +73,11 @@ android {
         coreLibraryDesugaringEnabled = true
     }
 
-    kotlinOptions {
-        jvmTarget = '22'
+    // ✅ 新版 AGP 9.0+ 适用的 Kotlin 全局配置写法（替代了旧的 kotlinOptions）
+    kotlin {
+        compilerOptions {
+            jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_22
+        }
     }
 
     buildFeatures {
@@ -86,12 +87,7 @@ android {
     }
 }
 
-// ========================================================
-// ❌ 彻底删除了原先所有的 kotlin { jvmToolchain(21) } 块与环境判断逻辑！
-// 不再依赖任何 Foojay 联网下载工具，直接使用系统或 AndroidIDE 默认提供的本地 JDK 21 环境。
-// ========================================================
-
-// ✅ 保持 Java 编译器的预览特性开启（让手机端 Java 代码也能顺利识别下划线 _ 语法）
+// ✅ 保持 Java 编译器参数稳定
 tasks.withType(JavaCompile).configureEach {
     options.compilerArgs += [
         '-Xlint:deprecation', 
@@ -100,11 +96,9 @@ tasks.withType(JavaCompile).configureEach {
     options.deprecation = true
 }
 
+// ✅ 适配 Kotlin 2.x + AGP 9.x 的编译器参数追加
 tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
-    compilerOptions {
-        // 允许 Kotlin 编译器在混编环境中稳定对齐 JDK 21 预览特性
-        freeCompilerArgs.add("-Xjdk-release=22")
-    }
+    compilerOptions.freeCompilerArgs.add("-Xjdk-release=22")
 }
 
 dependencies {
