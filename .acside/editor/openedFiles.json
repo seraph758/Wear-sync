@@ -49,14 +49,14 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncListenerService.java",
       "selection": {
         "end": {
-          "column": 0,
-          "index": 4519,
-          "line": 140
+          "column": 32,
+          "index": 3269,
+          "line": 96
         },
         "start": {
-          "column": 0,
-          "index": 4519,
-          "line": 140
+          "column": 32,
+          "index": 3269,
+          "line": 96
         }
       }
     },
@@ -76,5 +76,5 @@
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncDndManager.java"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncListenerService.java"
 }

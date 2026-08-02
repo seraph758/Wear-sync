@@ -94,7 +94,8 @@ public void onMessageReceived(@NonNull MessageEvent messageEvent) {
         switch (type.toLowerCase()) {
 
             case "dnd":
-                handleDnd(json);
+                String source = json.optString("sender", "");
+                handleDnd(json, source);
                 break;
 
             case "alarm":
