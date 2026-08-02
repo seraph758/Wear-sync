@@ -997,6 +997,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
             } 
         } 
     } 
+    
 
     override fun onResume() {
         super.onResume()

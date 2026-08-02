@@ -80,7 +80,6 @@ android {
 // ✅ 核心修复：显式开启 Java 预览特性，确保支持 Java 22 的下划线（_）等新语法
 tasks.withType(JavaCompile).configureEach {
     options.compilerArgs += [
-        '--enable-preview',          // 👈 必须开启预览特性
         '--release', '22',           // 👈 锁定 release 级别为 22
         '-Xlint:deprecation', 
         '-Xlint:unchecked',
@@ -114,4 +113,8 @@ dependencies {
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.2.1'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.6.1'
+    
+    // ✅ 新增：解决 Theme.MaterialComponents.NoActionBar not found
+    implementation 'com.google.android.material:material:1.9.0'
+
 }
