@@ -127,7 +127,7 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
             boolean hasDnd = nm.isNotificationPolicyAccessGranted();
             WearLog.d(TAG, "🌓 [系统权限检索] 📋 勿扰模式(DND/系统通知)权限最新状态: 【" + (hasDnd ? "已授权/TRUE" : "未授权/FALSE") + "】");
             // ✅ 2. 添加 (CharSequence) 强制转换以消除 setSummary 警告
-            dndPref.setSummary((CharSequence) (hasDnd ? getString(R.string.dnd_granted) : getString(R.string.dnd_denied)));
+            dndPref.setSummary(hasDnd ? getString(R.string.dnd_granted) : getString(R.string.dnd_denied));
         } else {
             WearLog.w(TAG, "⚠️ [系统权限检索] 边缘跳过：dndPref 或 NotificationManager 实体不存续。");
         }
@@ -137,7 +137,7 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
         WearLog.d(TAG, "♿ [系统权限检索] 📋 无障碍辅助功能服务实时活体状态: 【" + (hasAccessibility ? "服务已激活/TRUE" : "服务死亡/FALSE") + "】");
         if (accPref != null) {
             // ✅ 2. 添加 (CharSequence) 强制转换以消除 setSummary 警告
-            accPref.setSummary((CharSequence) (hasAccessibility ? getString(R.string.acc_activated) : getString(R.string.acc_deactivated)));
+            accPref.setSummary(hasAccessibility ? getString(R.string.acc_activated) : getString(R.string.acc_deactivated));
         }
     }
 
@@ -227,7 +227,7 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
     private void updateConnectionUI(boolean connected) {
         if (connectivityPref != null) {
             // ✅ 2. 添加 (CharSequence) 强制转换以消除 setSummary 警告
-            connectivityPref.setSummary((CharSequence) (connected ? getString(R.string.connectivity_connected) : getString(R.string.connectivity_disconnected)));
+            connectivityPref.setSummary(connected ? getString(R.string.connectivity_connected) : getString(R.string.connectivity_disconnected));
             WearLog.w(TAG, "📡 [UI渲染变更] ─── 联络链路状态突变探查 ➔ 在线=[" + connected + "] ───");
         } else {
             WearLog.e(TAG, "❌ [UI渲染失败] 试图将联络状态 [" + connected + "] 推送至卡面，但 connectivityPref 组件尚未加载，数据流丢失！");

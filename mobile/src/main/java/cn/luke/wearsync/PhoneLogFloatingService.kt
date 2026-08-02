@@ -76,7 +76,7 @@ class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
 
-        windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         val layoutType = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
         windowParams = WindowManager.LayoutParams(
             1000, 900, layoutType,

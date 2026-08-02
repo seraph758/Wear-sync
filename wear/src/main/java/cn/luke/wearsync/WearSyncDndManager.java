@@ -29,7 +29,7 @@ public class WearSyncDndManager {
     private static boolean isPowerSaveLinkageOpen = true;
     
     // 用于防止内部更新导致的循环触发
-    private static volatile boolean isInternalUpdate = false;
+    private static final boolean isInternalUpdate = false;
 
     /**
      * 这个方法是由 WearSyncCommManager 调用的

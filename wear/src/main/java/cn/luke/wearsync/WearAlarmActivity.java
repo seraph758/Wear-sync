@@ -50,7 +50,7 @@ public class WearAlarmActivity extends ComponentActivity {
         WearLog.d(TAG, "🎬 onCreate: 手表闹钟接管界面启动");
         
         // 保持屏幕常亮 1 分钟
-        screenManager.wakeForSync(1 * 60 * 1000L);
+        screenManager.wakeForSync(60 * 1000L);
         
         setContentView(R.layout.activity_wear_alarm);
         tvAlarmDay = findViewById(R.id.tv_alarm_day);

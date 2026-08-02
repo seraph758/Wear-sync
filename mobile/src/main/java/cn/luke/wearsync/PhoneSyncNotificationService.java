@@ -24,7 +24,7 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
     private static final long REMOTE_ACTION_WINDOW_MS = 3000;
 
     // ⏳ 用于防止系统闹钟“闪现”通知的防抖机制
-    private static volatile long lastAlarmPackageMatchTime = 0;
+    private static final long lastAlarmPackageMatchTime = 0;
     private static final long ALARM_DEBOUNCE_MS = 3000;
 
     /**

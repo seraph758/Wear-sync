@@ -64,7 +64,7 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
         if (pm != null) {
             // 注意：FULL_WAKE_LOCK 已过时，但目前为了编译通过先保留，后续建议改为 FLAG_KEEP_SCREEN_ON
             wakeLock = pm.newWakeLock(PowerManager.FULL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP, "WearSync:CameraWakeLock");
-            wakeLock.acquire(1 * 60 * 1000L);
+            wakeLock.acquire(60 * 1000L);
             WearLog.d(TAG, "🔋 WakeLock acquired for 1 mins");
         }
         setContentView(R.layout.activity_wear_camera);
