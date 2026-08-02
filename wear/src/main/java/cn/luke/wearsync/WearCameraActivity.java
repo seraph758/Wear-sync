@@ -114,7 +114,7 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
             }
         }
     }
-     public void feedH264Data(byte[] h264Data) {
+    public void feedH264Data(byte[] h264Data) {
         if (h264Data != null && h264Data.length > 0) {
             frameQueue.offer(h264Data);
         }

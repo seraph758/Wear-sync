@@ -13,6 +13,8 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.DataInputStream;
+import java.io.EOFException;
 import java.nio.charset.StandardCharsets;
 import org.json.JSONObject;
 import android.net.Uri;
@@ -361,7 +363,7 @@ public class WearSyncListenerService extends WearableListenerService {
                     // ④ 纯净 H.264 数据直接入队，不再需要 feedH264Data 做二次拷贝/跳头
                     WearCameraActivity activity = WearCameraActivity.sActivityRef.get();
                     if (activity != null) {
-                        activity.frameQueue.offer(h264Data);
+                        activity.feedH264Data(h264Data);
                     } else {
                         WearLog.w(TAG, "CAM-W014 Activity null, dropping frame");
                     }
