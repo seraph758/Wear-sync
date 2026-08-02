@@ -45,23 +45,11 @@ public class PhoneSyncRemoteCameraActivity extends ComponentActivity {
     }
 
     private void startCameraServiceAndFinish() {
-        // 1. 从全局状态管理器中获取已缓存的节点 ID
-        String nodeId = WearSyncState.getNodeId(this);
-
-        if (nodeId == null) {
-            Log.e(TAG, "无法从缓存中获取手表节点 ID，请确保 PhoneConnectionManager 已初始化且手表已连接。");
-            finish();
-            return;
-        }
-
-        Log.d(TAG, "从缓存中成功获取目标手表节点 ID: " + nodeId);
-
-        // 2. 启动服务并传递节点 ID
+        // ✅ 不再读取和传递 nodeId，仅做权限检查和启动服务
         Intent serviceIntent = new Intent(this, PhoneSyncCameraService.class);
         serviceIntent.setAction(PhoneSyncCameraService.ACTION_START_CAMERA);
-        serviceIntent.putExtra(PhoneSyncCameraService.EXTRA_NODE_ID, nodeId);
-        
         startForegroundService(serviceIntent);
         finish();
     }
+
 }

@@ -83,21 +83,41 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
         createNotificationChannel();
         startForeground(NOTIFICATION_ID, buildNotification());
     }
-
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent == null) return START_NOT_STICKY;
-
-        String action = intent.getAction();
-        if (ACTION_START_CAMERA.equals(action)) {
-            String nodeId = intent.getStringExtra(EXTRA_NODE_ID);
-            startStreaming(nodeId);
-        } else if (ACTION_STOP_CAMERA.equals(action)) {
-            stopStreaming();
-            stopSelf();
+        if (ACTION_START_CAMERA.equals(intent.getAction())) {
+            // ✅ 优先从 State 读取（与日志模块保持一致）
+            String nodeId = WearSyncState.getNodeId(this);
+            
+            if (nodeId != null) {
+                PhoneLog.d(TAG, "✅ 从 State 命中缓存节点: " + nodeId);
+                initCameraAndStream(nodeId);
+            } else {
+                // ✅ State 为空时，采用与手表端相同的异步兜底策略
+                PhoneLog.w(TAG, "⚠️ State 无缓存，启动异步节点发现...");
+                Wearable.getCapabilityClient(this)
+                    .getCapability("wear_sync", CapabilityClient.FILTER_REACHABLE)
+                    .addOnSuccessListener(capabilityInfo -> {
+                        if (!capabilityInfo.getNodes().isEmpty()) {
+                            String fallbackNodeId = capabilityInfo.getNodes().iterator().next().getId();
+                            // 顺便补写 State，避免下次再查
+                            WearSyncState.setNodeId(this, fallbackNodeId);
+                            PhoneLog.d(TAG, "✅ 异步兜底获取节点成功: " + fallbackNodeId);
+                            initCameraAndStream(fallbackNodeId);
+                        } else {
+                            PhoneLog.e(TAG, "❌ 异步兜底也未找到可达节点");
+                            stopSelf();
+                        }
+                    })
+                    .addOnFailureListener(e -> {
+                        PhoneLog.e(TAG, "❌ 异步兜底查询失败", e);
+                        stopSelf();
+                    });
+            }
         }
-        return START_NOT_STICKY;
+        return START_STICKY;
     }
+
 
     @Override
     public void onDestroy() {
