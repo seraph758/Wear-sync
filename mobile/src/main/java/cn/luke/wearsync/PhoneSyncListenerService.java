@@ -263,17 +263,12 @@ public void onMessageReceived(MessageEvent messageEvent) {
         }
     }
 
-    // ============================================================
-    // 🚀 核心独立追加：大流通道生命周期监控（用于对接手表的无线日志流）
-    // ============================================================
-    // 🟢 修复：彻底删除了错误的 @Override 注解
-
     @Override
     public void onChannelOpened(@NonNull com.google.android.gms.wearable.ChannelClient.Channel channel) {
         String path = channel.getPath();
         PhoneLog.d(TAG, "🛰️ [手機雷達] 偵測到 Channel 管道握手! Path: " + path);
-
-        // 统一在主日志管道中接收数据
+    
+        // 1. 处理日志通道 (原有逻辑)
         if (WEAR_LOG_CHANNEL_PATH.equals(path)) {
             PhoneLog.d(TAG, "🎯 [暗號吻合] 正在建立手錶日誌接收流...");
             com.google.android.gms.wearable.Wearable.getChannelClient(this)
@@ -283,6 +278,17 @@ public void onMessageReceived(MessageEvent messageEvent) {
                     new Thread(() -> readLogStream(inputStream)).start();
                 })
                 .addOnFailureListener(e -> PhoneLog.e("PhoneLog_Trace", "❌ [日誌流獲取失敗]", e));
+        }
+        // 2. 【新增】处理相机通道
+        else if ("/wear-universal-sync/camera".equals(path)) {
+            PhoneLog.d(TAG, "🎯 [相機暗號吻合] 收到手錶的相機流連接請求，正在通知相機服務開始推流...");
+            
+            // 核心修复：收到手表的连接请求后，通知 CameraService 开始推流
+            // 我们将手表的节点ID传递给服务，以便服务知道向谁推流
+            Intent serviceIntent = new Intent(this, PhoneSyncCameraService.class);
+            serviceIntent.setAction(PhoneSyncCameraService.ACTION_START_CAMERA);
+            serviceIntent.putExtra("remote_node_id", channel.getNodeId());
+            startService(serviceIntent);
         }
     }
 

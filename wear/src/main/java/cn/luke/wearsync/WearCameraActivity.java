@@ -114,17 +114,12 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
             }
         }
     }
-    public void feedH264Data(byte[] frame, int length) {
-            // 创建一个精确长度的新数组，避免传递 buffer 中的无效数据
-               // 【新增】防止在解码器初始化前传入数据
-            if (mDecoder == null) {
-                return;
-            }
-            byte[] frameCopy = new byte[length];
-            System.arraycopy(frame, 0, frameCopy, 0, length);
-            // 将数据帧放入队列，等待解码线程处理
-            frameQueue.offer(frameCopy);
+     public void feedH264Data(byte[] h264Data) {
+        if (h264Data != null && h264Data.length > 0) {
+            frameQueue.offer(h264Data);
         }
+    }
+
     private void startDecoderThread() {
         renderThread = new Thread(() -> {
             while (!Thread.currentThread().isInterrupted()) {

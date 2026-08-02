@@ -33,6 +33,9 @@ public class WearSyncListenerService extends WearableListenerService {
     private static final String TAG = "WearSync_WearListener";
     private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
     private static final String DATA_CHANNEL_BASE_PATH = "/wear_data_channel";
+    private static final String SIGNAL_BASE_PATH = "/wear-universal-sync";
+    private static final String CAMERA_DATA_PATH = SIGNAL_BASE_PATH + "/camera"; // 最终路径: /wear-universal-sync/camera
+
 
     private static final String CAMERA_PREVIEW_STREAM_PATH = DATA_CHANNEL_BASE_PATH + "/camera";
     private ChannelClient.Channel mLogChannel;
@@ -315,37 +318,62 @@ public class WearSyncListenerService extends WearableListenerService {
 
     @Override
     public void onChannelClosed(@NonNull ChannelClient.Channel channel, int closeReason, int appSpecificErrorCode) {
-        WearLog.d(TAG, "CAM-W004C closed path=" + channel.getPath() + " reason=" + closeReason);
-    }
-
-    private void readH264ChannelStream(ChannelClient.Channel channel) {
+            WearLog.d(TAG, "CAM-W004C closed path=" + channel.getPath() + " reason=" + closeReason);
+        }
+    
+        private void readH264ChannelStream(ChannelClient.Channel channel) {
         new Thread(() -> {
             WearLog.d(TAG, "CAM-W010 Start H264 reader thread");
-            try (InputStream is = Tasks.await(Wearable.getChannelClient(this).getInputStream(channel))) {
-
-                WearLog.d(TAG, "CAM-W011 InputStream ready");
-                byte[] buffer = new byte[40960];
+            try (DataInputStream dis = new DataInputStream(
+                    Tasks.await(Wearable.getChannelClient(this).getInputStream(channel)))) {
+    
+                WearLog.d(TAG, "CAM-W011 DataInputStream ready");
                 long totalBytes = 0;
                 int frameCount = 0;
-                while (true) {
-                    int length = is.read(buffer);
-                    if(length <= 0){ continue; }
-                    totalBytes += length;
+    
+                while (!Thread.currentThread().isInterrupted()) {
+                    // ① 精确读取 4B 帧长度
+                    int frameLen = dis.readInt();
+                    
+                    // 合理性校验，防止异常数据导致 OOM
+                    if (frameLen <= 0 || frameLen > 4 * 1024 * 1024) {
+                        WearLog.e(TAG, "❌ 异常帧长度: " + frameLen + "，断开连接");
+                        break;
+                    }
+    
+                    // ② 精确读取 8B 时间戳 + 4B Flags（共12B）
+                    long timestamp = dis.readLong();
+                    int flags = dis.readInt();
+    
+                    // ③ 精确读满这一帧的 H.264 数据
+                    byte[] h264Data = new byte[frameLen];
+                    dis.readFully(h264Data); // ✅ 保证读满 frameLen 字节才返回
+    
+                    totalBytes += frameLen + 16;
                     frameCount++;
-                    if(frameCount == 1){ WearLog.d(TAG, "CAM-W012 FIRST DATA length=" + length); }
-                    if(frameCount % 50 == 0){ WearLog.d(TAG, "CAM-W013 frames=" + frameCount +" bytes=" + totalBytes); }
+                    if (frameCount == 1) {
+                        WearLog.d(TAG, "✅ FIRST FRAME len=" + frameLen + " ts=" + timestamp);
+                    }
+                    if (frameCount % 50 == 0) {
+                        WearLog.d(TAG, "📊 frames=" + frameCount + " bytes=" + totalBytes);
+                    }
+    
+                    // ④ 纯净 H.264 数据直接入队，不再需要 feedH264Data 做二次拷贝/跳头
                     WearCameraActivity activity = WearCameraActivity.sActivityRef.get();
-                    if(activity == null){ WearLog.w(TAG, "CAM-W014 Activity null"); continue; }
-                    byte[] frame = new byte[length];
-                    System.arraycopy(buffer, 0, frame, 0, length);
-                    activity.feedH264Data(frame, length);
+                    if (activity != null) {
+                        activity.frameQueue.offer(h264Data);
+                    } else {
+                        WearLog.w(TAG, "CAM-W014 Activity null, dropping frame");
+                    }
                 }
-            } catch(Exception e){
+            } catch (EOFException e) {
+                WearLog.d(TAG, "📡 Channel 正常关闭");
+            } catch (Exception e) {
                 WearLog.e(TAG, "CAM-W015 H264 reader error", e);
             }
-        }).start();
+        }, "CameraStreamReader").start();
     }
-    
+
         /**
      * 核心方法：从已建立的Channel中接收文件流并保存到本地
      * 此方法应在后台线程中调用

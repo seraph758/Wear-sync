@@ -1,32 +1,77 @@
 {
   "allFiles": [
     {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncMainFragment.kt",
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncListenerService.java",
       "selection": {
         "end": {
-          "column": 41,
-          "index": 41481,
-          "line": 669
+          "column": 5,
+          "index": 17058,
+          "line": 374
         },
         "start": {
-          "column": 44,
-          "index": 36681,
-          "line": 612
+          "column": 100,
+          "index": 14744,
+          "line": 320
         }
       }
     },
     {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncRemoteCameraActivity.java",
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearCameraActivity.java",
+      "selection": {
+        "end": {
+          "column": 5,
+          "index": 5078,
+          "line": 120
+        },
+        "start": {
+          "column": 5,
+          "index": 5078,
+          "line": 120
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncMainFragment.java",
+      "selection": {
+        "end": {
+          "column": 5,
+          "index": 4863,
+          "line": 104
+        },
+        "start": {
+          "column": 8,
+          "index": 2970,
+          "line": 68
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncCommManager.java",
       "selection": {
         "end": {
           "column": 0,
-          "index": 2180,
-          "line": 60
+          "index": 7077,
+          "line": 184
         },
         "start": {
-          "column": 0,
-          "index": 2180,
-          "line": 60
+          "column": 5,
+          "index": 6442,
+          "line": 169
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncListenerService.java",
+      "selection": {
+        "end": {
+          "column": 9,
+          "index": 9941,
+          "line": 280
+        },
+        "start": {
+          "column": 9,
+          "index": 9941,
+          "line": 280
         }
       }
     },
@@ -35,16 +80,16 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 4227,
-          "line": 117
+          "index": 11256,
+          "line": 269
         },
         "start": {
           "column": 0,
-          "index": 4227,
-          "line": 117
+          "index": 11256,
+          "line": 269
         }
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncMainFragment.kt"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearCameraActivity.java"
 }
