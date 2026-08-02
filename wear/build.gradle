@@ -64,31 +64,24 @@ android {
     }
 
     compileOptions {
-        // ✅ 目标平台统一调整为 21
+        // ✅ 目标平台设为 22
         sourceCompatibility JavaVersion.VERSION_22
         targetCompatibility JavaVersion.VERSION_22
         
-        // ✅ 核心开启：允许将高版本语法脱糖翻译给 Wear OS 6 运行
+        // ✅ 核心开启：允许将高版本语法脱糖翻译给低版本 Wear OS 运行
         coreLibraryDesugaringEnabled = true
     }
-
-    // ========================================================
-    // ❌ 彻底删除了原先内部的 java { toolchain { ... } } 块！
-    // ========================================================
 
     buildFeatures {
         viewBinding true 
     }
 }
 
-// ========================================================
-// ❌ 彻底删除了底部的 if (System.getenv("GITHUB_ACTIONS") == "true") 判定块！
-// 手机本地与 GitHub 云端彻底摆脱 Foojay 联网下载工具，直接对齐默认环境。
-// ========================================================
-
-// ✅ 保持 Java 编译器的预览特性开启（让手表端 Java 代码顺利识别下划线 _ 语法）
+// ✅ 核心修复：显式开启 Java 预览特性，确保支持 Java 22 的下划线（_）等新语法
 tasks.withType(JavaCompile).configureEach {
     options.compilerArgs += [
+        '--enable-preview',          // 👈 必须开启预览特性
+        '--release', '22',           // 👈 锁定 release 级别为 22
         '-Xlint:deprecation', 
         '-Xlint:unchecked',
     ]
@@ -97,20 +90,19 @@ tasks.withType(JavaCompile).configureEach {
 
 dependencies {
     // ==================== 核心脱糖依赖 ====================
-    // ✅ 必须引入此库，作为“翻译官”把高版本字节码重写为手表兼容的格式
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'
 
     // ==================== WearOS 专属组件 ====================
     implementation 'androidx.wear:wear:1.3.0'
     implementation 'androidx.wear:wear-remote-interactions:1.2.0'
 
-    // ==================== AndroidX 基础组件 ====================
+    // ==================== AndroidX 基础组件（纯 Java 优化版） ====================
     implementation 'androidx.appcompat:appcompat:1.7.1'
-    implementation 'com.google.android.material:material:1.13.0'
-    // 💡 提示：因为是纯 Java 项目，未来如果不需要这几个组件，可以把 -ktx 后缀去掉以减小包体积
-    implementation 'androidx.preference:preference-ktx:1.2.1' 
     implementation 'androidx.constraintlayout:constraintlayout:2.2.1'
-    implementation 'androidx.core:core-ktx:1.16.0'
+    
+    // ✅ 优化：移除了 -ktx 后缀，改为纯 Java 依赖，防止把 Kotlin 运行时打包进手表导致安装包激增
+    implementation 'androidx.preference:preference:1.2.1' 
+    implementation 'androidx.core:core:1.16.0'
 
     // ==================== Wearable 通讯底层 ====================
     implementation 'com.google.android.gms:play-services-wearable:20.0.1'
