@@ -610,64 +610,83 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                             modifier = Modifier.fillMaxWidth().padding(14.dp),
                                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
-                                            Button(
-                                            modifier = Modifier.weight(1f),
-                                            colors = ButtonDefaults.buttonColors(
-                                                containerColor = if (isCameraAllowedState.value) Color(0xFF2E7D32) else Color(0xFF333333)
-                                            ),
-                                            onClick = {
-                                                // 1. 权限检查
-                                                if (!isCameraAllowedState.value) {
-                                                    requestCameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-                                                    return@Button
-                                                }
-                                        
-                                                // 2. ✅ 直接启动本地 Camera Service（不经过透明窗口）
-                                                val serviceIntent = Intent(context, PhoneSyncCameraService::class.java).apply {
-                                                    action = PhoneSyncCameraService.ACTION_START_CAMERA
-                                                }
-                                                ContextCompat.startForegroundService(context, serviceIntent)
-                                        
-                                                // 3. ✅ 向手表发送启动相机 Activity 的指令
-                                                val nodeId = WearSyncState.getNodeId(context)
-                                                if (!nodeId.isNullOrEmpty()) {
-                                                    Thread {
-                                                        try {
-                                                            val json = JSONObject().apply {
-                                                                put("sender", "phone")
-                                                                put("type", "camera_control")
-                                                                put("action", "open_phone_camera")
-                                                                put("timestamp", System.currentTimeMillis())
-                                                            }
-                                                            Wearable.getMessageClient(context).sendMessage(
-                                                                nodeId,
-                                                                "/wear-universal-sync",
-                                                                json.toString().toByteArray(StandardCharsets.UTF_8)
-                                                            )
-                                                        } catch (_: Exception) {}
-                                                    }.start()
-                                                }
-                                            }
-                                        ) {
-                                            Text("呼叫手表相机", color = Color.White, fontSize = 12.sp)
-                                        }
-                                        Button(
-                                                modifier = Modifier.weight(1f),
-                                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7F1D1D)),
-                                                onClick = {
-                                                    val nodeId = WearSyncState.getNodeId(requireContext())
-                                                    requireContext().startService(Intent(requireContext(), PhoneSyncCameraService::class.java).setAction(PhoneSyncCameraService.ACTION_STOP_CAMERA))
-                                                    if (!nodeId.isNullOrEmpty()) {
-                                                        Thread {
-                                                            try {
-                                                                val json = JSONObject().apply { put("sender", "phone"); put("type", "camera_control"); put("action", "FORCE_QUIT_CAMERA"); put("timestamp", System.currentTimeMillis()) }
-                                                                Wearable.getMessageClient(requireContext()).sendMessage(nodeId, "/wear-universal-sync", json.toString().toByteArray(StandardCharsets.UTF_8))
-                                                            } catch (_: Exception) {}
-                                                        }.start()
-                                                    }
-                                                }
-                                            ) { Text("强制关闭相机", color = Color.White, fontSize = 12.sp) }
-                                        }
+                                            // ✅ 启动按钮：本机启动 + 手表启动
+Button(
+    modifier = Modifier.weight(1f),
+    colors = ButtonDefaults.buttonColors(
+        containerColor = if (isCameraAllowedState.value) Color(0xFF2E7D32) else Color(0xFF333333)
+    ),
+    onClick = {
+        // 1. 权限检查
+        if (!isCameraAllowedState.value) {
+            requestCameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+            return@Button
+        }
+
+        // 2. ✅ 启动本机总控台 Activity（由它负责启动 Service）
+        val localIntent = Intent(context, PhoneSyncRemoteCameraActivity::class.java).apply {
+            putExtra(PhoneSyncRemoteCameraActivity.EXTRA_SOURCE, PhoneSyncRemoteCameraActivity.SOURCE_LOCAL)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        ContextCompat.startActivity(context, localIntent, null)
+
+        // 3. ✅ 向手表发送启动相机指令
+        val nodeId = WearSyncState.getNodeId(context)
+        if (!nodeId.isNullOrEmpty()) {
+            Thread {
+                try {
+                    val json = JSONObject().apply {
+                        put("sender", "phone")
+                        put("type", "camera_control")
+                        put("action", "open_phone_camera")
+                        put("timestamp", System.currentTimeMillis())
+                    }
+                    Wearable.getMessageClient(context).sendMessage(
+                        nodeId, "/wear-universal-sync",
+                        json.toString().toByteArray(StandardCharsets.UTF_8)
+                    )
+                } catch (_: Exception) {}
+            }.start()
+        }
+    }
+) {
+    Text("呼叫手表相机", color = Color.White, fontSize = 12.sp)
+}
+
+// ✅ 停止按钮：本机停止 + 手表停止（补全了之前缺失的手表端指令）
+Button(
+    modifier = Modifier.weight(1f),
+    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7F1D1D)),
+    onClick = {
+        // 1. ✅ 停止本机 Camera Service
+        context.startService(
+            Intent(context, PhoneSyncCameraService::class.java)
+                .setAction(PhoneSyncCameraService.ACTION_STOP_CAMERA)
+        )
+
+        // 2. ✅ 向手表发送强制关闭相机指令
+        val nodeId = WearSyncState.getNodeId(context)
+        if (!nodeId.isNullOrEmpty()) {
+            Thread {
+                try {
+                    val json = JSONObject().apply {
+                        put("sender", "phone")
+                        put("type", "camera_control")
+                        put("action", "FORCE_QUIT_CAMERA")
+                        put("timestamp", System.currentTimeMillis())
+                    }
+                    Wearable.getMessageClient(context).sendMessage(
+                        nodeId, "/wear-universal-sync",
+                        json.toString().toByteArray(StandardCharsets.UTF_8)
+                    )
+                } catch (_: Exception) {}
+            }.start()
+        }
+    }
+) {
+    Text("强制关闭相机", color = Color.White, fontSize = 12.sp)
+}
+
                                         
                                     }
                                 }

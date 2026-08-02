@@ -4,52 +4,57 @@ import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
-import android.util.Log;
-
 import androidx.activity.ComponentActivity;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.core.content.ContextCompat;
 
 /**
- * 远程相机跳板 Activity (最终修复版)
- * - 职责简化：不再负责查找节点，仅从 WearSyncState 读取已缓存的节点 ID。
- * - 完美匹配：与你提供的 PhoneConnectionManager 和 WearSyncState 无缝协作。
+ * 相机功能总控台
+ * 职责：统一处理本地和远程的相机启动请求，进行权限检查，并启动 PhoneSyncCameraService。
  */
 public class PhoneSyncRemoteCameraActivity extends ComponentActivity {
 
     private static final String TAG = "WearSync_RemoteActivity";
+    // 用于区分启动来源的 Key
+    public static final String EXTRA_SOURCE = "extra_source";
+    public static final String SOURCE_REMOTE = "source_remote";
+    public static final String SOURCE_LOCAL = "source_local";
 
-    private final ActivityResultLauncher<String> cameraPermissionLauncher =
-            registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
-                if (isGranted) {
-                    startCameraServiceAndFinish();
-                } else {
-                    // 权限被拒绝，直接退出
-                    finish();
-                }
-            });
+    private final ActivityResultLauncher<String> cameraPermissionLauncher = registerForActivityResult(
+        new ActivityResultContracts.RequestPermission(),
+        isGranted -> {
+            if (isGranted) {
+                startCameraServiceAndFinish();
+            } else {
+                // 权限被拒绝，直接退出
+                finish();
+            }
+        });
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
-                == PackageManager.PERMISSION_GRANTED) {
-            // 已有权限，直接启动服务
+        // 无论是本地还是远程触发，都走这个统一的权限检查流程
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
             startCameraServiceAndFinish();
         } else {
-            // 未授权，发起运行时权限申请
             cameraPermissionLauncher.launch(Manifest.permission.CAMERA);
         }
     }
 
     private void startCameraServiceAndFinish() {
-        // ✅ 不再读取和传递 nodeId，仅做权限检查和启动服务
+        // 将启动来源传递给 Service，方便 Service 内部做不同处理（如果需要）
+        String source = getIntent().getStringExtra(EXTRA_SOURCE);
+        
         Intent serviceIntent = new Intent(this, PhoneSyncCameraService.class);
         serviceIntent.setAction(PhoneSyncCameraService.ACTION_START_CAMERA);
-        startForegroundService(serviceIntent);
-        finish();
+        if (source != null) {
+            serviceIntent.putExtra(EXTRA_SOURCE, source);
+        }
+        
+        // 使用 startForegroundService 确保在 Android 8.0+ 上能正常启动
+        ContextCompat.startForegroundService(this, serviceIntent);
+        finish(); // 任务完成，立即关闭自身
     }
-
 }
