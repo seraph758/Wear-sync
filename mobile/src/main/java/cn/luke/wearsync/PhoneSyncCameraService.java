@@ -100,11 +100,12 @@ public class PhoneSyncCameraService extends Service {
         // ✅ 注册消息监听
         Wearable.getMessageClient(this).addListener(mMessageListener);
         PhoneLog.d(TAG, "✅ 服务已创建，拍照监听已注册");
+        PhoneLog.w(TAG,"🔥 CameraService onCreate");
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent == null) return START_STICKY;
+        if (intent == null)     return START_NOT_STICKY;
         String action = intent.getAction();
         if (ACTION_START_CAMERA.equals(action)) {
             discoverAndCacheNode();
@@ -113,7 +114,7 @@ public class PhoneSyncCameraService extends Service {
             stopStreamingAndRelease();
             stopSelf();
         }
-        return START_STICKY;
+            return START_NOT_STICKY;
     }
 
     @Override
@@ -122,6 +123,7 @@ public class PhoneSyncCameraService extends Service {
         stopStreamingAndRelease();
         stopForeground(STOP_FOREGROUND_REMOVE);
         super.onDestroy();
+        PhoneLog.w(TAG,"🔥 CameraService destroyed");
     }
 
     @Nullable @Override public IBinder onBind(Intent intent) { return null; }
@@ -171,6 +173,7 @@ public class PhoneSyncCameraService extends Service {
         } catch (Exception e) {
             PhoneLog.e(TAG, "❌ 初始化失败", e);
             stopStreamingAndRelease();
+            stopSelf();
         }
     }
 
@@ -300,6 +303,7 @@ public class PhoneSyncCameraService extends Service {
         public void onError(@NonNull CameraDevice camera, int error) {
             PhoneLog.e(TAG, "❌ 相机错误: " + error);
             stopStreamingAndRelease();
+            stopSelf();     
         }
     }
 
