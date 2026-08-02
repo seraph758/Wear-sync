@@ -16,6 +16,7 @@ import android.view.Surface;
 import androidx.annotation.NonNull;
 import androidx.camera.core.CameraSelector;
 import androidx.camera.core.Preview;
+import androidx.camera.core.SurfaceRequest; // <--- 修复1: 添加缺失的导入
 import androidx.camera.lifecycle.ProcessCameraProvider;
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
@@ -44,7 +45,7 @@ import java.util.concurrent.Executors;
 public class PhoneSyncCameraService extends Service implements LifecycleOwner {
 
     private static final String TAG = "WearSync_CameraService";
-    
+
     // --- 常量定义 ---
     private static PhoneSyncCameraService sInstance;
     public static final String ACTION_START_CAMERA = "cn.luke.wearsync.action.START_CAMERA";
@@ -58,6 +59,7 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
     // --- 视频流传输相关 ---
     private static final String CAMERA_STREAM_PATH = "/wear-universal-sync/camera";
     private MediaCodec mEncoder;
+    private Surface mEncoderInputSurface; // <--- 新增: 持有 Surface 引用以便安全管理
     private Thread mEncoderThread;
     private volatile boolean mIsStreaming = false;
     private final ExecutorService mNodeExecutor = Executors.newSingleThreadExecutor();
@@ -76,7 +78,7 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
         super.onCreate();
         sInstance = this;
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE);
-        
+
         // Android 16+ 必须立即创建渠道并启动前台服务
         createNotificationChannel();
         startForeground(NOTIFICATION_ID, buildNotification());
@@ -125,7 +127,7 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
     public void stopStreaming() {
         PhoneLog.d(TAG, "停止推流");
         mIsStreaming = false;
-        
+
         if (mEncoderThread != null) {
             mEncoderThread.interrupt();
             try {
@@ -136,10 +138,20 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
             mEncoderThread = null;
         }
 
+        // <--- 修复3: 统一在此处安全释放编码器和 Surface
         if (mEncoder != null) {
-            mEncoder.stop();
+            try {
+                mEncoder.stop();
+            } catch (Exception e) {
+                PhoneLog.e(TAG, "停止编码器异常", e);
+            }
             mEncoder.release();
             mEncoder = null;
+        }
+
+        if (mEncoderInputSurface != null) {
+            mEncoderInputSurface.release();
+            mEncoderInputSurface = null;
         }
     }
 
@@ -152,11 +164,11 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
         NotificationChannel channel = new NotificationChannel(
                 CHANNEL_ID,
                 "相机同步服务",
-                NotificationManager.IMPORTANCE_LOW // 低优先级，不弹出横幅
+                NotificationManager.IMPORTANCE_LOW
         );
         channel.setDescription("用于保持相机推流服务在后台运行");
         channel.setShowBadge(false);
-        
+
         NotificationManager manager = getSystemService(NotificationManager.class);
         if (manager != null) {
             manager.createNotificationChannel(channel);
@@ -168,7 +180,6 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
      */
     private Notification buildNotification() {
         Intent notificationIntent = new Intent(this, PhoneSyncMainActivity.class);
-        // Android 16+ 默认需要明确指定可变性，这里使用 IMMUTABLE 因为只是启动 Activity
         PendingIntent pendingIntent = PendingIntent.getActivity(
                 this,
                 PENDING_INTENT_REQUEST_CODE,
@@ -179,7 +190,7 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
         return new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle("相机服务运行中")
                 .setContentText("正在同步相机画面...")
-                .setSmallIcon(android.R.drawable.ic_menu_camera) // 建议替换为应用自己的透明图标
+                .setSmallIcon(android.R.drawable.ic_menu_camera)
                 .setContentIntent(pendingIntent)
                 .setOngoing(true)
                 .build();
@@ -200,15 +211,25 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
                     Size resolution = surfaceRequest.getResolution();
                     // 确保分辨率是偶数，避免某些编码器报错
                     Size evenResolution = new Size(resolution.getWidth() & ~1, resolution.getHeight() & ~1);
-                    Surface encoderInputSurface = createEncoderInputSurface(evenResolution);
                     
-                    if (encoderInputSurface != null) {
-                        surfaceRequest.provideSurface(encoderInputSurface, ContextCompat.getMainExecutor(this), result -> {
+                    // 创建并持有 Surface 引用
+                    mEncoderInputSurface = createEncoderInputSurface(evenResolution);
+
+                    if (mEncoderInputSurface != null) {
+                        surfaceRequest.provideSurface(mEncoderInputSurface, ContextCompat.getMainExecutor(this), result -> {
+                            // <--- 修复2: 仅在失败时释放 Surface，成功时保持给编码器使用
                             if (result.getResultCode() != SurfaceRequest.Result.RESULT_SURFACE_USED_SUCCESSFULLY) {
                                 PhoneLog.e(TAG, "Surface 提供失败，代码: " + result.getResultCode());
+                                if (mEncoderInputSurface != null) {
+                                    mEncoderInputSurface.release();
+                                    mEncoderInputSurface = null;
+                                }
+                            } else {
+                                PhoneLog.d(TAG, "Surface 已成功绑定到编码器");
                             }
-                            encoderInputSurface.release();
                         });
+                    } else {
+                        surfaceRequest.willNotProvideSurface();
                     }
                 });
 
@@ -236,8 +257,8 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
             format.setInteger(MediaFormat.KEY_BIT_RATE, 2000000); // 2Mbps
             format.setInteger(MediaFormat.KEY_FRAME_RATE, 30);
             format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
-            format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1); // 每秒一个I帧
-            
+            format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
+
             mEncoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
             return mEncoder.createInputSurface();
         } catch (IOException e) {
@@ -288,7 +309,7 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
                     if (outputBufferId >= 0) {
                         ByteBuffer outputBuffer = mEncoder.getOutputBuffer(outputBufferId);
                         if (outputBuffer != null && bufferInfo.size > 0) {
-                            // 跳过非关键帧的Sps/Pps
+                            // 跳过 SPS/PPS 配置帧（如需在手表端解码，建议保留或通过独立消息发送）
                             if ((bufferInfo.flags & MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0) {
                                 bufferInfo.size = 0;
                             }

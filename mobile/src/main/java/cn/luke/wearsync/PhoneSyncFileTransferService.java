@@ -60,7 +60,13 @@ public class PhoneSyncFileTransferService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent != null && ACTION_ADD_TRANSFER.equals(intent.getAction())) {
             String nodeId = intent.getStringExtra(EXTRA_NODE_ID);
-            Uri fileUri = intent.getParcelableExtra(EXTRA_FILE_URI);
+            Uri fileUri;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                fileUri = intent.getParcelableExtra(EXTRA_FILE_URI, Uri.class);
+            } else {
+                fileUri = intent.getParcelableExtra(EXTRA_FILE_URI);
+            }
+
             String fileName = intent.getStringExtra(EXTRA_FILE_NAME);
 
             if (nodeId != null && fileUri != null && fileName != null) {
