@@ -201,9 +201,9 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
             .build();
     }
 
-    /**
-     * 初始化相机和编码器
-     */
+        /**
+         * 初始化相机和编码器
+         */
     private void initCameraAndEncoder(String nodeId) {
         ListenableFuture<ProcessCameraProvider> cameraProviderFuture = ProcessCameraProvider.getInstance(this);
         cameraProviderFuture.addListener(() -> {
@@ -211,40 +211,46 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
                 ProcessCameraProvider cameraProvider = cameraProviderFuture.get();
                 Preview preview = new Preview.Builder().build();
                 CameraSelector cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA;
+    
                 preview.setSurfaceProvider(surfaceRequest -> {
                     Size resolution = surfaceRequest.getResolution();
-                    // 确保分辨率是偶数，避免某些编码器报错
                     Size evenResolution = new Size(resolution.getWidth() & ~1, resolution.getHeight() & ~1);
-                    // 创建并持有 Surface 引用
                     mEncoderInputSurface = createEncoderInputSurface(evenResolution);
+    
                     if (mEncoderInputSurface != null) {
                         surfaceRequest.provideSurface(mEncoderInputSurface, ContextCompat.getMainExecutor(this), result -> {
-                            // <--- 修复2: 仅在失败时释放 Surface，成功时保持给编码器使用
-                            if (result.getResultCode() != SurfaceRequest.Result.RESULT_SURFACE_USED_SUCCESSFULLY) {
-                                PhoneLog.e(TAG, "Surface 提供失败，代码: " + result.getResultCode());
+                            if (result.getResultCode() == SurfaceRequest.Result.RESULT_SURFACE_USED_SUCCESSFULLY) {
+                                PhoneLog.d(TAG, "✅ 相机 Surface 绑定成功，隐私灯应已亮起");
+                                // ✅ 【关键】只在相机真正就绪后才启动推流线程
+                                mIsStreaming = true;
+                                startEncoderThread(nodeId);
+                            } else {
+                                PhoneLog.e(TAG, "❌ Surface 绑定失败: " + result.getResultCode());
                                 if (mEncoderInputSurface != null) {
                                     mEncoderInputSurface.release();
                                     mEncoderInputSurface = null;
                                 }
-                            } else {
-                                PhoneLog.d(TAG, "Surface 已成功绑定到编码器");
+                                stopSelf();
                             }
                         });
                     } else {
                         surfaceRequest.willNotProvideSurface();
+                        stopSelf();
                     }
                 });
+    
                 cameraProvider.unbindAll();
                 cameraProvider.bindToLifecycle(this, cameraSelector, preview);
-                // 相机绑定成功后，开始发送视频流
-                mIsStreaming = true;
-                startEncoderThread(nodeId);
+                // ❌ 删除这里的 startEncoderThread 调用！它太早了！
+    
             } catch (ExecutionException | InterruptedException e) {
                 PhoneLog.e(TAG, "相机初始化失败", e);
                 Thread.currentThread().interrupt();
+                stopSelf();
             }
         }, ContextCompat.getMainExecutor(this));
     }
+
 
     /**
      * 创建编码器输入 Surface
@@ -253,14 +259,17 @@ public class PhoneSyncCameraService extends Service implements LifecycleOwner {
         try {
             mEncoder = MediaCodec.createEncoderByType("video/avc");
             MediaFormat format = MediaFormat.createVideoFormat("video/avc", size.getWidth(), size.getHeight());
-            format.setInteger(MediaFormat.KEY_BIT_RATE, 2000000); // 2Mbps
+            format.setInteger(MediaFormat.KEY_BIT_RATE, 2000000);
             format.setInteger(MediaFormat.KEY_FRAME_RATE, 30);
             format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
             format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
             mEncoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
-            return mEncoder.createInputSurface();
+            Surface surface = mEncoder.createInputSurface();
+            mEncoder.start(); // ✅ 必须 start
+            PhoneLog.d(TAG, "✅ 编码器已启动");
+            return surface;
         } catch (IOException e) {
-            PhoneLog.e(TAG, "创建编码器 Surface 失败", e);
+            PhoneLog.e(TAG, "创建编码器失败", e);
             return null;
         }
     }
