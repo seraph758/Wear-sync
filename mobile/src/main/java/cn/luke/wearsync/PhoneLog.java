@@ -118,25 +118,25 @@ public class PhoneLog {
         }
     }
 
+
     public static List<String> getLatestTenMinutesLogs() {
         List<String> result = new ArrayList<>();
         long tenMinAgo = System.currentTimeMillis() - 10 * 60 * 1000L;
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US);
-
+        
         readLogsFromFile(phoneLogFile, tenMinAgo, sdf, result);
         readLogsFromFile(wearLogFile, tenMinAgo, sdf, result);
-
-        // ✅ 正确写法：安全、简洁，按时间倒序排列（最新的在最前面）
-Collections.sort(result, (a, b) -> {
-    String timeA = a.length() > 19 ? a.substring(0, 19) : a;
-    String timeB = b.length() > 19 ? b.substring(0, 19) : b;
-    // 注意：b 在前，a 在后，实现倒序排列
-    return timeB.compareTo(timeA);
-});
-
-
+    
+        // ✅ 修正：改为正序排列，最新的日志在最后面
+        Collections.sort(result, (a, b) -> {
+            String timeA = a.length() > 19 ? a.substring(0, 19) : a;
+            String timeB = b.length() > 19 ? b.substring(0, 19) : b;
+            // 改为 a 在前，b 在后，实现正序排列
+            return timeA.compareTo(timeB); 
+        });
         return result;
     }
+
 
     private static void readLogsFromFile(File file, long tenMinAgo, SimpleDateFormat sdf, List<String> result) {
         if (file == null || !file.exists()) return;
