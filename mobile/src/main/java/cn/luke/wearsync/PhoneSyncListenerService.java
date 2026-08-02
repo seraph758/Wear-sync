@@ -115,22 +115,30 @@ public void onMessageReceived(@NonNull MessageEvent messageEvent) {
     // ============================================================
     // 🌓 DND（100% 还原，未动任一字句）
     // ============================================================
-    private void handleDnd(JSONObject json) {
-
-        int value = json.has("dnd_profile_value")
-                ? json.optInt("dnd_profile_value", -1)
-                : json.optInt("dnd_state", -1);
-
-        if (value == -1) return;
-
-        isInternalUpdate = true;
-        PhoneDndManager.handleIncomingAction(this, value);
-
-        new android.os.Handler(getMainLooper()).postDelayed(
-                () -> isInternalUpdate = false,
-                1500
-                );
+   private void handleDnd(JSONObject json, String source) {
+    // 🔑 仅保留来源过滤
+    if (!"wear".equalsIgnoreCase(source)) {
+        PhoneLog.d(TAG, "忽略非Wear来源DND消息: " + source);
+        return;
     }
+
+    // 解析目标值（兼容历史字段名）
+    int targetValue = json.has("interruption_filter")
+            ? json.optInt("interruption_filter", -1)
+            : (json.has("dnd_profile_value")
+                ? json.optInt("dnd_profile_value", -1)
+                : json.optInt("dnd_state", -1));
+
+    if (targetValue == -1) {
+        PhoneLog.w(TAG, "⚠️ 未找到有效DND字段, json=" + json);
+        return;
+    }
+
+    // 🔑 不再做状态比对，直接委托给 Manager
+    // Manager 内部已完成布尔归一化 + 去重 + 异步防抖
+    PhoneDndManager.handleIncomingAction(this, targetValue);
+}
+
 
     // ============================================================
     // ⏰ Alarm（100% 还原，未动任一字句）

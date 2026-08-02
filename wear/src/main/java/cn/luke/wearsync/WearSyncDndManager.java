@@ -98,69 +98,78 @@ public class WearSyncDndManager {
      * ✅ 新增：带延迟参数的重载方法
      * 用于接收手机端下发的最新 pullDownDelayMs 并透传给 BedtimeAutomationActivity
      */
-    public static void executeDndSync(Context context, int dndStatePhone, int pullDownDelayMs) {
-        if (!isSyncAllowed) {
-            WearLog.w(TAG, "🛑 [DND拦截] 总开关关闭");
-            return;
-        }
-
-        NotificationManager mNotificationManager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-        if (mNotificationManager == null) {
-            WearLog.e(TAG, "❌ NotificationManager 获取失败");
-            return;
-        }
-
-        int currentDndState = mNotificationManager.getCurrentInterruptionFilter();
-        WearLog.d(TAG, "🔍 [DND状态检查] 手机=" + dndStatePhone + " 手表=" + currentDndState);
-
-        if (dndStatePhone == currentDndState) {
-            WearLog.d(TAG, "✅ [DND一致] 继续执行子联动");
-        } else {
-            WearLog.d(TAG, "⚡ [DND变化] 开始同步");
-        }
-
-        // 标记内部更新，防止通知监听器重复触发
-        WearSyncNotificationService.isInternalUpdate = true;
-        WearSyncNotificationService.lastInternalUpdateTime = System.currentTimeMillis();
-
-        // 1. 执行震动反馈
-        if (isVibrateSwitchOn && dndStatePhone > 1) {
-            WearLog.d(TAG, "📳 [开始震动]");
-            vibrate(context);
-        }
-
-        // 2. 执行睡眠联动
-        if (isSleepLinkageOpen) {
-            Intent intent = new Intent(context, WearSyncBedtimeAutomationActivity.class);
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-            intent.putExtra("extra_pull_down_delay", pullDownDelayMs);
-            context.startActivity(intent);
-        }
-
-        // 3. 执行省电模式联动
-        if (isPowerSaveLinkageOpen) {
-            boolean enable = dndStatePhone > 1;
-            new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                try {
-                    Settings.Global.putInt(context.getContentResolver(), "low_power", enable ? 1 : 0);
-                    context.sendBroadcast(new Intent(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED));
-                    WearLog.d(TAG, "🔋 [省电异步同步] " + (enable ? "开启" : "关闭"));
-                } catch (Exception e) {
-                    WearLog.e(TAG, "❌ [省电同步失败] " + e.getMessage());
-                }
-            }, 3000);
-        }
-
-        // 4. 最终设置手表的DND状态
-        if (mNotificationManager.isNotificationPolicyAccessGranted()) {
-            mNotificationManager.setInterruptionFilter(dndStatePhone);
-        }
-
-        // 5. 延迟重置内部更新标记
-        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            WearSyncNotificationService.isInternalUpdate = false;
-        }, 7000);
+   public static void executeDndSync(Context context, int dndStatePhone, int pullDownDelayMs) {
+    if (!isSyncAllowed) {
+        WearLog.w(TAG, "🛑 [DND拦截] 总开关关闭");
+        return;
     }
+
+    NotificationManager nm = context.getSystemService(NotificationManager.class);
+    if (nm == null) {
+        WearLog.e(TAG, "❌ NotificationManager 获取失败");
+        return;
+    }
+
+    // 🔑 Step 1: 布尔归一化比对（修复值域错位）
+    int rawWatchFilter = nm.getCurrentInterruptionFilter();
+    boolean targetDndOn = (dndStatePhone != 0);
+    boolean currentDndOn = (rawWatchFilter != NotificationManager.INTERRUPTION_FILTER_ALL);
+
+    WearLog.d(TAG, "🔍 [DND状态检查] 手机=" + dndStatePhone 
+            + " 手表=" + (currentDndOn ? 1 : 0) + "(raw=" + rawWatchFilter + ")");
+
+    boolean dndChanged = (targetDndOn != currentDndOn);
+    if (!dndChanged) {
+        WearLog.d(TAG, "✅ [DND一致] 跳过系统变更，继续执行子联动");
+    } else {
+        WearLog.d(TAG, "⚡ [DND变化] 开始同步: " + (currentDndOn ? 1 : 0) + " → " + dndStatePhone);
+    }
+
+    // 标记内部更新，防止通知监听器重复触发
+    WearSyncNotificationService.isInternalUpdate = true;
+    WearSyncNotificationService.lastInternalUpdateTime = System.currentTimeMillis();
+
+    // 🔑 Step 2: 震动反馈改用布尔判断（原 dndStatePhone > 1 在 0/1 协议下永远为 false）
+    if (isVibrateSwitchOn && targetDndOn) {
+        WearLog.d(TAG, "📳 [开始震动]");
+        vibrate(context);
+    }
+
+    // 3. 执行睡眠联动（与 DND 值无关，保持不变）
+    if (isSleepLinkageOpen) {
+        Intent intent = new Intent(context, WearSyncBedtimeAutomationActivity.class);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        intent.putExtra("extra_pull_down_delay", pullDownDelayMs);
+        context.startActivity(intent);
+    }
+
+    // 4. 执行省电模式联动（改用布尔判断）
+    if (isPowerSaveLinkageOpen) {
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            try {
+                Settings.Global.putInt(context.getContentResolver(), "low_power", targetDndOn ? 1 : 0);
+                context.sendBroadcast(new Intent(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED));
+                WearLog.d(TAG, "🔋 [省电异步同步] " + (targetDndOn ? "开启" : "关闭"));
+            } catch (Exception e) {
+                WearLog.e(TAG, "❌ [省电同步失败] " + e.getMessage());
+            }
+        }, 3000); // 3秒缓冲：等DND切换完成后再改省电模式，避免系统UI并发冲突
+    }
+
+    // 🔑 Step 3: 仅在状态真正变化时才设置系统DND（修复直接传0/1的问题）
+    if (dndChanged && nm.isNotificationPolicyAccessGranted()) {
+        int targetFilter = targetDndOn
+                ? NotificationManager.INTERRUPTION_FILTER_NONE
+                : NotificationManager.INTERRUPTION_FILTER_ALL;
+        nm.setInterruptionFilter(targetFilter);
+        WearLog.d(TAG, "✨ [DND设置成功] filter=" + targetFilter);
+    }
+
+    // 5. 延迟重置内部更新标记
+    new Handler(Looper.getMainLooper()).postDelayed(() -> {
+        WearSyncNotificationService.isInternalUpdate = false;
+    }, 7000); // 7秒覆盖：DND设置 + 省电延迟(3s) + 系统回调异步窗口的完整周期
+}
 
     /**
      * 启动就寝模式自动化
