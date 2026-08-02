@@ -1,20 +1,80 @@
 {
   "allFiles": [
     {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncFileTransferService.java",
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncRemoteCameraActivity.java",
       "selection": {
         "end": {
-          "column": 5,
-          "index": 2921,
-          "line": 78
+          "column": 0,
+          "index": 2216,
+          "line": 67
         },
         "start": {
           "column": 0,
-          "index": 1995,
-          "line": 57
+          "index": 2216,
+          "line": 67
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/WearSyncState.java",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 1492,
+          "line": 47
+        },
+        "start": {
+          "column": 0,
+          "index": 0,
+          "line": 0
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneConnectionManager.java",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 2658,
+          "line": 82
+        },
+        "start": {
+          "column": 0,
+          "index": 0,
+          "line": 0
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/AndroidManifest.xml",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 0,
+          "line": 0
+        },
+        "start": {
+          "column": 0,
+          "index": 0,
+          "line": 0
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/WearSyncApplication.kt",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 322,
+          "line": 14
+        },
+        "start": {
+          "column": 0,
+          "index": 0,
+          "line": 0
         }
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncFileTransferService.java"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncRemoteCameraActivity.java"
 }

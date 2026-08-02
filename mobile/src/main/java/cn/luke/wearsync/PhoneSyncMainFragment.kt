@@ -671,29 +671,29 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                         
                                     }
                                 }
-
-
-            AnimatedVisibility(visible = isLogExpanded) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = cardBgColor)
-                ) {
-                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        // 1. 手机端日志开关（只控制本地日志）
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Text("开启手机端调试日志", color = textColor, fontSize = 14.sp)
-                            Switch(
-                                checked = uiLogDebugSwitch.value,
-                                onCheckedChange = { isEnabled ->
-                                    uiLogDebugSwitch.value = isEnabled
-                                    PhoneLog.DEBUG = isEnabled
-                                    // ✅ 修复：这里只控制本地日志，不启动浮窗
-                                    // 如果需要浮窗，让用户点下面的按钮
-                                }
-                            )
-                        }
             
+            
+                        AnimatedVisibility(visible = isLogExpanded) {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = cardBgColor)
+                            ) {
+                                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    // 1. 手机端日志开关（只控制本地日志）
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                        Text("开启手机端调试日志", color = textColor, fontSize = 14.sp)
+                                        Switch(
+                                            checked = uiLogDebugSwitch.value,
+                                            onCheckedChange = { isEnabled ->
+                                                uiLogDebugSwitch.value = isEnabled
+                                                PhoneLog.DEBUG = isEnabled
+                                                // ✅ 修复：这里只控制本地日志，不启动浮窗
+                                                // 如果需要浮窗，让用户点下面的按钮
+                                            }
+                                        )
+                                    }
+                        
                         // 2. 手表端日志开关（控制手表日志回传）
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Text("同步监听手表端核心日志", color = textColor, fontSize = 14.sp)
