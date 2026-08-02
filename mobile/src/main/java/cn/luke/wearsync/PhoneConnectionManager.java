@@ -70,7 +70,7 @@ public class PhoneConnectionManager {
 
     private void updateNodeCache(CapabilityInfo capabilityInfo) {
         Set<Node> nodes = capabilityInfo.getNodes();
-        if (nodes != null && !nodes.isEmpty()) {
+        if (!nodes.isEmpty()) {
             String nodeId = nodes.iterator().next().getId();
             WearSyncState.setNodeId(appContext, nodeId);
             PhoneLog.d(TAG, "✅ 已更新手表节点缓存: " + nodeId);

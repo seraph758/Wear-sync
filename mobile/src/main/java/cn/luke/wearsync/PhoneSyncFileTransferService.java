@@ -3,20 +3,14 @@ package cn.luke.wearsync;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
-import android.app.PendingIntent;
 import android.app.Service;
-import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
-import android.os.Build;
 import android.os.IBinder;
-import android.util.Log;
 
-import androidx.annotation.NonNull;
 import androidx.core.app.NotificationCompat;
 
 import com.google.android.gms.tasks.Tasks;
-import com.google.android.gms.wearable.Channel;
 import com.google.android.gms.wearable.ChannelClient;
 import com.google.android.gms.wearable.Node;
 import com.google.android.gms.wearable.Wearable;
@@ -24,10 +18,8 @@ import com.google.android.gms.wearable.Wearable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
@@ -61,11 +53,8 @@ public class PhoneSyncFileTransferService extends Service {
         if (intent != null && ACTION_ADD_TRANSFER.equals(intent.getAction())) {
             String nodeId = intent.getStringExtra(EXTRA_NODE_ID);
             Uri fileUri;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                fileUri = intent.getParcelableExtra(EXTRA_FILE_URI, Uri.class);
-            } else {
-                fileUri = intent.getParcelableExtra(EXTRA_FILE_URI);
-            }
+            fileUri = intent.getParcelableExtra(EXTRA_FILE_URI, Uri.class);
+
 
             String fileName = intent.getStringExtra(EXTRA_FILE_NAME);
 
@@ -173,7 +162,7 @@ public class PhoneSyncFileTransferService extends Service {
             repository.removeItem(item.getId());
 
         } catch (Exception e) {
-            Log.e(TAG, "传输失败", e);
+            PhoneLog.e(TAG, "传输失败", e);
             repository.updateItem(item.getId(), it -> it.setStatus(TransferStatus.ERROR));
             // 失败不移除，或者根据需求移除
         }
@@ -182,11 +171,9 @@ public class PhoneSyncFileTransferService extends Service {
     // --- 辅助方法 ---
 
     private void createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "文件传输服务", NotificationManager.IMPORTANCE_LOW);
-            NotificationManager manager = getSystemService(NotificationManager.class);
-            if (manager != null) manager.createNotificationChannel(channel);
-        }
+        NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "文件传输服务", NotificationManager.IMPORTANCE_LOW);
+        NotificationManager manager = getSystemService(NotificationManager.class);
+        if (manager != null) manager.createNotificationChannel(channel);
     }
 
     private Notification buildNotification(String text) {

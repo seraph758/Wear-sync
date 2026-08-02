@@ -3,11 +3,14 @@ package cn.luke.wearsync;
 import android.app.NotificationManager;
 import android.content.Context;
 import android.content.SharedPreferences;
+
 import androidx.core.app.NotificationManagerCompat;
-import androidx.preference.PreferenceManager;
+
 import com.google.android.gms.tasks.Tasks;
 import com.google.android.gms.wearable.Wearable;
+
 import org.json.JSONObject;
+
 import java.nio.charset.StandardCharsets;
 
 /**
@@ -65,22 +68,6 @@ public class PhoneDndManager {
     // 2. 正向同步入口 (手机 -> 手表)
     // ==========================================
 
-    /**
-     * 场景 A：UI (MainFragment) 触发
-     * 用户在设置界面拖动滑块时调用。
-     * 逻辑：实时获取当前 DND 状态 + 使用 UI 传入的新间隔值 -> 发送
-     *
-     * @param context 上下文
-     * @param pullDownDelayMs UI 传入的最新间隔值
-     */
-
-    /**
-     * 场景 B：系统监听器 (PhoneSyncNotificationService) 触发
-     * 当手机系统勿扰模式发生变化时调用。
-     * 逻辑：实时获取当前 DND 状态 + 读取本地保存的间隔配置 -> 发送
-     *
-     * @param context 上下文
-     */
     /**
      * 场景：系统监听器 (PhoneSyncNotificationService) 触发
      * 仅在手机系统勿扰模式发生变化时调用

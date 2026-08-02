@@ -14,6 +14,8 @@ import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.CaptureRequest;
+import android.hardware.camera2.params.OutputConfiguration;
+import android.hardware.camera2.params.SessionConfiguration;
 import android.media.ImageReader;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
@@ -21,8 +23,6 @@ import android.media.MediaFormat;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
-import android.util.Log;
-import android.util.Size;
 import android.view.Surface;
 
 import androidx.annotation.NonNull;
@@ -30,7 +30,6 @@ import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
 
-import com.google.android.gms.wearable.CapabilityClient;
 import com.google.android.gms.wearable.ChannelClient;
 import com.google.android.gms.wearable.MessageClient;
 import com.google.android.gms.wearable.Wearable;
@@ -38,8 +37,8 @@ import com.google.android.gms.wearable.Wearable;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
-import java.util.Collections;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class PhoneSyncCameraService extends Service {
@@ -238,6 +237,12 @@ public class PhoneSyncCameraService extends Service {
     // ==================== 编码器回调 → Channel 写入 ====================
 
     private class EncoderCallback extends MediaCodec.Callback {
+
+        @Override
+        public void onInputBufferAvailable(@NonNull MediaCodec codec, int index) {
+            // 你用的是 Surface 输入（createInputSurface），不会收到 input buffer 回调
+            // 留空即可
+        }
         @Override
         public void onOutputBufferAvailable(@NonNull MediaCodec codec, int index,
                                             @NonNull MediaCodec.BufferInfo info) {
@@ -280,25 +285,48 @@ public class PhoneSyncCameraService extends Service {
             mCameraDevice = camera;
             try {
                 // ✅ 同时绑定预览Surface和拍照Surface
-                java.util.List<Surface> targets = Arrays.asList(mEncoderSurface, mPhotoReader.getSurface());
                 CaptureRequest.Builder b = camera.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
                 b.addTarget(mEncoderSurface);
                 b.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO);
 
-                camera.createCaptureSession(targets, new CameraCaptureSession.StateCallback() {
-                    @Override
-                    public void onConfigured(@NonNull CameraCaptureSession s) {
-                        mCaptureSession = s;
-                        try { s.setRepeatingRequest(b.build(), null, mBgHandler); }
-                        catch (Exception e) { PhoneLog.e(TAG, "❌ 预览请求失败", e); }
-                    }
-                    @Override
-                    public void onConfigureFailed(@NonNull CameraCaptureSession s) {
-                        PhoneLog.e(TAG, "❌ Session配置失败");
-                    }
-                }, mBgHandler);
+                // 构建 OutputConfiguration 列表
+                List<OutputConfiguration> outputConfigs = new ArrayList<>();
+                outputConfigs.add(new OutputConfiguration(mEncoderSurface));
+                outputConfigs.add(new OutputConfiguration(mPhotoReader.getSurface()));
+
+// 构建 SessionConfiguration
+                SessionConfiguration sessionConfig = new SessionConfiguration(
+                        SessionConfiguration.SESSION_REGULAR,
+                        outputConfigs,
+                        runnable -> mBgHandler.post(runnable),   // Executor
+                        new CameraCaptureSession.StateCallback() {
+                            @Override
+                            public void onConfigured(@NonNull CameraCaptureSession s) {
+                                mCaptureSession = s;
+                                try {
+                                    s.setRepeatingRequest(b.build(), null, mBgHandler);
+                                } catch (Exception e) {
+                                    PhoneLog.e(TAG, "❌ 预览请求失败", e);
+                                }
+                            }
+
+                            @Override
+                            public void onConfigureFailed(@NonNull CameraCaptureSession s) {
+                                PhoneLog.e(TAG, "❌ Session配置失败");
+                            }
+                        }
+                );
+
+                camera.createCaptureSession(sessionConfig);
             } catch (Exception e) { PhoneLog.e(TAG, "❌ 创建Session失败", e); }
         }
+        @Override
+        public void onDisconnected(@NonNull CameraDevice camera) {
+            PhoneLog.w(TAG, "⚠️ 相机被断开");
+            camera.close();
+            mCameraDevice = null;
+        }
+
         @Override
         public void onError(@NonNull CameraDevice camera, int error) {
             PhoneLog.e(TAG, "❌ 相机错误: " + error);
@@ -311,18 +339,12 @@ public class PhoneSyncCameraService extends Service {
 
     private void discoverAndCacheNode() {
         mCachedNodeId = WearSyncState.getNodeId(this);
-        if (mCachedNodeId != null) { openChannelStream(); return; }
-        Wearable.getCapabilityClient(this)
-                .getCapability(WEAR_CAPABILITY, CapabilityClient.FILTER_REACHABLE)
-                .addOnSuccessListener(info -> {
-                    if (!info.getNodes().isEmpty()) {
-                        mCachedNodeId = info.getNodes().iterator().next().getId();
-                        WearSyncState.setNodeId(PhoneSyncCameraService.this, mCachedNodeId);
-                        openChannelStream();
-                    }
-                });
+        if (mCachedNodeId != null) {
+            openChannelStream();
+        } else {
+            PhoneLog.w(TAG, "未获取到节点ID，手表可能未连接");
+        }
     }
-
     // ==================== 工具方法 ====================
 
     private void startBackgroundThread() {

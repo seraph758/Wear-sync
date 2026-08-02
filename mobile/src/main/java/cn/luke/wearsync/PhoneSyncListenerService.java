@@ -15,9 +15,8 @@ import org.json.JSONObject;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutorService;
-
+import java.util.concurrent.Executors;
 
 /**
  * 📡 手机端监听核心（Camera + DND + Alarm + 🚀安全追加：无线日志大流接收舱）
@@ -39,20 +38,20 @@ public class PhoneSyncListenerService extends WearableListenerService {
     // 📩 主入口（100% 还原，未动任一字句）
     // ============================================================
  @Override
-public void onMessageReceived(MessageEvent messageEvent) {
+public void onMessageReceived(@NonNull MessageEvent messageEvent) {
     // 1. 更新节点ID
-    if (messageEvent != null && messageEvent.getSourceNodeId() != null) {
-        WearSyncState.setNodeId(this, messageEvent.getSourceNodeId());
-    }
-    
-    // 2. 路径校验
-    String receivedPath = (messageEvent != null) ? messageEvent.getPath() : "null";
-    PhoneLog.d(TAG, "🔍 收到消息，路径为: [" + receivedPath + "]，期望路径: [" + UNIVERSAL_SYNC_PATH + "]");
-    
-    if (messageEvent == null || !UNIVERSAL_SYNC_PATH.equals(messageEvent.getPath())) {
-        super.onMessageReceived(messageEvent);
-        return;
-    }
+     WearSyncState.setNodeId(this, messageEvent.getSourceNodeId());
+
+
+     // 2. 路径校验
+     // ✅
+     String receivedPath = messageEvent.getPath();
+     PhoneLog.d(TAG, "🔍 收到消息，路径为: [" + receivedPath + "]，期望路径: [" + UNIVERSAL_SYNC_PATH + "]");
+
+     if (!UNIVERSAL_SYNC_PATH.equals(receivedPath)) {
+         super.onMessageReceived(messageEvent);
+         return;
+     }
 
     // 3. 在后台线程处理消息
     MESSAGE_EXECUTOR.execute(() -> {
@@ -148,25 +147,16 @@ public void onMessageReceived(MessageEvent messageEvent) {
     PhoneLog.d(TAG, "P-080 handleCamera action=" + action);
     String nodeId = WearSyncState.getNodeId(this);
 
-    if ("CAMERA_READY".equalsIgnoreCase(action)) {
-      PhoneLog.d(TAG, "P-081 CAMERA_READY branch");
-      PhoneSyncCameraService service = PhoneSyncCameraService.getInstance();
-      PhoneLog.d(TAG, "service=" + service + " nodeId=" + nodeId);
-      if (service != null) {
-        PhoneLog.d(TAG, "P-082 about to call startStreaming");
-        service.startStreaming(nodeId);
-      }
-      return;
-    }
 
-    if ("STREAM_START".equalsIgnoreCase(action)) {
-      PhoneSyncCameraService service = PhoneSyncCameraService.getInstance();
-      if (service != null) {
-        PhoneLog.d(TAG, "P-088 about to call startStreaming");
-        service.startStreaming(nodeId);
-      }
-      return;
-    }
+        if ("CAMERA_READY".equalsIgnoreCase(action) || "STREAM_START".equalsIgnoreCase(action)) {
+            PhoneLog.d(TAG, "P-081 CAMERA_READY branch");
+            Intent serviceIntent = new Intent(this, PhoneSyncCameraService.class);
+            serviceIntent.setAction(PhoneSyncCameraService.ACTION_START_CAMERA);
+            serviceIntent.putExtra("nodeId", nodeId);
+            startForegroundService(serviceIntent);
+            return;
+        }
+
 
     if ("START_CAMERA".equalsIgnoreCase(action)
         || "START_CAMERA_UI".equalsIgnoreCase(action)
@@ -179,7 +169,7 @@ public void onMessageReceived(MessageEvent messageEvent) {
                 if (nodes == null || nodes.isEmpty()) {
                   return;
                 }
-                String id = nodes.get(0).getId();
+                String id = nodes.getFirst().getId();
                 WearSyncState.setNodeId(this, id);
                 executeRemoteActivityLaunch(id);
               } catch (Exception e) {
@@ -275,7 +265,7 @@ public void onMessageReceived(MessageEvent messageEvent) {
                 .getInputStream(channel)
                 .addOnSuccessListener(inputStream -> {
                     PhoneLog.d("PhoneLog_Trace", "🟢 [日誌流就緒] 啟動背景讀取執行緒...");
-                    new Thread(() -> readLogStream(inputStream)).start();
+                    REMOTE_EXECUTOR.execute(() -> readLogStream(inputStream));
                 })
                 .addOnFailureListener(e -> PhoneLog.e("PhoneLog_Trace", "❌ [日誌流獲取失敗]", e));
         }
@@ -288,7 +278,7 @@ public void onMessageReceived(MessageEvent messageEvent) {
             Intent serviceIntent = new Intent(this, PhoneSyncCameraService.class);
             serviceIntent.setAction(PhoneSyncCameraService.ACTION_START_CAMERA);
             serviceIntent.putExtra("remote_node_id", channel.getNodeId());
-            startService(serviceIntent);
+            startForegroundService(serviceIntent);
         }
     }
 

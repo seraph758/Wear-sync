@@ -1,6 +1,5 @@
 package cn.luke.wearsync
 
-import android.util.Log
 import com.google.android.gms.wearable.ChannelClient
 import com.google.android.gms.wearable.Wearable
 import com.google.android.gms.wearable.WearableListenerService

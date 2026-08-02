@@ -21,11 +21,7 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
 
     // 🛡️ 用于记录最后一次由手表触发的远程操作时间，防止状态回弹
     private static final AtomicLong sLastRemoteActionTimeMs = new AtomicLong(0);
-    private static final long REMOTE_ACTION_WINDOW_MS = 3000;
 
-    // ⏳ 用于防止系统闹钟“闪现”通知的防抖机制
-    private static final long lastAlarmPackageMatchTime = 0;
-    private static final long ALARM_DEBOUNCE_MS = 3000;
 
     /**
      * 🎯 [全步進日誌版] 供 PhoneAlarmManager 調用的即時逆向控制核心方法

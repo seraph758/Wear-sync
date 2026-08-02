@@ -52,7 +52,9 @@ public class PhoneLog {
         if (!DEBUG) return;
         Timber.tag(tag).d(msg);
     }
-
+    public static void w(String tag, String msg, Throwable tr) {
+        Log.w(tag, msg, tr);
+    }
     public static void i(String tag, String msg) {
         if (!DEBUG) return;
         Timber.tag(tag).i(msg);

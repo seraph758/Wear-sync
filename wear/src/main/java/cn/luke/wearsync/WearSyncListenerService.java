@@ -1,26 +1,27 @@
 package cn.luke.wearsync;
 
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
+import android.os.Environment;
+import android.provider.MediaStore;
+
 import androidx.annotation.NonNull;
+
 import com.google.android.gms.tasks.Tasks;
 import com.google.android.gms.wearable.ChannelClient;
 import com.google.android.gms.wearable.MessageEvent;
 import com.google.android.gms.wearable.Wearable;
 import com.google.android.gms.wearable.WearableListenerService;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.InputStream;
-import java.io.OutputStream;
+
+import org.json.JSONObject;
+
 import java.io.DataInputStream;
 import java.io.EOFException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
-import org.json.JSONObject;
-import android.net.Uri;
-import android.os.Environment;
-import android.content.ContentValues;
-import android.provider.MediaStore;
 
 
 public class WearSyncListenerService extends WearableListenerService {

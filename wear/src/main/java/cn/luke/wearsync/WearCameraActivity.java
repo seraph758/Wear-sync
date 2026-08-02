@@ -12,20 +12,15 @@ import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.WindowManager;
 import android.widget.Button;
-import android.os.VibrationEffect;
+
 import androidx.core.content.ContextCompat;
 import androidx.activity.ComponentActivity;
 import androidx.activity.OnBackPressedCallback;
-import androidx.localbroadcastmanager.content.LocalBroadcastManager; // ✅ 新增导入
-import com.google.android.gms.tasks.Tasks;
-import com.google.android.gms.wearable.Node;
-import com.google.android.gms.wearable.Wearable;
+// ✅ 新增导入
 import org.json.JSONObject;
-import org.json.JSONException; // ✅ 新增导入
+// ✅ 新增导入
 import java.lang.ref.WeakReference;
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
-import java.util.List;
 
 // 🟢 完美優化：變更繼承為 ComponentActivity 以原生支持現代返回調度器
 public class WearCameraActivity extends ComponentActivity implements SurfaceHolder.Callback {

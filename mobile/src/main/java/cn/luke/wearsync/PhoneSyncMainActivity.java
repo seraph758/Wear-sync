@@ -2,10 +2,11 @@ package cn.luke.wearsync;
 
 import android.content.Intent;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.Settings;
+
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.fragment.app.FragmentTransaction;
 
@@ -43,18 +44,14 @@ public class PhoneSyncMainActivity extends AppCompatActivity {
 
     // ✅ 新增：权限检查方法
     private void checkAndRequestStoragePermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            if (!Environment.isExternalStorageManager()) {
-                PhoneLog.d(TAG, "⚠️ [权限] 缺少管理所有文件的权限，即将跳转设置页面");
-                Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
-                intent.setData(Uri.fromParts("package", getPackageName(), null));
-                startActivity(intent);
-            }
+        if (!Environment.isExternalStorageManager()) {
+            startActivity(new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+                    .setData(Uri.fromParts("package", getPackageName(), null)));
         }
     }
 
     @Override
-    protected void onNewIntent(Intent intent) {
+    protected void onNewIntent(@NonNull Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
         PhoneLog.d(TAG, "🔄 [主界面] PhoneSyncMainActivity -> onNewIntent() 唤醒");

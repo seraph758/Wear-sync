@@ -1,3 +1,6 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.plugin.compose'
@@ -23,7 +26,7 @@ android {
     defaultConfig {
         applicationId "cn.luke.wearsync"
         minSdk = 35
-        targetSdk = 36
+        targetSdk = 37
         versionCode githubRunNumber.toInteger()
         versionName "1.0.${githubRunNumber}"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
@@ -68,17 +71,13 @@ android {
         // ✅ 目标平台设为 22
         sourceCompatibility JavaVersion.VERSION_22
         targetCompatibility JavaVersion.VERSION_22
-        
+
         // ✅ 核心开启：允许将高版本语法脱糖给更低版本的设备运行
         coreLibraryDesugaringEnabled = true
     }
 
     // ✅ 新版 AGP 9.0+ 适用的 Kotlin 全局配置写法（替代了旧的 kotlinOptions）
-    kotlin {
-        compilerOptions {
-            jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_22
-        }
-    }
+
 
     buildFeatures {
         buildConfig true
@@ -87,17 +86,22 @@ android {
     }
 }
 
+kotlin {
+    compilerOptions {
+        jvmTarget = JvmTarget.JVM_22
+    }
+}
 // ✅ 保持 Java 编译器参数稳定
 tasks.withType(JavaCompile).configureEach {
     options.compilerArgs += [
-        '-Xlint:deprecation', 
-        '-Xlint:unchecked', 
+        '-Xlint:deprecation',
+        '-Xlint:unchecked',
     ]
     options.deprecation = true
 }
 
 // ✅ 适配 Kotlin 2.x + AGP 9.x 的编译器参数追加
-tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+tasks.withType(KotlinCompile).configureEach {
     compilerOptions.freeCompilerArgs.add("-Xjdk-release=22")
 }
 
@@ -141,4 +145,6 @@ dependencies {
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.2.1'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.6.1'
+    implementation 'com.jakewharton.timber:timber:5.0.1'
+
 }
