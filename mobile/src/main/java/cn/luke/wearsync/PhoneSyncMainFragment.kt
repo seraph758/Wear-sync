@@ -234,6 +234,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                     val subTextColor = if (isDark) Color.Gray else Color(0xFF757575)
                     val dividerColor = if (isDark) Color(0xFF2C2C2C) else Color(0xFFE5E5EA)
 
+                    // 🛠️ 修复：将这 4 个变量正确放入了 Composable 上下文
                     var isVibrationExpanded by remember { mutableStateOf(false) }
                     var patternOnDuration by remember { mutableIntStateOf(500) }
                     var patternOffDuration by remember { mutableIntStateOf(200) }
@@ -247,6 +248,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                     var isPermissionExpanded by remember { mutableStateOf(false) }
                     var isFileTransferExpanded by remember { mutableStateOf(false) }
 
+                    // ⚠️ 注意：必须在 Composable 顶层获取 Context，不能在 onClick 内部获取
                     val context = LocalContext.current
 
                     var mask by remember { mutableIntStateOf(sp.getInt("KEY_MASK", 15)) }
@@ -266,20 +268,46 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                             PhoneLog.d("WearSync_Main", "⚙️ 勿扰同步配置已更新：mask=$newMask")
                         }
 
+
                     var selectedAlarmName by remember {
-                        mutableStateOf(sp.getString("selected_alarm_name", "Google 时钟") ?: "Google 时钟")
+                        mutableStateOf(
+                            sp.getString(
+                                "selected_alarm_name",
+                                "Google 时钟"
+                            ) ?: "Google 时钟"
+                        )
                     }
                     var selectedAlarmPkg by remember {
-                        mutableStateOf(sp.getString("selected_alarm_package", "com.google.android.deskclock") ?: "com.google.android.deskclock")
+                        mutableStateOf(
+                            sp.getString(
+                                "selected_alarm_package",
+                                "com.google.android.deskclock"
+                            ) ?: "com.google.android.deskclock"
+                        )
                     }
                     var dismissKeyText by remember {
-                        mutableStateOf(sp.getString("alarm_dismiss_key", "停止") ?: "停止")
+                        mutableStateOf(
+                            sp.getString(
+                                "alarm_dismiss_key",
+                                "停止"
+                            ) ?: "停止"
+                        )
                     }
                     var snoozeKeyText by remember {
-                        mutableStateOf(sp.getString("alarm_snooze_key", "延后") ?: "延后")
+                        mutableStateOf(
+                            sp.getString(
+                                "alarm_snooze_key",
+                                "延后"
+                            ) ?: "延后"
+                        )
                     }
                     var isAlarmMasterEnabled by remember {
-                        mutableStateOf(sp.getBoolean("alarm_proxy_master_switch", true))
+                        mutableStateOf(
+                            sp.getBoolean(
+                                "alarm_proxy_master_switch",
+                                true
+                            )
+                        )
                     }
 
                     Surface(
@@ -305,7 +333,9 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(16.dp),
                                 colors = CardDefaults.cardColors(
-                                    containerColor = if (isDark) Color(0xFF251818) else Color(0xFFFFF0F0)
+                                    containerColor = if (isDark) Color(
+                                        0xFF251818
+                                    ) else Color(0xFFFFF0F0)
                                 )
                             ) {
                                 Column(modifier = Modifier.padding(16.dp)) {
@@ -330,7 +360,9 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                             text = watchWearState.value,
                                             fontSize = 14.sp,
                                             fontWeight = FontWeight.Bold,
-                                            color = if (watchWearState.value.contains("🟢")) Color(0xFF4CAF50) else Color(0xFFE53935)
+                                            color = if (watchWearState.value.contains("🟢")) Color(
+                                                0xFF4CAF50
+                                            ) else Color(0xFFE53935)
                                         )
                                     }
                                 }
@@ -351,13 +383,23 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                         colors = CardDefaults.cardColors(containerColor = cardBgColor)
                                     ) {
                                         Row(
-                                            modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp),
+                                            modifier = Modifier.fillMaxSize()
+                                                .padding(horizontal = 14.dp),
                                             horizontalArrangement = Arrangement.SpaceBetween,
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Column {
-                                                Text("勿扰同步", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = textColor)
-                                                Text("同步状态控制", fontSize = 11.sp, color = subTextColor)
+                                                Text(
+                                                    "勿扰同步",
+                                                    fontSize = 15.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = textColor
+                                                )
+                                                Text(
+                                                    "同步状态控制",
+                                                    fontSize = 11.sp,
+                                                    color = subTextColor
+                                                )
                                             }
                                             Text(text = "🌙", fontSize = 16.sp)
                                         }
@@ -373,7 +415,8 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                         colors = CardDefaults.cardColors(containerColor = cardBgColor)
                                     ) {
                                         Row(
-                                            modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp),
+                                            modifier = Modifier.fillMaxSize()
+                                                .padding(horizontal = 14.dp),
                                             horizontalArrangement = Arrangement.SpaceBetween,
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
@@ -382,12 +425,16 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                                     "闹钟全域代点",
                                                     fontSize = 15.sp,
                                                     fontWeight = FontWeight.Bold,
-                                                    color = if (isAlarmMasterEnabled) textColor else textColor.copy(alpha = 0.5f)
+                                                    color = if (isAlarmMasterEnabled) textColor else textColor.copy(
+                                                        alpha = 0.5f
+                                                    )
                                                 )
                                                 Text(
                                                     selectedAlarmName,
                                                     fontSize = 11.sp,
-                                                    color = if (isAlarmMasterEnabled) subTextColor else subTextColor.copy(alpha = 0.5f)
+                                                    color = if (isAlarmMasterEnabled) subTextColor else subTextColor.copy(
+                                                        alpha = 0.5f
+                                                    )
                                                 )
                                             }
                                             Text(text = "⏰", fontSize = 16.sp)
@@ -405,21 +452,32 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                             modifier = Modifier.padding(14.dp),
                                             verticalArrangement = Arrangement.spacedBy(10.dp)
                                         ) {
+                                            // 主开关
                                             Row(
                                                 modifier = Modifier.fillMaxWidth(),
                                                 horizontalArrangement = Arrangement.SpaceBetween,
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
-                                                Text("启用勿扰主同步", fontWeight = FontWeight.SemiBold, color = textColor, fontSize = 14.sp)
+                                                Text(
+                                                    "启用勿扰主同步",
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = textColor,
+                                                    fontSize = 14.sp
+                                                )
                                                 Switch(
                                                     checked = masterOn,
                                                     onCheckedChange = {
-                                                        masterOn = it
-                                                        updateMask(it, vibrateOn, sleepOn, powerOn)
+                                                        masterOn = it; updateMask(
+                                                        it,
+                                                        vibrateOn,
+                                                        sleepOn,
+                                                        powerOn
+                                                    )
                                                     }
                                                 )
                                             }
 
+                                            // ✅ 子项区域：受 masterOn 控制
                                             AnimatedVisibility(visible = masterOn) {
                                                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                                     HorizontalDivider(color = dividerColor)
@@ -429,12 +487,20 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                                         horizontalArrangement = Arrangement.SpaceBetween,
                                                         verticalAlignment = Alignment.CenterVertically
                                                     ) {
-                                                        Text("手表端振动反馈", color = textColor, fontSize = 13.sp)
+                                                        Text(
+                                                            "手表端振动反馈",
+                                                            color = textColor,
+                                                            fontSize = 13.sp
+                                                        )
                                                         Switch(
                                                             checked = vibrateOn,
                                                             onCheckedChange = {
-                                                                vibrateOn = it
-                                                                updateMask(masterOn, it, sleepOn, powerOn)
+                                                                vibrateOn = it; updateMask(
+                                                                masterOn,
+                                                                it,
+                                                                sleepOn,
+                                                                powerOn
+                                                            )
                                                             }
                                                         )
                                                     }
@@ -444,12 +510,20 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                                         horizontalArrangement = Arrangement.SpaceBetween,
                                                         verticalAlignment = Alignment.CenterVertically
                                                     ) {
-                                                        Text("睡眠模式同步", color = textColor, fontSize = 13.sp)
+                                                        Text(
+                                                            "睡眠模式同步",
+                                                            color = textColor,
+                                                            fontSize = 13.sp
+                                                        )
                                                         Switch(
                                                             checked = sleepOn,
                                                             onCheckedChange = {
-                                                                sleepOn = it
-                                                                updateMask(masterOn, vibrateOn, it, powerOn)
+                                                                sleepOn = it; updateMask(
+                                                                masterOn,
+                                                                vibrateOn,
+                                                                it,
+                                                                powerOn
+                                                            )
                                                             }
                                                         )
                                                     }
@@ -459,48 +533,83 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                                         horizontalArrangement = Arrangement.SpaceBetween,
                                                         verticalAlignment = Alignment.CenterVertically
                                                     ) {
-                                                        Text("省电模式同步", color = textColor, fontSize = 13.sp)
+                                                        Text(
+                                                            "省电模式同步",
+                                                            color = textColor,
+                                                            fontSize = 13.sp
+                                                        )
                                                         Switch(
                                                             checked = powerOn,
                                                             onCheckedChange = {
-                                                                powerOn = it
-                                                                updateMask(masterOn, vibrateOn, sleepOn, it)
+                                                                powerOn = it; updateMask(
+                                                                masterOn,
+                                                                vibrateOn,
+                                                                sleepOn,
+                                                                it
+                                                            )
                                                             }
                                                         )
                                                     }
 
-                                                    HorizontalDivider(color = dividerColor, modifier = Modifier.padding(vertical = 4.dp))
+                                                    // ✅ 新增：下拉菜单间隔（在 masterOn 的 Column 内部）
+                                                    HorizontalDivider(
+                                                        color = dividerColor,
+                                                        modifier = Modifier.padding(vertical = 4.dp)
+                                                    )
 
-                                                    Text(text = "亮屏与下拉菜单间隔", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = textColor)
-                                                    Text(text = "手机同步勿扰时，手表亮屏后延迟多久允许下拉菜单响应", fontSize = 11.sp, color = subTextColor, lineHeight = 14.sp)
+                                                    Text(
+                                                        text = "亮屏与下拉菜单间隔",
+                                                        fontSize = 13.sp,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        color = textColor
+                                                    )
+                                                    Text(
+                                                        text = "手机同步勿扰时，手表亮屏后延迟多久允许下拉菜单响应",
+                                                        fontSize = 11.sp,
+                                                        color = subTextColor,
+                                                        lineHeight = 14.sp
+                                                    )
                                                     Row(
                                                         modifier = Modifier.fillMaxWidth(),
                                                         verticalAlignment = Alignment.CenterVertically
                                                     ) {
                                                         Slider(
                                                             value = screenPullDownInterval.toFloat(),
-                                                            onValueChange = { newValue -> screenPullDownInterval = newValue.toInt() },
+                                                            onValueChange = { newValue ->
+                                                                // ✅ 隨著手指滑動，只即時更新記憶體變量，確保 UI 滑動流暢
+                                                                screenPullDownInterval =
+                                                                    newValue.toInt()
+                                                            },
                                                             onValueChangeFinished = {
-                                                                sp.edit { putInt("screen_pull_down_interval", screenPullDownInterval) }
+                                                                // ✅ 當用戶手指抬起、滑動結束時，才執行一次性本地保存
+                                                                sp.edit {
+                                                                    putInt(
+                                                                        "screen_pull_down_interval",
+                                                                        screenPullDownInterval
+                                                                    )
+                                                                }
                                                             },
                                                             valueRange = 0f..2000f,
                                                             steps = 19,
                                                             modifier = Modifier.weight(1f)
                                                         )
 
+
+
                                                         Text(
                                                             text = "${screenPullDownInterval}ms",
                                                             fontSize = 13.sp,
                                                             color = textColor,
-                                                            modifier = Modifier.padding(start = 8.dp).widthIn(min = 56.dp),
+                                                            modifier = Modifier.padding(start = 8.dp)
+                                                                .widthIn(min = 56.dp),
                                                             textAlign = TextAlign.End
                                                         )
                                                     }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
+                                                } // ← masterOn 的 Column 结束
+                                            } // ← masterOn 的 AnimatedVisibility 结束
+                                        } // ← Card 内部的 Column 结束
+                                    } // ← Card 结束
+                                } // ← isDndExpanded 的 AnimatedVisibility 结束
 
                                 AnimatedVisibility(visible = isAlarmExpanded) {
                                     Card(
@@ -524,8 +633,16 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                                         PhoneSyncAppPicker.show(requireContext()) { pkg, name ->
                                                             selectedAlarmName = name
                                                             selectedAlarmPkg = pkg
-                                                                                                                        sp.edit { putBoolean("alarm_proxy_master_switch", isAlarmMasterEnabled) }
-                                                            PhoneLog.d("WearSync_Main", "🎯 切换时钟源: $name [$pkg]")
+                                                            sp.edit {
+                                                                putBoolean(
+                                                                    "alarm_proxy_master_switch",
+                                                                    isAlarmMasterEnabled
+                                                                )
+                                                            }
+                                                            PhoneLog.d(
+                                                                "WearSync_Main",
+                                                                "🎯 切换时钟源: $name [$pkg]"
+                                                            )
                                                         }
                                                     }
                                                 ) { Text("切换时钟源", fontSize = 12.sp) }
@@ -534,18 +651,30 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                                     verticalAlignment = Alignment.CenterVertically,
                                                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                                                 ) {
-                                                    Text(text = if (isAlarmMasterEnabled) "已启用" else "已禁用", fontSize = 12.sp, color = textColor)
+                                                    Text(
+                                                        text = if (isAlarmMasterEnabled) "已启用" else "已禁用",
+                                                        fontSize = 12.sp,
+                                                        color = textColor
+                                                    )
                                                     Switch(
                                                         checked = isAlarmMasterEnabled,
                                                         onCheckedChange = { isEnabled ->
                                                             isAlarmMasterEnabled = isEnabled
-                                                            sp.edit { putBoolean("alarm_proxy_master_switch", isEnabled) }
-                                                        }
-                                                    )
+                                                            sp.edit {
+                                                                putBoolean(
+                                                                    "alarm_proxy_master_switch",
+                                                                    isEnabled
+                                                                )
+                                                            }
+                                                        })
                                                 }
                                             }
 
-                                            Text(text = "目标包名: $selectedAlarmPkg", fontSize = 11.sp, color = subTextColor)
+                                            Text(
+                                                "目标包名: $selectedAlarmPkg",
+                                                fontSize = 11.sp,
+                                                color = subTextColor
+                                            )
                                             HorizontalDivider(color = dividerColor)
 
                                             Row(
@@ -556,8 +685,12 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                                     enabled = isAlarmMasterEnabled,
                                                     value = dismissKeyText,
                                                     onValueChange = {
-                                                        dismissKeyText = it
-                                                        sp.edit { putString("alarm_dismiss_key", it) }
+                                                        dismissKeyText = it; sp.edit {
+                                                        putString(
+                                                            "alarm_dismiss_key",
+                                                            it
+                                                        )
+                                                    }
                                                     },
                                                     label = { Text("停止关键字") },
                                                     singleLine = true,
@@ -568,8 +701,12 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                                     enabled = isAlarmMasterEnabled,
                                                     value = snoozeKeyText,
                                                     onValueChange = {
-                                                        snoozeKeyText = it
-                                                        sp.edit { putString("alarm_snooze_key", it) }
+                                                        snoozeKeyText = it; sp.edit {
+                                                        putString(
+                                                            "alarm_snooze_key",
+                                                            it
+                                                        )
+                                                    }
                                                     },
                                                     label = { Text("延后关键字") },
                                                     singleLine = true,
@@ -579,7 +716,12 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                             }
 
                                             HorizontalDivider(color = dividerColor)
-                                            Text(text = "🧪 业务流联调测试面板", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = textColor)
+                                            Text(
+                                                "🧪 业务流联调测试面板",
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = textColor
+                                            )
 
                                             Row(
                                                 modifier = Modifier.fillMaxWidth(),
@@ -588,23 +730,47 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                                 Button(
                                                     enabled = isAlarmMasterEnabled,
                                                     modifier = Modifier.weight(1f),
-                                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
+                                                    colors = ButtonDefaults.buttonColors(
+                                                        containerColor = Color(0xFFC62828)
+                                                    ),
                                                     onClick = {
                                                         try {
-                                                            PhoneAlarmManager.handleWatchCommand(requireContext(), "DISMISS")
-                                                        } catch (_: Exception) {}
+                                                            PhoneAlarmManager.handleWatchCommand(
+                                                                requireContext(),
+                                                                "DISMISS"
+                                                            )
+                                                        } catch (_: Exception) {
+                                                        }
                                                     }
-                                                ) { Text("模拟停止测试", color = Color.White, fontSize = 11.sp) }
+                                                ) {
+                                                    Text(
+                                                        "模拟停止测试",
+                                                        color = Color.White,
+                                                        fontSize = 11.sp
+                                                    )
+                                                }
                                                 Button(
                                                     enabled = isAlarmMasterEnabled,
                                                     modifier = Modifier.weight(1f),
-                                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE65100)),
+                                                    colors = ButtonDefaults.buttonColors(
+                                                        containerColor = Color(0xFFE65100)
+                                                    ),
                                                     onClick = {
                                                         try {
-                                                            PhoneAlarmManager.handleWatchCommand(requireContext(), "SNOOZE")
-                                                        } catch (_: Exception) {}
+                                                            PhoneAlarmManager.handleWatchCommand(
+                                                                requireContext(),
+                                                                "SNOOZE"
+                                                            )
+                                                        } catch (_: Exception) {
+                                                        }
                                                     }
-                                                ) { Text("模拟延后测试", color = Color.White, fontSize = 11.sp) }
+                                                ) {
+                                                    Text(
+                                                        "模拟延后测试",
+                                                        color = Color.White,
+                                                        fontSize = 11.sp
+                                                    )
+                                                }
                                             }
                                         }
                                     }
@@ -626,13 +792,23 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                         colors = CardDefaults.cardColors(containerColor = cardBgColor)
                                     ) {
                                         Row(
-                                            modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp),
+                                            modifier = Modifier.fillMaxSize()
+                                                .padding(horizontal = 14.dp),
                                             horizontalArrangement = Arrangement.SpaceBetween,
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Column {
-                                                Text("相机中心", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = textColor)
-                                                Text("同步手表取景屏", fontSize = 11.sp, color = subTextColor)
+                                                Text(
+                                                    "相机中心",
+                                                    fontSize = 15.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = textColor
+                                                )
+                                                Text(
+                                                    "同步手表取景屏",
+                                                    fontSize = 11.sp,
+                                                    color = subTextColor
+                                                )
                                             }
                                             Text(text = "📷", fontSize = 16.sp)
                                         }
@@ -648,20 +824,29 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                         colors = CardDefaults.cardColors(containerColor = cardBgColor)
                                     ) {
                                         Row(
-                                            modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp),
+                                            modifier = Modifier.fillMaxSize()
+                                                .padding(horizontal = 14.dp),
                                             horizontalArrangement = Arrangement.SpaceBetween,
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Column {
-                                                Text("终端调试", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = textColor)
-                                                Text("底层日志错误追踪", fontSize = 11.sp, color = subTextColor)
+                                                Text(
+                                                    "终端调试",
+                                                    fontSize = 15.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = textColor
+                                                )
+                                                Text(
+                                                    "底层日志错误追踪",
+                                                    fontSize = 11.sp,
+                                                    color = subTextColor
+                                                )
                                             }
                                             Text(text = "📝", fontSize = 16.sp)
                                         }
                                     }
                                 }
 
-                                // ✅ 1. 相机中心展开面板 (已独立闭合)
                                 AnimatedVisibility(visible = isCameraExpanded) {
                                     Card(
                                         modifier = Modifier.fillMaxWidth(),
@@ -672,411 +857,692 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                             modifier = Modifier.fillMaxWidth().padding(14.dp),
                                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
+                                            // ✅ 启动按钮：本机启动 + 手表启动
                                             Button(
                                                 modifier = Modifier.weight(1f),
                                                 colors = ButtonDefaults.buttonColors(
-                                                    containerColor = if (isCameraAllowedState.value) Color(0xFF2E7D32) else Color(0xFF333333)
+                                                    containerColor = if (isCameraAllowedState.value) Color(
+                                                        0xFF2E7D32
+                                                    ) else Color(0xFF333333)
                                                 ),
                                                 onClick = {
+                                                    // 1. 权限检查
                                                     if (!isCameraAllowedState.value) {
-                                                        requestCameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                                                        requestCameraPermissionLauncher.launch(
+                                                            Manifest.permission.CAMERA
+                                                        )
                                                         return@Button
                                                     }
-                                                    val localIntent = Intent(requireContext(), PhoneSyncRemoteCameraActivity::class.java).apply {
-                                                        putExtra(PhoneSyncRemoteCameraActivity.EXTRA_SOURCE, PhoneSyncRemoteCameraActivity.SOURCE_LOCAL)
+
+                                                    // 2. ✅ 启动本机总控台 Activity
+                                                    val localIntent = Intent(
+                                                        requireContext(),
+                                                        PhoneSyncRemoteCameraActivity::class.java
+                                                    ).apply {
+                                                        putExtra(
+                                                            PhoneSyncRemoteCameraActivity.EXTRA_SOURCE,
+                                                            PhoneSyncRemoteCameraActivity.SOURCE_LOCAL
+                                                        )
                                                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                                     }
                                                     requireContext().startActivity(localIntent)
 
-                                                    val nodeId = WearSyncState.getNodeId(requireContext())
+
+                                                    // 3. ✅ 向手表发送启动相机指令
+                                                    val nodeId =
+                                                        WearSyncState.getNodeId(requireContext())
                                                     if (!nodeId.isNullOrEmpty()) {
                                                         Thread {
                                                             try {
                                                                 val json = JSONObject().apply {
                                                                     put("sender", "phone")
                                                                     put("type", "camera_control")
-                                                                    put("action", "open_phone_camera")
-                                                                    put("timestamp", System.currentTimeMillis())
+                                                                    put(
+                                                                        "action",
+                                                                        "open_phone_camera"
+                                                                    )
+                                                                    put(
+                                                                        "timestamp",
+                                                                        System.currentTimeMillis()
+                                                                    )
                                                                 }
-                                                                Wearable.getMessageClient(requireContext()).sendMessage(
+                                                                Wearable.getMessageClient(
+                                                                    requireContext()
+                                                                ).sendMessage(
                                                                     nodeId, UNIVERSAL_SYNC_PATH,
-                                                                    json.toString().toByteArray(StandardCharsets.UTF_8)
+                                                                    json.toString().toByteArray(
+                                                                        StandardCharsets.UTF_8
+                                                                    )
                                                                 )
-                                                            } catch (_: Exception) {}
+                                                            } catch (_: Exception) {
+                                                            }
                                                         }.start()
                                                     }
                                                 }
-                                            ) { Text("呼叫手表相机", color = Color.White, fontSize = 12.sp) }
+                                            ) {
+                                                Text(
+                                                    "呼叫手表相机",
+                                                    color = Color.White,
+                                                    fontSize = 12.sp
+                                                )
+                                            }
 
+                                            // ✅ 停止按钮：本机停止 + 手表停止
                                             Button(
                                                 modifier = Modifier.weight(1f),
-                                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7F1D1D)),
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = Color(
+                                                        0xFF7F1D1D
+                                                    )
+                                                ),
                                                 onClick = {
+                                                    // 1. ✅ 停止本机 Camera Service
                                                     requireContext().startService(
-                                                        Intent(requireContext(), PhoneSyncCameraService::class.java)
+                                                        Intent(
+                                                            requireContext(),
+                                                            PhoneSyncCameraService::class.java
+                                                        )
                                                             .setAction(PhoneSyncCameraService.ACTION_STOP_CAMERA)
                                                     )
-                                                    val nodeId = WearSyncState.getNodeId(requireContext())
+
+                                                    // 2. ✅ 向手表发送强制关闭相机指令
+                                                    val nodeId =
+                                                        WearSyncState.getNodeId(requireContext())
                                                     if (!nodeId.isNullOrEmpty()) {
                                                         Thread {
                                                             try {
                                                                 val json = JSONObject().apply {
                                                                     put("sender", "phone")
                                                                     put("type", "camera_control")
-                                                                    put("action", "FORCE_QUIT_CAMERA")
-                                                                    put("timestamp", System.currentTimeMillis())
+                                                                    put(
+                                                                        "action",
+                                                                        "FORCE_QUIT_CAMERA"
+                                                                    )
+                                                                    put(
+                                                                        "timestamp",
+                                                                        System.currentTimeMillis()
+                                                                    )
                                                                 }
-                                                                Wearable.getMessageClient(requireContext()).sendMessage(
+                                                                Wearable.getMessageClient(
+                                                                    requireContext()
+                                                                ).sendMessage(
                                                                     nodeId, UNIVERSAL_SYNC_PATH,
-                                                                    json.toString().toByteArray(StandardCharsets.UTF_8)
+                                                                    json.toString().toByteArray(
+                                                                        StandardCharsets.UTF_8
+                                                                    )
                                                                 )
-                                                            } catch (_: Exception) {}
+                                                            } catch (_: Exception) {
+                                                            }
                                                         }.start()
                                                     }
                                                 }
-                                            ) { Text("强制关闭相机", color = Color.White, fontSize = 12.sp) }
-                                        }
-                                    }
-                                }
-
-                                // ✅ 2. 终端调试展开面板 (已从相机面板独立出来平级)
-                                AnimatedVisibility(visible = isLogExpanded) {
-                                    Card(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(12.dp),
-                                        colors = CardDefaults.cardColors(containerColor = cardBgColor)
-                                    ) {
-                                        Column(
-                                            modifier = Modifier.padding(14.dp),
-                                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                                        ) {
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                verticalAlignment = Alignment.CenterVertically
                                             ) {
-                                                Text("开启手机端调试日志", color = textColor, fontSize = 14.sp)
-                                                Switch(
-                                                    checked = uiLogDebugSwitch.value,
-                                                    onCheckedChange = { isEnabled ->
-                                                        uiLogDebugSwitch.value = isEnabled
-                                                        PhoneLog.DEBUG = isEnabled
-                                                    }
+                                                Text(
+                                                    "强制关闭相机",
+                                                    color = Color.White,
+                                                    fontSize = 12.sp
                                                 )
                                             }
+                                        }
+                                    }
 
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                verticalAlignment = Alignment.CenterVertically
+
+                                    AnimatedVisibility(visible = isLogExpanded) {
+                                        Card(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(12.dp),
+                                            colors = CardDefaults.cardColors(containerColor = cardBgColor)
+                                        ) {
+                                            Column(
+                                                modifier = Modifier.padding(14.dp),
+                                                verticalArrangement = Arrangement.spacedBy(10.dp)
                                             ) {
-                                                Text("同步监听手表端核心日志", color = textColor, fontSize = 14.sp)
-                                                Switch(
-                                                    checked = uiWearLogDebugSwitch.value,
-                                                    onCheckedChange = { isChecked ->
-                                                        uiWearLogDebugSwitch.value = isChecked
-                                                        sp.edit { putBoolean("wear_log_debug_visible", isChecked) }
-                                                        try {
-                                                            val msgJson = JSONObject().apply {
-                                                                put("type", "wearlog")
-                                                                put("wear_log_debug", isChecked)
-                                                                put("timestamp", System.currentTimeMillis())
-                                                            }
-                                                            val context = requireContext()
-                                                            val nodeId = WearSyncState.getNodeId(context)
-                                                            if (!nodeId.isNullOrEmpty()) {
-                                                                kotlinx.coroutines.MainScope().launch(Dispatchers.IO) {
-                                                                    try {
-                                                                        Wearable.getMessageClient(context).sendMessage(
-                                                                            nodeId, UNIVERSAL_SYNC_PATH,
-                                                                            msgJson.toString().toByteArray(StandardCharsets.UTF_8)
-                                                                        )
-                                                                    } catch (_: Exception) {}
-                                                                }
-                                                            }
-                                                        } catch (_: Exception) {}
-                                                    }
-                                                )
-                                            }
-
-                                            HorizontalDivider(color = dividerColor)
-
-                                            Button(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                onClick = {
-                                                    val context = requireContext()
-                                                    if (!Settings.canDrawOverlays(context)) {
-                                                        val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, "package:${context.packageName}".toUri())
-                                                        startActivity(intent)
-                                                    } else {
-                                                        val intent = Intent(context, PhoneLogFloatingService::class.java)
-                                                        context.startService(intent)
-                                                    }
-                                                }
-                                            ) { Text("开启实时悬浮监视器", fontSize = 13.sp) }
-                                        }
-                                    }
-                                }
-                            }
-
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    Card(
-                                        onClick = {
-                                            isConnectionExpanded = !isConnectionExpanded
-                                            if (isConnectionExpanded) isPermissionExpanded = false
-                                        },
-                                        modifier = Modifier.weight(1f).height(72.dp),
-                                        shape = RoundedCornerShape(16.dp),
-                                        colors = CardDefaults.cardColors(containerColor = cardBgColor)
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Column {
-                                                Text("连接状态", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = textColor)
-                                                Text("骨干 network 检测", fontSize = 11.sp, color = subTextColor)
-                                            }
-                                            Text(text = if (isConnectedState.value) "🟢" else "🔴", fontSize = 14.sp)
-                                        }
-                                    }
-
-                                    Card(
-                                        onClick = {
-                                            isPermissionExpanded = !isPermissionExpanded
-                                            if (isPermissionExpanded) isConnectionExpanded = false
-                                        },
-                                        modifier = Modifier.weight(1f).height(72.dp),
-                                        shape = RoundedCornerShape(16.dp),
-                                        colors = CardDefaults.cardColors(containerColor = cardBgColor)
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Column {
-                                                Text("核心权限", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = textColor)
-                                                Text("底层硬件授信", fontSize = 11.sp, color = subTextColor)
-                                            }
-                                            Text(text = if (isNotificationAllowedState.value && isCameraAllowedState.value) "🟢" else "⚠️", fontSize = 14.sp)
-                                        }
-                                    }
-                                }
-
-                                AnimatedVisibility(visible = isConnectionExpanded) {
-                                    Card(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(12.dp),
-                                        colors = CardDefaults.cardColors(containerColor = cardBgColor)
-                                    ) {
-                                        Column(modifier = Modifier.padding(14.dp)) {
-                                            Text(
-                                                text = if (isConnectedState.value) "骨干网络畅通。正在通过 GMS Wearable CapabilityClient 实时监听手表节点的动态响应。"
-                                                else "未检测到处于活动状态的手表节点。请检查手表是否开机、蓝牙是否连接、或 Wear OS 专属配对 App 是否在后台运行。",
-                                                fontSize = 13.sp,
-                                                color = textColor,
-                                                lineHeight = 18.sp
-                                            )
-                                        }
-                                    }
-                                }
-
-                                AnimatedVisibility(visible = isPermissionExpanded) {
-                                    Card(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(12.dp),
-                                        colors = CardDefaults.cardColors(containerColor = cardBgColor)
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(12.dp).fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                        ) {
-                                            Card(
-                                                modifier = Modifier.weight(1f).height(110.dp),
-                                                shape = RoundedCornerShape(8.dp),
-                                                colors = CardDefaults.cardColors(containerColor = backgroundColor)
-                                            ) {
-                                                Column(
-                                                    modifier = Modifier.padding(10.dp).fillMaxSize(),
-                                                    verticalArrangement = Arrangement.SpaceBetween
+                                                // 1. 手机端日志开关（只控制本地日志）
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
                                                 ) {
-                                                    Column {
-                                                        Text("通知接管", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = textColor)
-                                                        Text(
-                                                            text = if (isNotificationAllowedState.value) "核心状态已就绪" else "拦截状态必备",
-                                                            fontSize = 11.sp,
-                                                            color = if (isNotificationAllowedState.value) Color(0xFF4CAF50) else Color(0xFFF44336)
-                                                        )
-                                                    }
-                                                    if (!isNotificationAllowedState.value) {
-                                                        Button(
-                                                            onClick = { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) },
-                                                            contentPadding = PaddingValues(horizontal = 6.dp),
-                                                            modifier = Modifier.align(Alignment.End).height(26.dp)
-                                                        ) { Text("去授权", fontSize = 10.sp) }
-                                                    } else {
-                                                        Text("🟢 已放行", fontSize = 11.sp, color = Color(0xFF4CAF50), modifier = Modifier.align(Alignment.End))
-                                                    }
-                                                }
-                                            }
-                                            Card(
-                                                modifier = Modifier.weight(1f).height(110.dp),
-                                                shape = RoundedCornerShape(8.dp),
-                                                colors = CardDefaults.cardColors(containerColor = backgroundColor)
-                                            ) {
-                                                Column(
-                                                    modifier = Modifier.padding(10.dp).fillMaxSize(),
-                                                    verticalArrangement = Arrangement.SpaceBetween
-                                                ) {
-                                                    Column {
-                                                        Text("相机硬件", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = textColor)
-                                                        Text(
-                                                            text = if (isCameraAllowedState.value) "取景功能正常" else "取景控制必备",
-                                                            fontSize = 11.sp,
-                                                            color = if (isCameraAllowedState.value) Color(0xFF4CAF50) else Color(0xFFF44336)
-                                                        )
-                                                    }
-                                                    if (!isCameraAllowedState.value) {
-                                                        Button(
-                                                            onClick = { requestCameraPermissionLauncher.launch(Manifest.permission.CAMERA) },
-                                                            contentPadding = PaddingValues(horizontal = 6.dp),
-                                                            modifier = Modifier.align(Alignment.End).height(26.dp)
-                                                        ) { Text("授相机", fontSize = 10.sp) }
-                                                    } else {
-                                                        Text("🟢 已放行", fontSize = 11.sp, color = Color(0xFF4CAF50), modifier = Modifier.align(Alignment.End))
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            Card(
-                                onClick = { isFileTransferExpanded = !isFileTransferExpanded },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(16.dp),
-                                colors = CardDefaults.cardColors(containerColor = cardBgColor)
-                            ) {
-                                Column(modifier = Modifier.padding(16.dp)) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Column {
-                                            Text("跨端文件传输枢纽", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = textColor)
-                                            Text("双向传输照片、音频及自定义配置文件", fontSize = 12.sp, color = subTextColor)
-                                        }
-                                        Text(text = "📤", fontSize = 14.sp, color = textColor)
-                                    }
-
-                                    AnimatedVisibility(visible = isFileTransferExpanded) {
-                                        Column(
-                                            modifier = Modifier.padding(top = 12.dp),
-                                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                                        ) {
-                                            HorizontalDivider(color = dividerColor)
-                                            Button(
-                                                onClick = { fileTransferLauncher.launch("*/*") },
-                                                modifier = Modifier.fillMaxWidth()
-                                            ) { Text("选择并发送文件") }
-
-                                            Text(
-                                                text = fileTransferStatus.value,
-                                                fontSize = 12.sp,
-                                                color = if (fileTransferStatus.value.contains("成功")) Color(0xFF4CAF50) else if (fileTransferStatus.value.contains("失败") || fileTransferStatus.value.contains("错误")) Color(0xFFF44336) else subTextColor,
-                                                modifier = Modifier.fillMaxWidth()
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-
-                            Card(
-                                onClick = { isVibrationExpanded = !isVibrationExpanded },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(16.dp),
-                                colors = CardDefaults.cardColors(containerColor = cardBgColor)
-                            ) {
-                                Column(modifier = Modifier.padding(16.dp)) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Column {
-                                            Text("震动反馈设置", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = textColor)
-                                            Text("自定义手表端提醒震动波形与频率", fontSize = 12.sp, color = subTextColor)
-                                        }
-                                        Text(text = if (isVibrationExpanded) "▲" else "▼", fontSize = 14.sp, color = subTextColor)
-                                    }
-
-                                    AnimatedVisibility(visible = isVibrationExpanded) {
-                                        Column(
-                                            modifier = Modifier.padding(top = 12.dp),
-                                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                                        ) {
-                                            HorizontalDivider(color = dividerColor)
-
-                                            Text(text = "震动时长: ${patternOnDuration}ms", fontSize = 13.sp, color = textColor)
-                                            Slider(
-                                                value = patternOnDuration.toFloat(),
-                                                onValueChange = { patternOnDuration = it.toInt() },
-                                                valueRange = 100f..2000f,
-                                                steps = 19,
-                                                modifier = Modifier.fillMaxWidth()
-                                            )
-
-                                            Text(text = "间隔时长: ${patternOffDuration}ms", fontSize = 13.sp, color = textColor)
-                                            Slider(
-                                                value = patternOffDuration.toFloat(),
-                                                onValueChange = { patternOffDuration = it.toInt() },
-                                                valueRange = 100f..1000f,
-                                                steps = 8,
-                                                modifier = Modifier.fillMaxWidth()
-                                            )
-
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Text(text = "循环震动", fontSize = 13.sp, color = textColor)
-                                                Spacer(Modifier.weight(1f))
-                                                Switch(
-                                                    checked = repeatIndex == 0,
-                                                    onCheckedChange = { repeatIndex = if (it) 0 else -1 }
-                                                )
-                                            }
-
-                                            HorizontalDivider(color = dividerColor)
-
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                            ) {
-                                                OutlinedButton(
-                                                    onClick = { sendVibrationCommand("preview", patternOnDuration, patternOffDuration, repeatIndex) },
-                                                    modifier = Modifier.weight(1f)
-                                                ) { Text("📳 预览") }
-
-                                                Button(
-                                                    modifier = Modifier.weight(1f),
-                                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
-                                                    onClick = {
-                                                        val prefs = requireContext().getSharedPreferences("wear_vibration_prefs", Context.MODE_PRIVATE)
-                                                        prefs.edit {
-                                                            putInt("onDuration", patternOnDuration)
-                                                            putInt("offDuration", patternOffDuration)
-                                                                                                                        putInt("repeatIndex", repeatIndex)
+                                                    Text(
+                                                        "开启手机端调试日志",
+                                                        color = textColor,
+                                                        fontSize = 14.sp
+                                                    )
+                                                    Switch(
+                                                        checked = uiLogDebugSwitch.value,
+                                                        onCheckedChange = { isEnabled ->
+                                                            uiLogDebugSwitch.value = isEnabled
+                                                            PhoneLog.DEBUG = isEnabled
+                                                            // ✅ 修复：这里只控制本地日志，不启动浮窗
+                                                            // 如果需要浮窗，让用户点下面的按钮
                                                         }
-                                                        PhoneLog.d("WearSync_Main", "💾 震动参数已保存到手机端: on=${patternOnDuration}ms, off=${patternOffDuration}ms, repeat=${repeatIndex}")
-                                                        sendVibrationCommand("save", patternOnDuration, patternOffDuration, repeatIndex)
+                                                    )
+                                                }
+
+                                                // 2. 手表端日志开关（控制手表日志回传）
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text(
+                                                        "同步监听手表端核心日志",
+                                                        color = textColor,
+                                                        fontSize = 14.sp
+                                                    )
+                                                    Switch(
+                                                        checked = uiWearLogDebugSwitch.value,
+                                                        onCheckedChange = { isChecked ->
+                                                            uiWearLogDebugSwitch.value = isChecked
+                                                            sp.edit {
+                                                                putBoolean(
+                                                                    "wear_log_debug_visible",
+                                                                    isChecked
+                                                                )
+                                                            }
+                                                            PhoneLog.d(
+                                                                "WearSync_Main",
+                                                                "用户切换同步监听手表端核心日志开关，当前状态: $isChecked"
+                                                            )
+                                                            try {
+                                                                val msgJson = JSONObject().apply {
+                                                                    put("type", "wearlog")
+                                                                    put("wear_log_debug", isChecked)
+                                                                    put(
+                                                                        "timestamp",
+                                                                        System.currentTimeMillis()
+                                                                    )
+                                                                }
+                                                                PhoneLog.d(
+                                                                    "WearSync_Main",
+                                                                    "准备向手表端发送日志控制信令: $msgJson"
+                                                                )
+                                                                val context = requireContext()
+                                                                val nodeId =
+                                                                    WearSyncState.getNodeId(context)
+                                                                if (!nodeId.isNullOrEmpty()) {
+                                                                    kotlinx.coroutines.MainScope()
+                                                                        .launch(Dispatchers.IO) {
+                                                                            try {
+                                                                                Wearable.getMessageClient(
+                                                                                    context
+                                                                                )
+                                                                                    .sendMessage(
+                                                                                        nodeId,
+                                                                                        UNIVERSAL_SYNC_PATH,
+                                                                                        msgJson.toString()
+                                                                                            .toByteArray(
+                                                                                                StandardCharsets.UTF_8
+                                                                                            )
+                                                                                    )
+                                                                                PhoneLog.d(
+                                                                                    "WearSync_Main",
+                                                                                    "日志控制信令已成功送出到消息队列"
+                                                                                )
+                                                                            } catch (sendError: Exception) {
+                                                                                PhoneLog.e(
+                                                                                    "WearSync_Main",
+                                                                                    "通过MessageClient发送信令时遭遇物理失败",
+                                                                                    sendError
+                                                                                )
+                                                                            }
+                                                                        }
+                                                                } else {
+                                                                    PhoneLog.w(
+                                                                        "WearSync_Main",
+                                                                        "无法发送信令给手表：当前未捕获到有效的手表 NodeId"
+                                                                    )
+                                                                }
+                                                            } catch (e: Exception) {
+                                                                PhoneLog.e(
+                                                                    "WearSync_Main",
+                                                                    "组装手表日志开关信令数据失败",
+                                                                    e
+                                                                )
+                                                            }
+                                                        }
+                                                    )
+                                                }
+
+                                                HorizontalDivider(color = dividerColor)
+
+                                                // 3. 独立的浮窗按钮
+                                                Button(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    onClick = {
+                                                        val context = requireContext()
+                                                        if (!Settings.canDrawOverlays(context)) {
+                                                            val intent = Intent(
+                                                                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                                                "package:${context.packageName}".toUri()
+                                                            )
+                                                            startActivity(intent)
+                                                        } else {
+                                                            // ✅ 修复：这里只负责启动浮窗，不依赖上面的开关
+                                                            val intent = Intent(
+                                                                context,
+                                                                PhoneLogFloatingService::class.java
+                                                            )
+                                                            context.startService(intent)
+                                                        }
                                                     }
-                                                ) { Text("💾 保存") }
+                                                ) {
+                                                    Text("开启实时悬浮监视器", fontSize = 13.sp)
+                                                }
+                                            }
+                                        }
+                                    }
+
+
+                                }
+
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        Card(
+                                            onClick = {
+                                                isConnectionExpanded = !isConnectionExpanded
+                                                if (isConnectionExpanded) isPermissionExpanded =
+                                                    false
+                                            },
+                                            modifier = Modifier.weight(1f).height(72.dp),
+                                            shape = RoundedCornerShape(16.dp),
+                                            colors = CardDefaults.cardColors(containerColor = cardBgColor)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.fillMaxSize()
+                                                    .padding(horizontal = 14.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Column {
+                                                    Text(
+                                                        "连接状态",
+                                                        fontSize = 15.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = textColor
+                                                    )
+                                                    Text(
+                                                        "骨干网络检测",
+                                                        fontSize = 11.sp,
+                                                        color = subTextColor
+                                                    )
+                                                }
+                                                Text(
+                                                    text = if (isConnectedState.value) "🟢" else "🔴",
+                                                    fontSize = 14.sp
+                                                )
+                                            }
+                                        }
+
+                                        Card(
+                                            onClick = {
+                                                isPermissionExpanded = !isPermissionExpanded
+                                                if (isPermissionExpanded) isConnectionExpanded =
+                                                    false
+                                            },
+                                            modifier = Modifier.weight(1f).height(72.dp),
+                                            shape = RoundedCornerShape(16.dp),
+                                            colors = CardDefaults.cardColors(containerColor = cardBgColor)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.fillMaxSize()
+                                                    .padding(horizontal = 14.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Column {
+                                                    Text(
+                                                        "核心权限",
+                                                        fontSize = 15.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = textColor
+                                                    )
+                                                    Text(
+                                                        "底层硬件授信",
+                                                        fontSize = 11.sp,
+                                                        color = subTextColor
+                                                    )
+                                                }
+                                                Text(
+                                                    text = if (isNotificationAllowedState.value && isCameraAllowedState.value) "🟢" else "⚠️",
+                                                    fontSize = 14.sp
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    AnimatedVisibility(visible = isConnectionExpanded) {
+                                        Card(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(12.dp),
+                                            colors = CardDefaults.cardColors(containerColor = cardBgColor)
+                                        ) {
+                                            Column(modifier = Modifier.padding(14.dp)) {
+                                                Text(
+                                                    text = if (isConnectedState.value) "骨干网络畅通。正在通过 GMS Wearable CapabilityClient 实时监听手表节点的动态响应。"
+                                                    else "未检测到处于活动状态的手表节点。请检查手表是否开机、蓝牙是否连接、或 Wear OS 专属配对 App 是否在后台运行。",
+                                                    fontSize = 13.sp,
+                                                    color = textColor,
+                                                    lineHeight = 18.sp
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    AnimatedVisibility(visible = isPermissionExpanded) {
+                                        Card(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(12.dp),
+                                            colors = CardDefaults.cardColors(containerColor = cardBgColor)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                            ) {
+                                                Card(
+                                                    modifier = Modifier.weight(1f).height(110.dp),
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    colors = CardDefaults.cardColors(containerColor = backgroundColor)
+                                                ) {
+                                                    Column(
+                                                        modifier = Modifier.padding(10.dp)
+                                                            .fillMaxSize(),
+                                                        verticalArrangement = Arrangement.SpaceBetween
+                                                    ) {
+                                                        Column {
+                                                            Text(
+                                                                "通知接管",
+                                                                fontSize = 14.sp,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = textColor
+                                                            )
+                                                            Text(
+                                                                text = if (isNotificationAllowedState.value) "核心状态已就绪" else "拦截状态必备",
+                                                                fontSize = 11.sp,
+                                                                color = if (isNotificationAllowedState.value) Color(
+                                                                    0xFF4CAF50
+                                                                ) else Color(0xFFF44336)
+                                                            )
+                                                        }
+                                                        if (!isNotificationAllowedState.value) {
+                                                            Button(
+                                                                onClick = {
+                                                                    startActivity(
+                                                                        Intent(
+                                                                            Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS
+                                                                        )
+                                                                    )
+                                                                },
+                                                                contentPadding = PaddingValues(
+                                                                    horizontal = 6.dp
+                                                                ),
+                                                                modifier = Modifier.align(Alignment.End)
+                                                                    .height(26.dp)
+                                                            ) { Text("去授权", fontSize = 10.sp) }
+                                                        } else {
+                                                            Text(
+                                                                "🟢 已放行",
+                                                                fontSize = 11.sp,
+                                                                color = Color(0xFF4CAF50),
+                                                                modifier = Modifier.align(Alignment.End)
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                                Card(
+                                                    modifier = Modifier.weight(1f).height(110.dp),
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    colors = CardDefaults.cardColors(containerColor = backgroundColor)
+                                                ) {
+                                                    Column(
+                                                        modifier = Modifier.padding(10.dp)
+                                                            .fillMaxSize(),
+                                                        verticalArrangement = Arrangement.SpaceBetween
+                                                    ) {
+                                                        Column {
+                                                            Text(
+                                                                "相机硬件",
+                                                                fontSize = 14.sp,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = textColor
+                                                            )
+                                                            Text(
+                                                                text = if (isCameraAllowedState.value) "取景功能正常" else "取景控制必备",
+                                                                fontSize = 11.sp,
+                                                                color = if (isCameraAllowedState.value) Color(
+                                                                    0xFF4CAF50
+                                                                ) else Color(0xFFF44336)
+                                                            )
+                                                        }
+                                                        if (!isCameraAllowedState.value) {
+                                                            Button(
+                                                                onClick = {
+                                                                    requestCameraPermissionLauncher.launch(
+                                                                        Manifest.permission.CAMERA
+                                                                    )
+                                                                },
+                                                                contentPadding = PaddingValues(
+                                                                    horizontal = 6.dp
+                                                                ),
+                                                                modifier = Modifier.align(Alignment.End)
+                                                                    .height(26.dp)
+                                                            ) { Text("授相机", fontSize = 10.sp) }
+                                                        } else {
+                                                            Text(
+                                                                "🟢 已放行",
+                                                                fontSize = 11.sp,
+                                                                color = Color(0xFF4CAF50),
+                                                                modifier = Modifier.align(Alignment.End)
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Card(
+                                    onClick = { isFileTransferExpanded = !isFileTransferExpanded },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(16.dp),
+                                    colors = CardDefaults.cardColors(containerColor = cardBgColor)
+                                ) {
+                                    Column(modifier = Modifier.padding(16.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column {
+                                                // 1. 标题已更新，移除了 "(暂未启用)"
+                                                Text(
+                                                    "跨端文件传输枢纽",
+                                                    fontSize = 16.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = textColor
+                                                )
+                                                Text(
+                                                    "双向传输照片、音频及自定义配置文件",
+                                                    fontSize = 12.sp,
+                                                    color = subTextColor
+                                                )
+                                            }
+                                            // 2. 图标已更新，不再是 "预留"
+                                            Text(text = "📤", fontSize = 14.sp, color = textColor)
+                                        }
+
+                                        AnimatedVisibility(visible = isFileTransferExpanded) {
+                                            Column(
+                                                modifier = Modifier.padding(top = 12.dp),
+                                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                                            ) {
+                                                HorizontalDivider(color = dividerColor)
+
+                                                // 3. 移除了旧的提示文本，替换为功能按钮和状态显示
+                                                Button(
+                                                    onClick = { fileTransferLauncher.launch("*/*") },
+                                                    modifier = Modifier.fillMaxWidth()
+                                                ) {
+                                                    Text("选择并发送文件")
+                                                }
+
+                                                Text(
+                                                    text = fileTransferStatus.value,
+                                                    fontSize = 12.sp,
+                                                    color = if (fileTransferStatus.value.contains("成功")) Color(
+                                                        0xFF4CAF50
+                                                    ) else if (fileTransferStatus.value.contains("失败") || fileTransferStatus.value.contains(
+                                                            "错误"
+                                                        )
+                                                    ) Color(0xFFF44336) else subTextColor,
+                                                    modifier = Modifier.fillMaxWidth()
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // ========== 震动反馈设置 ==========
+                                Card(
+                                    onClick = { isVibrationExpanded = !isVibrationExpanded },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(16.dp),
+                                    colors = CardDefaults.cardColors(containerColor = cardBgColor)
+                                ) {
+                                    Column(modifier = Modifier.padding(16.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column {
+                                                Text(
+                                                    "震动反馈设置",
+                                                    fontSize = 16.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = textColor
+                                                )
+                                                Text(
+                                                    "自定义手表端提醒震动波形与频率",
+                                                    fontSize = 12.sp,
+                                                    color = subTextColor
+                                                )
+                                            }
+                                            Text(
+                                                text = if (isVibrationExpanded) "▲" else "▼",
+                                                fontSize = 14.sp,
+                                                color = subTextColor
+                                            )
+                                        }
+
+                                        AnimatedVisibility(visible = isVibrationExpanded) {
+                                            Column(
+                                                modifier = Modifier.padding(top = 12.dp),
+                                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                                            ) {
+                                                HorizontalDivider(color = dividerColor)
+
+                                                Text(
+                                                    "震动时长: ${patternOnDuration}ms",
+                                                    fontSize = 13.sp,
+                                                    color = textColor
+                                                )
+                                                Slider(
+                                                    value = patternOnDuration.toFloat(),
+                                                    onValueChange = {
+                                                        patternOnDuration = it.toInt()
+                                                    },
+                                                    valueRange = 100f..2000f,
+                                                    steps = 19,
+                                                    modifier = Modifier.fillMaxWidth()
+                                                )
+
+                                                Text(
+                                                    "间隔时长: ${patternOffDuration}ms",
+                                                    fontSize = 13.sp,
+                                                    color = textColor
+                                                )
+                                                Slider(
+                                                    value = patternOffDuration.toFloat(),
+                                                    onValueChange = {
+                                                        patternOffDuration = it.toInt()
+                                                    },
+                                                    valueRange = 100f..1000f,
+                                                    steps = 8,
+                                                    modifier = Modifier.fillMaxWidth()
+                                                )
+
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Text(
+                                                        "循环震动",
+                                                        fontSize = 13.sp,
+                                                        color = textColor
+                                                    )
+                                                    Spacer(Modifier.weight(1f))
+                                                    Switch(
+                                                        checked = repeatIndex == 0,
+                                                        onCheckedChange = {
+                                                            repeatIndex = if (it) 0 else -1
+                                                        })
+                                                }
+
+                                                HorizontalDivider(color = dividerColor)
+
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                ) {
+                                                    OutlinedButton(
+                                                        onClick = {
+                                                            sendVibrationCommand(
+                                                                "preview",
+                                                                patternOnDuration,
+                                                                patternOffDuration,
+                                                                repeatIndex
+                                                            )
+                                                        },
+                                                        modifier = Modifier.weight(1f)
+                                                    ) { Text("📳 预览") }
+
+                                                    Button(
+                                                        modifier = Modifier.weight(1f),
+                                                        colors = ButtonDefaults.buttonColors(
+                                                            containerColor = Color(0xFF4CAF50)
+                                                        ),
+                                                        onClick = {
+                                                            val prefs =
+                                                                requireContext().getSharedPreferences(
+                                                                    "wear_vibration_prefs",
+                                                                    Context.MODE_PRIVATE
+                                                                )
+                                                            prefs.edit {
+                                                                putInt(
+                                                                    "onDuration",
+                                                                    patternOnDuration
+                                                                )
+                                                                putInt(
+                                                                    "offDuration",
+                                                                    patternOffDuration
+                                                                )
+                                                                putInt("repeatIndex", repeatIndex)
+                                                            }
+                                                            PhoneLog.d(
+                                                                "WearSync_Main",
+                                                                "💾 震动参数已保存到手机端: on=${patternOnDuration}ms, off=${patternOffDuration}ms, repeat=${repeatIndex}"
+                                                            )
+                                                            sendVibrationCommand(
+                                                                "save",
+                                                                patternOnDuration,
+                                                                patternOffDuration,
+                                                                repeatIndex
+                                                            )
+                                                        }
+                                                    ) { Text("💾 保存") }
+                                                }
                                             }
                                         }
                                     }
@@ -1086,9 +1552,8 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                     }
                 }
             }
-        }                                  
-                   
-    
+        }
+    }
 
     override fun onResume() {
         super.onResume()
