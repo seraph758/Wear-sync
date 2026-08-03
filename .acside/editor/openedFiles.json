@@ -1,32 +1,17 @@
 {
   "allFiles": [
     {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncMainFragment.java",
-      "selection": {
-        "end": {
-          "column": 5,
-          "index": 4863,
-          "line": 104
-        },
-        "start": {
-          "column": 6,
-          "index": 2968,
-          "line": 68
-        }
-      }
-    },
-    {
       "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncMainFragment.kt",
       "selection": {
         "end": {
-          "column": 5,
-          "index": 98700,
-          "line": 1556
+          "column": 76,
+          "index": 55403,
+          "line": 932
         },
         "start": {
-          "column": 5,
-          "index": 98700,
-          "line": 1556
+          "column": 76,
+          "index": 55403,
+          "line": 932
         }
       }
     }
