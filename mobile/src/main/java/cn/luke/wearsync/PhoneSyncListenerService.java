@@ -90,6 +90,7 @@ public class PhoneSyncListenerService extends WearableListenerService {
                 break;
             case "camera":
             case "camera_control":
+            case "camera_action": 
                 handleCamera(action);
                 break;
             default:
