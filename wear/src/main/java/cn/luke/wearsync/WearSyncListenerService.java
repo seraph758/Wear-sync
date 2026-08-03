@@ -1,5 +1,6 @@
 package cn.luke.wearsync;
 
+import android.app.NotificationManager;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
@@ -157,8 +158,24 @@ public class WearSyncListenerService extends WearableListenerService {
             WearLog.w(TAG, "【DND-002】指令缺少 dnd_state");
             return;
         }
+
+        // 🔑 核心比对：获取手表当前系统原始值
+        NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+        int currentWatchFilter = nm.getCurrentInterruptionFilter();
+
+        if (dndStatePhone == currentWatchFilter) {
+            WearLog.d(TAG, "✅ [DND一致] 状态=" + currentWatchFilter + "，跳过系统变更");
+            // 状态一致，不需要改 DND，但如果有其他联动（如震动），仍可继续往下走
+        } else {
+            WearLog.d(TAG, "⚡ [DND变化] 手表=" + currentWatchFilter + " → 手机=" + dndStatePhone);
+            // 状态不同才真正去设置系统 DND
+            if (nm.isNotificationPolicyAccessGranted()) {
+                nm.setInterruptionFilter(dndStatePhone);
+            }
+        }
+
+        // 其他联动逻辑保持不变
         int pullDownDelayMs = json.optInt("pullDownDelayMs", 500);
-        WearLog.d(TAG, "【DND-003】状态=" + dndStatePhone + " | 延迟=" + pullDownDelayMs);
         WearSyncDndManager.updateConfigs(json);
         WearSyncDndManager.executeDndSync(this, dndStatePhone, pullDownDelayMs);
     }

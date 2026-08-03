@@ -101,16 +101,13 @@ public class PhoneSyncListenerService extends WearableListenerService {
     // 🌓 DND（100% 还原，未动任一字句）
     // ============================================================
     private void handleDnd(JSONObject json) {
-        // 解析目标值（兼容历史字段名）
         int targetValue = json.has("interruption_filter") ? json.optInt("interruption_filter", -1)
-                : (json.has("dnd_profile_value") ? json.optInt("dnd_profile_value", -1)
-                : json.optInt("dnd_state", -1));
+                : json.optInt("dnd_state", -1); // 优先读 interruption_filter
 
         if (targetValue == -1) {
-            PhoneLog.w(TAG, "⚠️ 未找到有效DND字段, json=" + json);
+            PhoneLog.w(TAG, "⚠️ 未找到有效DND字段");
             return;
         }
-        // Manager 内部已完成布尔归一化 + 去重 + 异步防抖
         PhoneDndManager.handleIncomingAction(this, targetValue);
     }
 

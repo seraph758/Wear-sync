@@ -243,7 +243,8 @@ public void onNotificationPosted(StatusBarNotification sbn) {
             return;
         }
         try {
-            PhoneDndManager.syncDndToWear(this);
+            // 而不是重新 getCurrentInterruptionFilter()（两者在极端时序下可能不一致）
+            PhoneDndManager.syncDndToWear(this, interruptionFilter);
         } catch (Exception e) {
             PhoneLog.e(TAG, e.getMessage());
         }

@@ -236,6 +236,14 @@ public class PhoneSyncCameraService extends Service {
     }
     private void startCameraDevice() {
         PhoneLog.d(TAG, "📷 [4/4] 正在打开硬件相机...");
+        // 【新增】显式检查相机权限，防止 SecurityException
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+                != PackageManager.PERMISSION_GRANTED) {
+            PhoneLog.e(TAG, "❌ [4/4] 缺少 CAMERA 权限，推流终止。请在手机端授予相机权限后重试。");
+            stopStreamingAndRelease();
+            stopSelf();
+            return;
+        }
         try {
             CameraManager mgr = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
             String camId = mgr.getCameraIdList()[0];

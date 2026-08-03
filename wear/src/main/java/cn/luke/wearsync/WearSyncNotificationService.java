@@ -1,7 +1,6 @@
 package cn.luke.wearsync;
 
 import android.service.notification.NotificationListenerService;
-import android.service.notification.StatusBarNotification;
 
 /**
  * 纯粹的 DND 状态变化监听器
@@ -17,16 +16,12 @@ public class WearSyncNotificationService extends NotificationListenerService {
     @Override
     public void onInterruptionFilterChanged(int interruptionFilter) {
         super.onInterruptionFilterChanged(interruptionFilter);
-        
-        // 如果是内部更新触发的，则忽略，防止循环
         if (isInternalUpdate) {
             WearLog.d(TAG, "🔒 内部更新，忽略此次 DND 变化");
             return;
         }
-
         WearLog.d(TAG, "📡 检测到本地 DND 变化: " + interruptionFilter);
-        
-        // ✅ 直接通知通信管理器，由 CommManager 统一处理发送
+        // ✅ 直接传回调参数，不要重新读系统值
         WearSyncCommManager.sendDndReverseSync(this, interruptionFilter);
     }
 }
