@@ -26,10 +26,12 @@ public class PhoneLog {
     private static File logDir;
     private static File phoneLogFile;
     private static File wearLogFile;
+    private static File backupDir;
 
     public static void init(boolean isDebug, Context context) {
         DEBUG = isDebug;
-        logDir = new File(Environment.getExternalStoragePublicDirectory(
+        logDir = new File(context.getCacheDir(), "WearSync/Log");
+        backupDir = new File(Environment.getExternalStoragePublicDirectory(
                 Environment.DIRECTORY_DOWNLOADS), "WearSync/Log");
         if (!logDir.exists()) logDir.mkdirs();
         phoneLogFile = new File(logDir, "phone_log.txt");
@@ -108,8 +110,8 @@ public class PhoneLog {
         try {
             String timeStr = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
                     .format(new Date());
-            File phoneBackup = new File(logDir, "Phone_Backup_" + timeStr + ".txt");
-            File wearBackup = new File(logDir, "Wear_Backup_" + timeStr + ".txt");
+            File phoneBackup = new File(backupDir, "Phone_Backup_" + timeStr + ".txt");
+            File wearBackup = new File(backupDir, "Wear_Backup_" + timeStr + ".txt");
             copyFile(phoneLogFile, phoneBackup);
             copyFile(wearLogFile, wearBackup);
             Timber.i("备份成功: %s, %s", phoneBackup.getName(), wearBackup.getName());
