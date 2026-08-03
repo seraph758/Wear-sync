@@ -824,7 +824,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                         colors = CardDefaults.cardColors(containerColor = cardBgColor)
                                     ) {
                                         Row(
-                                            modifier = Modifier.fillMaxSize()
+                                            modifier = Modifier.fillMaxWidth()
                                                 .padding(horizontal = 14.dp),
                                             horizontalArrangement = Arrangement.SpaceBetween,
                                             verticalAlignment = Alignment.CenterVertically

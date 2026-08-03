@@ -1,80 +1,35 @@
 {
   "allFiles": [
     {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncDndManager.java",
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncMainFragment.java",
       "selection": {
         "end": {
-          "column": 7,
-          "index": 5969,
-          "line": 170
+          "column": 5,
+          "index": 4863,
+          "line": 104
         },
         "start": {
-          "column": 7,
-          "index": 5969,
-          "line": 170
+          "column": 6,
+          "index": 2968,
+          "line": 68
         }
       }
     },
     {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncNotificationService.java",
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncMainFragment.kt",
       "selection": {
         "end": {
-          "column": 0,
-          "index": 1009,
-          "line": 32
+          "column": 67,
+          "index": 49046,
+          "line": 851
         },
         "start": {
-          "column": 4,
-          "index": 525,
-          "line": 17
-        }
-      }
-    },
-    {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncCommManager.java",
-      "selection": {
-        "end": {
-          "column": 0,
-          "index": 2614,
-          "line": 79
-        },
-        "start": {
-          "column": 4,
-          "index": 2211,
-          "line": 70
-        }
-      }
-    },
-    {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncListenerService.java",
-      "selection": {
-        "end": {
-          "column": 32,
-          "index": 3269,
-          "line": 96
-        },
-        "start": {
-          "column": 32,
-          "index": 3269,
-          "line": 96
-        }
-      }
-    },
-    {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneDndManager.java",
-      "selection": {
-        "end": {
-          "column": 1,
-          "index": 5110,
-          "line": 141
-        },
-        "start": {
-          "column": 1,
-          "index": 5110,
-          "line": 141
+          "column": 60,
+          "index": 49039,
+          "line": 851
         }
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncListenerService.java"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncMainFragment.kt"
 }

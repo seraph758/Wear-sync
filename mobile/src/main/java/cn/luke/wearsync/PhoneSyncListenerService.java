@@ -94,8 +94,7 @@ public void onMessageReceived(@NonNull MessageEvent messageEvent) {
         switch (type.toLowerCase()) {
 
             case "dnd":
-                String source = json.optString("sender", "");
-                handleDnd(json, source);
+                handleDnd(json);
                 break;
 
             case "alarm":
@@ -116,13 +115,7 @@ public void onMessageReceived(@NonNull MessageEvent messageEvent) {
     // ============================================================
     // 🌓 DND（100% 还原，未动任一字句）
     // ============================================================
-   private void handleDnd(JSONObject json, String source) {
-    // 🔑 仅保留来源过滤
-    if (!"wear".equalsIgnoreCase(source)) {
-        PhoneLog.d(TAG, "忽略非Wear来源DND消息: " + source);
-        return;
-    }
-
+  private void handleDnd(JSONObject json) {
     // 解析目标值（兼容历史字段名）
     int targetValue = json.has("interruption_filter")
             ? json.optInt("interruption_filter", -1)
@@ -135,7 +128,6 @@ public void onMessageReceived(@NonNull MessageEvent messageEvent) {
         return;
     }
 
-    // 🔑 不再做状态比对，直接委托给 Manager
     // Manager 内部已完成布尔归一化 + 去重 + 异步防抖
     PhoneDndManager.handleIncomingAction(this, targetValue);
 }
