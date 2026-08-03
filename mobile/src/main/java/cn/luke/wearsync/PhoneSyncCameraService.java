@@ -153,7 +153,8 @@ public class PhoneSyncCameraService extends Service {
             mEncoder.configure(fmt, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
             mEncoderSurface = mEncoder.createInputSurface();
             mEncoder.setCallback(new EncoderCallback());
-            mEncoder.start();
+            PhoneLog.d(TAG, "⏸️ [1/4] 编码器配置完成，【挂起等待】通道建立后再启动");
+        
 
             // ✅ 2. 高清拍照 ImageReader（独立于预览流）
             mPhotoReader = ImageReader.newInstance(PHOTO_WIDTH, PHOTO_HEIGHT, ImageFormat.JPEG, 2);
@@ -163,17 +164,16 @@ public class PhoneSyncCameraService extends Service {
                 }
             }, mBgHandler);
 
-            // 3. 打开相机，同时绑定预览Surface和拍照Surface
-            CameraManager mgr = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
-            String camId = mgr.getCameraIdList()[0];
-            mgr.openCamera(camId, new CameraStateCallback(), mBgHandler);
-
-            PhoneLog.d(TAG, "✅ 低延迟预览管线已启动 (" + PREVIEW_WIDTH + "x" + PREVIEW_HEIGHT + "@" + BIT_RATE + "bps)");
-        } catch (Exception e) {
-            PhoneLog.e(TAG, "❌ 初始化失败", e);
+          
+            
+      } catch (Exception e) {
+            PhoneLog.e(TAG, "❌ [1/4] 初始化编码器失败", e);
             stopStreamingAndRelease();
             stopSelf();
+            return;
         }
+        PhoneLog.d(TAG, "🔍 [2/4] 编码器就绪，开始寻找手表节点并打开通道...");
+        discoverAndCacheNode();
     }
 
     /** ✅ 高清拍照：单独发起一次全尺寸 CaptureRequest */
@@ -206,17 +206,49 @@ public class PhoneSyncCameraService extends Service {
     // ==================== Channel 管理 ====================
 
     private void openChannelStream() {
-        if (mCachedNodeId == null || !mIsStreaming.get()) return;
+        if (mCachedNodeId == null || !mIsStreaming.get()){
+          PhoneLog.w(TAG, "⚠️ [2/4] 节点ID为空或推流已停止，放弃打开通道");
+          return;
+         }
+         PhoneLog.d(TAG, "📡 [2/4] 正在向手表发起 Channel 连接请求 (Path: " + WEAR_CHANNEL_PATH + ")...");
+    
         mChannelClient.openChannel(mCachedNodeId, WEAR_CHANNEL_PATH)
-                .addOnSuccessListener(channel ->
-                        mChannelClient.getOutputStream(channel)
-                                .addOnSuccessListener(os -> {
-                                    mChannelOutputStream = os;
-                                    PhoneLog.d(TAG, "✅ Channel 输出流就绪");
-                                })
-                                .addOnFailureListener(e -> PhoneLog.e(TAG, "❌ 获取输出流失败", e)))
-                .addOnFailureListener(e -> PhoneLog.e(TAG, "❌ 打开Channel失败", e));
+            .addOnSuccessListener(channel -> {
+                PhoneLog.d(TAG, "🤝 [2/4] Channel 连接成功！正在获取输出流 (OutputStream)...");
+                
+                mChannelClient.getOutputStream(channel)
+                    .addOnSuccessListener(os -> {
+                        mChannelOutputStream = os;
+                        PhoneLog.d(TAG, "✅ [3/4] 输出流获取成功！通道已完全打通！");
+                        
+                        PhoneLog.d(TAG, "🎬 [3/4] 现在安全地启动编码器和相机...");
+                        // ✅ 通道通了！现在可以安全地启动编码器和相机了
+                        mEncoder.start();
+                        startCameraDevice(); 
+                    })
+                    .addOnFailureListener(e -> {
+                        PhoneLog.e(TAG, "❌ [3/4] 获取输出流失败，通道建立中断", e);
+                    });
+            })
+            .addOnFailureListener(e -> {
+                PhoneLog.e(TAG, "❌ [2/4] 打开 Channel 失败，请检查手表连接状态", e);
+            });
     }
+    private void startCameraDevice() {
+        PhoneLog.d(TAG, "📷 [4/4] 正在打开硬件相机...");
+        try {
+            CameraManager mgr = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
+            String camId = mgr.getCameraIdList()[0];
+            mgr.openCamera(camId, new CameraStateCallback(), mBgHandler);
+            PhoneLog.d(TAG, "✅ [4/4] 相机硬件启动指令已发出，等待 CameraStateCallback 回调");
+        } catch (Exception e) {
+            PhoneLog.e(TAG, "❌ [4/4] 启动相机失败，推流终止", e);
+            stopStreamingAndRelease();
+            stopSelf();
+        }
+    }
+    
+    
 
     private void stopStreamingAndRelease() {
         mIsStreaming.set(false);

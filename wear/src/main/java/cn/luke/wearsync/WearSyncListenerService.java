@@ -168,8 +168,8 @@ public class WearSyncListenerService extends WearableListenerService {
                 return;
             }
             if ("STOP_CAMERA".equalsIgnoreCase(action) || "FORCE_QUIT_CAMERA".equalsIgnoreCase(action)) {
-                sendBroadcast(new Intent("cn.luke.wearsync.ACTION_FORCE_QUIT_WEAR_CAMERA"));
-                return;
+                WearCameraActivity.forceClose();
+                  return;
             }
             // ✅ 新增：处理开启手机相机的动作
             // ✅ 修复：处理开启手机相机的动作，并主动连接手机

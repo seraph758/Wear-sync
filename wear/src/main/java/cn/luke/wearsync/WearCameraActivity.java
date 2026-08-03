@@ -1,9 +1,5 @@
 package cn.luke.wearsync;
 
-import android.content.BroadcastReceiver;
-import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
 import android.media.MediaCodec;
 import android.media.MediaFormat;
 import android.os.Bundle;
@@ -12,21 +8,19 @@ import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.WindowManager;
 import android.widget.Button;
-
-import androidx.core.content.ContextCompat;
 import androidx.activity.ComponentActivity;
 import androidx.activity.OnBackPressedCallback;
-// ✅ 新增导入
 import org.json.JSONObject;
-// ✅ 新增导入
 import java.lang.ref.WeakReference;
 import java.nio.ByteBuffer;
 
 // 🟢 完美優化：變更繼承為 ComponentActivity 以原生支持現代返回調度器
 public class WearCameraActivity extends ComponentActivity implements SurfaceHolder.Callback {
     private static final String TAG = "WearSync_WearCameraUI";
+
     // 🚀 彻底删除了原有的 static instance 泄露源，全部由下方的 sActivityRef 弱引用全权接管
     public static WeakReference<WearCameraActivity> sActivityRef = new WeakReference<>(null);
+
     private SurfaceView surfaceView;
     private MediaCodec mDecoder;
     private boolean isDecoderRunning = false;
@@ -37,16 +31,6 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
     private final java.util.concurrent.ConcurrentLinkedQueue<byte[]> frameQueue = new java.util.concurrent.ConcurrentLinkedQueue<>();
     private Thread renderThread;
 
-    private final BroadcastReceiver phoneKillReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            if ("cn.luke.wearsync.ACTION_FORCE_QUIT_WEAR_CAMERA".equals(intent.getAction())) {
-                WearLog.w(TAG, "🚨 [手機端熔斷信號] 收到手機端要求強制關閉相機命令，執行乾淨退出...");
-                cleanExit(false);
-            }
-        }
-    };
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -54,6 +38,7 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
         // 修改点1: 将 WearLog.i 改为 WearLog.d (假设你的类里只有 d 方法)
         WearLog.d(TAG, "🟢 [生命周期] onCreate 啟動時間戳: " + activityCreateTime);
         sActivityRef = new WeakReference<>(this);
+
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
         if (pm != null) {
@@ -62,7 +47,9 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
             wakeLock.acquire(60 * 1000L);
             WearLog.d(TAG, "🔋 WakeLock acquired for 1 mins");
         }
+
         setContentView(R.layout.activity_wear_camera);
+
         // 修改点2: 修正 findViewById 的逻辑，使用 XML 中实际存在的 ID 'surfaceView'
         surfaceView = findViewById(R.id.surfaceView);
         if (surfaceView != null) {
@@ -70,9 +57,10 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
         } else {
             WearLog.e(TAG, "❌ 找不到 SurfaceView，请检查布局文件 ID 是否为 surfaceView");
         }
+
         // 修改点3: 修正按钮 ID，XML 中是 btn_shutter，代码里写成了 btn_close_camera
         Button btnClose = findViewById(R.id.btn_shutter);
-                if (btnClose != null) {
+        if (btnClose != null) {
             btnClose.setOnClickListener(v -> {
                 WearLog.d(TAG, "🔘 用户点击 [关闭相机]");
                 // 发送关闭指令给手机
@@ -87,15 +75,10 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
             public void handleOnBackPressed() {
                 WearLog.d(TAG, "🔙 用户按下返回键");
                 WearSyncCommManager.getInstance(WearCameraActivity.this)
-                 .sendBusinessCommand("camera_action", "STOP_CAMERA");
+                        .sendBusinessCommand("camera_action", "STOP_CAMERA");
                 cleanExit(false);
             }
         });
-
-        // 注册广播接收器，监听来自手机的关闭指令
-        IntentFilter filter = new IntentFilter("cn.luke.wearsync.ACTION_FORCE_QUIT_WEAR_CAMERA");
-        ContextCompat.registerReceiver(this, phoneKillReceiver, filter, ContextCompat.RECEIVER_EXPORTED);
-
 
         // 启动解码线程
         startDecoderThread();
@@ -112,6 +95,7 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
             }
         }
     }
+
     public void feedH264Data(byte[] h264Data) {
         if (h264Data != null && h264Data.length > 0) {
             frameQueue.offer(h264Data);
@@ -203,20 +187,13 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
             WearLog.d(TAG, "🔋 WakeLock released");
         }
 
-        // 5. 移除广播接收器
-        try {
-            unregisterReceiver(phoneKillReceiver);
-        } catch (Exception e) {
-            // 可能未注册，忽略
-        }
-
-        // 6. 清除静态引用
+        // 5. 清除静态引用
         if (sActivityRef != null) {
             sActivityRef.clear();
             sActivityRef = null;
         }
 
-        // 7. 结束 Activity
+        // 6. 结束 Activity
         finishAndRemoveTask();
         WearLog.d(TAG, "✅ [干净退出] 完成");
     }
