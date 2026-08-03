@@ -985,6 +985,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                             }
                                         }
                                     }
+                                }
 
 
                                     AnimatedVisibility(visible = isLogExpanded) {
@@ -1132,8 +1133,6 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                             }
                                         }
                                     }
-
-
                                 }
 
                                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1553,7 +1552,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                 }
             }
         }
-    }
+    
 
     override fun onResume() {
         super.onResume()
