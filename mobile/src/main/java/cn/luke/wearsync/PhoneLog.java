@@ -108,6 +108,7 @@ public class PhoneLog {
      */
     public static synchronized File exportBackupFile() {
         try {
+            if (!backupDir.exists()) backupDir.mkdirs();
             String timeStr = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
                     .format(new Date());
             File phoneBackup = new File(backupDir, "Phone_Backup_" + timeStr + ".txt");
