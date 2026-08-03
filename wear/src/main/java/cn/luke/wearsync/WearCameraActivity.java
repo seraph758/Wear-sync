@@ -76,7 +76,7 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
             btnClose.setOnClickListener(v -> {
                 WearLog.d(TAG, "🔘 用户点击 [关闭相机]");
                 // 发送关闭指令给手机
-                WearSyncCommManager.getInstance(this).sendBusinessCommand("camera_action", "STOP");
+                WearSyncCommManager.getInstance(this).sendBusinessCommand("camera_action", "STOP_CAMERA");
                 cleanExit(false);
             });
         }
@@ -86,13 +86,16 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
             @Override
             public void handleOnBackPressed() {
                 WearLog.d(TAG, "🔙 用户按下返回键");
+                WearSyncCommManager.getInstance(WearCameraActivity.this)
+                 .sendBusinessCommand("camera_action", "STOP_CAMERA");
                 cleanExit(false);
             }
         });
 
         // 注册广播接收器，监听来自手机的关闭指令
         IntentFilter filter = new IntentFilter("cn.luke.wearsync.ACTION_FORCE_QUIT_WEAR_CAMERA");
-        ContextCompat.registerReceiver(this, phoneKillReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED);
+        ContextCompat.registerReceiver(this, phoneKillReceiver, filter, ContextCompat.RECEIVER_EXPORTED);
+
 
         // 启动解码线程
         startDecoderThread();
