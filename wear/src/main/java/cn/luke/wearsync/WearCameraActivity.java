@@ -40,7 +40,7 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
     private final BroadcastReceiver phoneKillReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            if ("cn.luke.wearsync.ACTION_PHONE_KILL_CAMERA".equals(intent.getAction())) {
+            if ("cn.luke.wearsync.ACTION_FORCE_QUIT_WEAR_CAMERA".equals(intent.getAction())) {
                 WearLog.w(TAG, "🚨 [手機端熔斷信號] 收到手機端要求強制關閉相機命令，執行乾淨退出...");
                 cleanExit(false);
             }
@@ -91,7 +91,7 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
         });
 
         // 注册广播接收器，监听来自手机的关闭指令
-        IntentFilter filter = new IntentFilter("cn.luke.wearsync.ACTION_PHONE_KILL_CAMERA");
+        IntentFilter filter = new IntentFilter("cn.luke.wearsync.ACTION_FORCE_QUIT_WEAR_CAMERA");
         ContextCompat.registerReceiver(this, phoneKillReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED);
 
         // 启动解码线程
