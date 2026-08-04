@@ -63,6 +63,8 @@ public class WearSyncListenerService extends WearableListenerService {
             String sender = json.optString("sender", "");
             String type = json.optString("type", "");
             String action = json.optString("action", "");
+            String source = json.optString("source", ""); // ✅ 新增：提取 source
+
 
             // 【2. 防循环】
             if ("wear".equalsIgnoreCase(sender)) {
@@ -81,6 +83,10 @@ public class WearSyncListenerService extends WearableListenerService {
             }
 
             // 【4. DND模块】
+            if ("dnd".equals(type) && "phone_dnd_change".equals(source)) {
+                WearLog.d(TAG, "🔒 [回环拦截] 忽略来自手机的DND同步指令 (source=" + source + ")");
+                return; // 直接返回，不进入后续处理
+            }
             if ("dnd".equalsIgnoreCase(type)) {
                 handleDndCommand(json, messageEvent.getSourceNodeId());
                 return;

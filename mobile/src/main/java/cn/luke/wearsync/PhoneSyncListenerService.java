@@ -57,7 +57,13 @@ public class PhoneSyncListenerService extends WearableListenerService {
                 // 5. 解析消息类型和动作
                 String type = json.optString("type", "");
                 String action = json.optString("action", "");
+                String source = json.optString("source", "");
                 PhoneLog.d(TAG, "📥 [信令] type=" + type + " action=" + action);
+
+                if ("dnd".equals(type) && "wear_dnd_change".equals(source)) {
+                    PhoneLog.d(TAG, "🔒 [回环拦截] 忽略来自手表的DND同步指令 (source=" + source + ")");
+                    return; // 直接返回，不进入后续处理
+                }
 
                 // 🚀 新增：监听手表的“准备就绪”信号
                 if ("READY_TO_RECEIVE".equalsIgnoreCase(action)) {

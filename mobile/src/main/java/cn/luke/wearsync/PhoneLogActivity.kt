@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
+import kotlin.time.Duration.Companion.milliseconds
 
 class PhoneLogActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -35,7 +36,7 @@ class PhoneLogActivity : ComponentActivity() {
                     if (logLines.size != freshLogs.size) {
                         logLines = freshLogs
                     }
-                    delay(400)
+                    delay(400.milliseconds)
                 }
             }
 
@@ -70,7 +71,7 @@ class PhoneLogActivity : ComponentActivity() {
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8E44AD)),
                                 modifier = Modifier.height(42.dp).weight(1f)
                             ) {
-                                Text("切换悬浮窗", fontSize = 12.sp)
+                                Text("切换浮窗", fontSize = 12.sp)
                             }
                             Button(
                                 onClick = { PhoneLog.clear(); logLines = emptyList() },

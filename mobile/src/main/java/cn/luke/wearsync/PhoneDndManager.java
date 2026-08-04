@@ -101,6 +101,7 @@ public class PhoneDndManager {
                 json.put("mask", currentMask);
                 json.put("pullDownDelayMs", delay);
                 json.put("timestamp", System.currentTimeMillis());
+                json.put("source", "phone_dnd_change");
 
                 byte[] data = json.toString().getBytes(StandardCharsets.UTF_8);
                 String nodeId = WearSyncState.getNodeId(context);

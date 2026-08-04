@@ -113,6 +113,7 @@ public class WearSyncCommManager {
 
                 JSONObject payload = new JSONObject();
                 payload.put("sender", "wear");
+                payload.put("source", "wear_dnd_change"); // ✅ 新增：明确来源，用于手机端回环拦截
                 payload.put("type", type);
                 payload.put("action", action);
                 payload.put("timestamp", System.currentTimeMillis());
