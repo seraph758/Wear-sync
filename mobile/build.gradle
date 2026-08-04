@@ -68,9 +68,9 @@ android {
     }
 
     compileOptions {
-        // ✅ 目标平台设为 22
-        sourceCompatibility JavaVersion.VERSION_22
-        targetCompatibility JavaVersion.VERSION_22
+        // ✅ 目标平台设为 17
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
 
         // ✅ 核心开启：允许将高版本语法脱糖给更低版本的设备运行
         coreLibraryDesugaringEnabled = true
@@ -88,7 +88,7 @@ android {
 
 kotlin {
     compilerOptions {
-        jvmTarget = JvmTarget.JVM_22
+        jvmTarget = JvmTarget.JVM_17
     }
 }
 // ✅ 保持 Java 编译器参数稳定
@@ -102,7 +102,7 @@ tasks.withType(JavaCompile).configureEach {
 
 // ✅ 适配 Kotlin 2.x + AGP 9.x 的编译器参数追加
 tasks.withType(KotlinCompile).configureEach {
-    compilerOptions.freeCompilerArgs.add("-Xjdk-release=22")
+    compilerOptions.freeCompilerArgs.add("-Xjdk-release=17")
 }
 
 dependencies {

@@ -57,13 +57,7 @@ public class PhoneSyncListenerService extends WearableListenerService {
                 // 5. 解析消息类型和动作
                 String type = json.optString("type", "");
                 String action = json.optString("action", "");
-                String source = json.optString("source", "");
                 PhoneLog.d(TAG, "📥 [信令] type=" + type + " action=" + action);
-
-                if ("dnd".equals(type) && "wear_dnd_change".equals(source)) {
-                    PhoneLog.d(TAG, "🔒 [回环拦截] 忽略来自手表的DND同步指令 (source=" + source + ")");
-                    return; // 直接返回，不进入后续处理
-                }
 
                 // 🚀 新增：监听手表的“准备就绪”信号
                 if ("READY_TO_RECEIVE".equalsIgnoreCase(action)) {
@@ -223,16 +217,6 @@ public class PhoneSyncListenerService extends WearableListenerService {
                         REMOTE_EXECUTOR.execute(() -> readLogStream(inputStream));
                     })
                     .addOnFailureListener(e -> PhoneLog.e("PhoneLog_Trace", "❌ [日誌流獲取失敗]", e));
-        }
-        // 2. 【新增】处理相机通道
-        else if ("/wear-universal-sync/camera".equals(path)) {
-            PhoneLog.d(TAG, "🎯 [相機暗號吻合] 收到手錶的相機流連接請求，正在通知相機服務開始推流...");
-            // 核心修复：收到手表的连接请求后，通知 CameraService 开始推流
-            // 我们将手表的节点ID传递给服务，以便服务知道向谁推流
-            Intent serviceIntent = new Intent(this, PhoneSyncCameraService.class);
-            serviceIntent.setAction(PhoneSyncCameraService.ACTION_START_CAMERA);
-            serviceIntent.putExtra("remote_node_id", channel.getNodeId());
-            startForegroundService(serviceIntent);
         }
     }
 

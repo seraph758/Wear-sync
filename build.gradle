@@ -1,7 +1,7 @@
 plugins {
     // 🎯 统一管理：将版本号修改为带有预览版后缀的完整版本号
-    id 'com.android.application' version '9.4.0-alpha04' apply false
-    id 'com.android.library' version '9.4.0-alpha04' apply false
+    id 'com.android.application' version '9.4.0-alpha07' apply false
+    id 'com.android.library' version '9.4.0-alpha07' apply false
 
     // ✅ 核心修复 1：使用 Kotlin 2.4.10。只有 2.4+ 才能认识并编译过手机端的 jvmTarget = '26'
     id 'org.jetbrains.kotlin.android' version '2.4.10' apply false
@@ -11,7 +11,7 @@ plugins {
 }
 
 // 🟢 打印日志提示（同步更新一下日志中的 AGP 版本提示，避免以后看日志混淆）
-logger.warn("WearSync 编译提示: 根目录配置加载成功 (Kotlin 2.4.10 + AGP 9.4.0-alpha04 -> 全面适配 JDK 26)")
+logger.warn("WearSync 编译提示: 根目录配置加载成功 (Kotlin 2.4.10 + AGP 9.4.0-alpha07 -> 全面适配 JDK 26)")
 
 // 现代化的 clean 任务写法（适配 Gradle 9.x）
 tasks.register('clean', Delete) {

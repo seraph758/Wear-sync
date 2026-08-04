@@ -91,7 +91,7 @@ public class WearSyncDndManager {
     /**
      * ✅ 核心修改：完全重写执行逻辑，使用原始值进行比对和设置
      */
-    private static void executeDndSync(Context context, int targetFilterFromPhone, int pullDownDelayMs) {
+    public static void executeDndSync(Context context, int targetFilterFromPhone, int pullDownDelayMs) {
         if (!isSyncAllowed) {
             WearLog.w(TAG, "🛑 [DND拦截] 总开关关闭");
             return;

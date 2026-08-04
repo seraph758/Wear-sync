@@ -8,12 +8,12 @@ pluginManagement {
             maven { url 'https://maven.aliyun.com/repository/google' }
             maven { url 'https://maven.aliyun.com/repository/public' }
         } else {
+            google()
+            mavenCentral()
             maven { url 'https://maven.aliyun.com/repository/google' }
             maven { url 'https://maven.aliyun.com/repository/public' }
             maven { url 'https://mirrors.cloud.tencent.com/nexus/repository/maven-public/' }
             gradlePluginPortal()
-            google()
-            mavenCentral()
         }
     }
 }
@@ -33,11 +33,11 @@ dependencyResolutionManagement {
             maven { url 'https://maven.aliyun.com/repository/google' }
             maven { url 'https://maven.aliyun.com/repository/public' }
         } else {
+            google()
+            mavenCentral()
             maven { url 'https://maven.aliyun.com/repository/google' }
             maven { url 'https://maven.aliyun.com/repository/public' }
             maven { url 'https://mirrors.cloud.tencent.com/nexus/repository/maven-public/' }
-            google()
-            mavenCentral()
         }
     }
 }

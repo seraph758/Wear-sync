@@ -123,14 +123,6 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
         super.onCreate();
         instance = this;
         PhoneLog.d(TAG, "🚀 PhoneSyncNotificationService 启动");
-        try {
-            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-            if (nm != null) {
-                PhoneLog.d(TAG, "当前勿扰状态: " + nm.getCurrentInterruptionFilter());
-            }
-        } catch (Exception e) {
-            PhoneLog.e(TAG, "获取勿扰状态失败: " + e.getMessage());
-        }
     }
 
     @Override

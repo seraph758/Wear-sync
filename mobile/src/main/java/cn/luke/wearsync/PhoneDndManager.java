@@ -3,6 +3,8 @@ package cn.luke.wearsync;
 import android.app.NotificationManager;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.os.Handler;
+import android.os.Looper;
 
 import androidx.core.app.NotificationManagerCompat;
 
@@ -57,9 +59,18 @@ public class PhoneDndManager {
                 return;
             }
 
-            // 🔑 Step 3: 直接设置目标值（无需任何映射）
+            // 🔑 Step 3: 标记内部更新，防止回环
+            PhoneSyncListenerService.isInternalUpdate = true;
+
+            // 🔑 Step 4: 直接设置目标值（无需任何映射）
             nm.setInterruptionFilter(targetFilter);
             PhoneLog.d(TAG, "✨ [逆向同步成功] filter: " + currentFilter + " → " + targetFilter);
+
+            // 🔑 Step 5: 延迟重置标记
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                PhoneSyncListenerService.isInternalUpdate = false;
+                PhoneLog.d(TAG, "🔓 逆向同步标记已重置");
+            }, 5000);
 
         } catch (Exception e) {
             PhoneLog.e(TAG, "🔴 [逆向同步异常] " + e.getMessage(), e);

@@ -50,7 +50,7 @@ public class PhoneSyncCameraService extends Service {
     public static final String ACTION_STOP_CAMERA = "cn.luke.wearsync.action.STOP_CAMERA";
     /** ⚠️ 手表端发送拍照指令的 MessageClient Path */
     public static final String WEAR_MSG_PATH_TAKE_PHOTO = "/camera/take_photo";
-    public static final String WEAR_CHANNEL_PATH = "/video/stream";
+    public static final String WEAR_CHANNEL_PATH = "/wear_data_channel/camera";
     public static final String WEAR_CAPABILITY = "wear_sync";
 
     // ==================== 低延迟预览参数 ====================
@@ -107,6 +107,11 @@ public class PhoneSyncCameraService extends Service {
         if (intent == null)     return START_NOT_STICKY;
         String action = intent.getAction();
         if (ACTION_START_CAMERA.equals(action)) {
+            String remoteNodeId = intent.getStringExtra("remote_node_id");
+            if (remoteNodeId != null) {
+                mCachedNodeId = remoteNodeId;
+                PhoneLog.d(TAG, "📍 使用 Intent 传入的节点 ID: " + mCachedNodeId);
+            }
             discoverAndCacheNode();
             if (!mIsStreaming.get()) initCameraAndStartStreaming();
         } else if (ACTION_STOP_CAMERA.equals(action)) {

@@ -74,6 +74,10 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
         });
 
         startDecoderThread();
+
+        // 🟢 [新增] 启动时向手机发送开启相机指令
+        WearLog.d(TAG, "📤 发送开启手机相机指令");
+        WearSyncCommManager.getInstance(this).sendBusinessCommand("camera_control", "open_phone_camera");
     }
 
     // ✅ 供 ListenerService 直接调用的静态强制关闭方法

@@ -27,8 +27,6 @@ public class WearSyncListenerService extends WearableListenerService {
     // --- 路径常量 ---
     private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
     private static final String DATA_CHANNEL_BASE_PATH = "/wear_data_channel";
-    private static final String SIGNAL_BASE_PATH = "/wear-universal-sync";
-    private static final String CAMERA_DATA_PATH = SIGNAL_BASE_PATH + "/camera";
     private static final String CAMERA_PREVIEW_STREAM_PATH = DATA_CHANNEL_BASE_PATH + "/camera";
     private static final String FILE_TRANSFER_CHANNEL_PATH = "/wear-sync/file-transfer";
     private static final String FILE_TRANSFER_STATUS_PATH = "/file-transfer-status";
@@ -63,7 +61,6 @@ public class WearSyncListenerService extends WearableListenerService {
             String sender = json.optString("sender", "");
             String type = json.optString("type", "");
             String action = json.optString("action", "");
-            String source = json.optString("source", ""); // ✅ 新增：提取 source
 
 
             // 【2. 防循环】
@@ -83,12 +80,8 @@ public class WearSyncListenerService extends WearableListenerService {
             }
 
             // 【4. DND模块】
-            if ("dnd".equals(type) && "phone_dnd_change".equals(source)) {
-                WearLog.d(TAG, "🔒 [回环拦截] 忽略来自手机的DND同步指令 (source=" + source + ")");
-                return; // 直接返回，不进入后续处理
-            }
             if ("dnd".equalsIgnoreCase(type)) {
-                handleDndCommand(json, messageEvent.getSourceNodeId());
+                handleDndCommand(json);
                 return;
             }
 
@@ -157,7 +150,7 @@ public class WearSyncListenerService extends WearableListenerService {
         }
     }
 
-    private void handleDndCommand(JSONObject json, String sourceNodeId) {
+    private void handleDndCommand(JSONObject json) {
         WearLog.d(TAG, "【DND-001】开始处理勿扰指令");
         int dndStatePhone = json.optInt("dnd_state", -1);
         if (dndStatePhone == -1) {
@@ -226,12 +219,6 @@ public class WearSyncListenerService extends WearableListenerService {
             Intent cameraIntent = new Intent(this, WearCameraActivity.class);
             cameraIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivity(cameraIntent);
-
-            String cameraStreamPath = "/wear-universal-sync/camera";
-            Wearable.getChannelClient(this)
-                    .openChannel(sourceNodeId, cameraStreamPath)
-                    .addOnSuccessListener(channel -> WearLog.d(TAG, "【CAM-006】相机数据通道连接请求已发送"))
-                    .addOnFailureListener(e -> WearLog.e(TAG, "【CAM-ERR】发送相机数据通道连接请求失败", e));
             return;
         }
         WearLog.w(TAG, "【CAM-007】未知的相机指令Action: " + action);
@@ -251,7 +238,7 @@ public class WearSyncListenerService extends WearableListenerService {
             WearLog.d(TAG, "【LOG-003】日志已关闭，正在清理资源");
             if (mLogChannel != null) {
                 Wearable.getChannelClient(this).close(mLogChannel)
-                        .addOnSuccessListener(aVoid -> mLogChannel = null)
+                        .addOnSuccessListener(_unused -> mLogChannel = null)
                         .addOnFailureListener(e -> WearLog.e(TAG, "【LOG-ERR】关闭日志通道失败", e));
             }
         }
@@ -296,7 +283,7 @@ public class WearSyncListenerService extends WearableListenerService {
             // 解析路径中的元数据
             String pathData = path.substring(FILE_TRANSFER_CHANNEL_PATH.length() + 1);
             long expectedSize = -1L;
-            String fileName = "unknown_file";
+            String fileName;
             int slashIndex = pathData.indexOf('/');
             if (slashIndex != -1) {
                 try {
@@ -337,8 +324,8 @@ public class WearSyncListenerService extends WearableListenerService {
                         WearLog.e(TAG, "【STR-ERR】异常帧长度: " + frameLen + "，断开连接");
                         break;
                     }
-                    long timestamp = dis.readLong();
-                    int flags = dis.readInt();
+                    dis.readLong(); // timestamp
+                    dis.readInt();  // flags
                     byte[] h264Data = new byte[frameLen];
                     dis.readFully(h264Data);
 
