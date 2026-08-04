@@ -238,7 +238,7 @@ public class WearSyncListenerService extends WearableListenerService {
             WearLog.d(TAG, "【LOG-003】日志已关闭，正在清理资源");
             if (mLogChannel != null) {
                 Wearable.getChannelClient(this).close(mLogChannel)
-                        .addOnSuccessListener(_unused -> mLogChannel = null)
+                        .addOnSuccessListener(_ -> mLogChannel = null)
                         .addOnFailureListener(e -> WearLog.e(TAG, "【LOG-ERR】关闭日志通道失败", e));
             }
         }
@@ -259,7 +259,7 @@ public class WearSyncListenerService extends WearableListenerService {
                 ack.put("action", "READY_TO_RECEIVE");
                 Wearable.getMessageClient(this)
                         .sendMessage(sourceNodeId, UNIVERSAL_SYNC_PATH, ack.toString().getBytes(StandardCharsets.UTF_8))
-                        .addOnSuccessListener(aVoid -> WearLog.d(TAG, "【APK-003】ACK已发送"))
+                        .addOnSuccessListener(_ -> WearLog.d(TAG, "【APK-003】ACK已发送"))
                         .addOnFailureListener(e -> WearLog.e(TAG, "【APK-ERR】ACK发送失败", e));
             } catch (Exception e) {
                 WearLog.e(TAG, "【APK-ERR】构建ACK异常", e);

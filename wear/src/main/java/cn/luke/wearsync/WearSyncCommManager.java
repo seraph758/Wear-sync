@@ -17,6 +17,7 @@ import com.google.android.gms.wearable.Wearable;
 import org.json.JSONObject;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Iterator;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -118,7 +119,7 @@ public class WearSyncCommManager {
                 payload.put("action", action);
                 payload.put("timestamp", System.currentTimeMillis());
                 if (extra != null) {
-                    java.util.Iterator<String> keys = extra.keys();
+                    Iterator<String> keys = extra.keys();
                     while (keys.hasNext()) {
                         String key = keys.next();
                         payload.put(key, extra.get(key));
@@ -129,7 +130,7 @@ public class WearSyncCommManager {
                 Task<Integer> task = Wearable.getMessageClient(appContext)
                         .sendMessage(connectedNode.getId(), UNIVERSAL_SYNC_PATH, data);
                 // ✅ Statement lambda → Expression lambda
-                task.addOnSuccessListener(result ->
+                task.addOnSuccessListener(_ ->
                         WearLog.d(TAG, "✅ 信令已发送 [" + type + "/" + action + "]"));
                 task.addOnFailureListener(e ->
                         WearLog.e(TAG, "❌ 信令发送失败 [" + type + "/" + action + "]: " + e.getMessage(), e));
@@ -178,7 +179,7 @@ public class WearSyncCommManager {
 
         channelClient.openChannel(connectedNode.getId(), channelPath)
                 // ✅ Statement lambda → Expression lambda
-                .addOnSuccessListener(channel ->
+                .addOnSuccessListener(_ ->
                         WearLog.d(TAG, "✅ 通道已打开: " + channelPath))
                 .addOnFailureListener(e ->
                         WearLog.e(TAG, "❌ 打开通道失败 [" + channelPath + "]: " + e.getMessage(), e));

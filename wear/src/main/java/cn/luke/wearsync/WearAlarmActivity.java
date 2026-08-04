@@ -64,14 +64,14 @@ public class WearAlarmActivity extends ComponentActivity {
         startWatchVibration();
 
         // 3. 按钮逻辑
-        btnDismiss.setOnClickListener(v -> {
+        btnDismiss.setOnClickListener(_ -> {
             WearLog.d(TAG, "🔘 用户点击 [关闭]");
             // 发送关闭指令给手机
             WearSyncCommManager.getInstance(this).dismissPhoneAlarm();
             cleanExit();
         });
 
-        btnSnooze.setOnClickListener(v -> {
+        btnSnooze.setOnClickListener(_ -> {
             WearLog.d(TAG, "🔘 用户点击 [延后]");
             // 发送延后指令给手机
             WearSyncCommManager.getInstance(this).snoozePhoneAlarm();

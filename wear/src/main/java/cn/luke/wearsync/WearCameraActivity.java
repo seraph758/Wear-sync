@@ -56,7 +56,7 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
 
         Button btnClose = findViewById(R.id.btn_shutter);
         if (btnClose != null) {
-            btnClose.setOnClickListener(v -> {
+            btnClose.setOnClickListener(_ -> {
                 WearLog.d(TAG, "🔘 用户点击 [关闭相机]");
                 WearSyncCommManager.getInstance(this).sendBusinessCommand("camera_action", "STOP_CAMERA");
                 cleanExit(false);

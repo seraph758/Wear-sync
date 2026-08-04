@@ -49,7 +49,7 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
 
         if (accPref != null) {
             WearLog.d(TAG, "🎯 [交互事件挂载] 正在为 [无障碍辅助功能] 项注入物理点击跳转拦截器...");
-            accPref.setOnPreferenceClickListener(preference -> {
+            accPref.setOnPreferenceClickListener(_ -> {
                 WearLog.d(TAG, "🔘 [交互触发] 用户点击了无障碍辅助功能 Preference 项，准备穿透调起系统设置页面...");
                 try {
                     Intent accIntent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
@@ -69,7 +69,7 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
         Preference cameraPref = findPreference("camera_control_key");
         if (cameraPref != null) {
             WearLog.d(TAG, "📸 [交互挂载] 成功找到 camera_control_key，正在注册点击监听器...");
-            // ✅ 4. 将未使用的 'preference' 替换为 '_'
+            // ✅ 4. 将未使用的 'preference' 替换为 '_' (Java 22+ 支持)
             cameraPref.setOnPreferenceClickListener(_ -> {
                 WearLog.w(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
                 WearLog.w(TAG, "📸 [远端相机入口] 用户点击【远端相机控制】");

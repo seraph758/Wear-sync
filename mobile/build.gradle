@@ -69,8 +69,8 @@ android {
 
     compileOptions {
         // ✅ 目标平台设为 17
-        sourceCompatibility JavaVersion.VERSION_17
-        targetCompatibility JavaVersion.VERSION_17
+        sourceCompatibility JavaVersion.VERSION_22
+        targetCompatibility JavaVersion.VERSION_22
 
         // ✅ 核心开启：允许将高版本语法脱糖给更低版本的设备运行
         coreLibraryDesugaringEnabled = true
@@ -88,7 +88,7 @@ android {
 
 kotlin {
     compilerOptions {
-        jvmTarget = JvmTarget.JVM_17
+        jvmTarget = JvmTarget.JVM_22
     }
 }
 // ✅ 保持 Java 编译器参数稳定
