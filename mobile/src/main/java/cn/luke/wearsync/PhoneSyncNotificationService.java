@@ -21,7 +21,7 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
 
     // 🛡️ 用于记录最后一次由手表触发的远程操作时间，防止状态回弹
     private static final AtomicLong sLastRemoteActionTimeMs = new AtomicLong(0);
-
+    public static volatile boolean isInternalUpdate = false;
 
     /**
      * 🎯 [全步進日誌版] 供 PhoneAlarmManager 調用的即時逆向控制核心方法
@@ -93,6 +93,12 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
                             PhoneLog.d(TAG, "🚀 [發射] 正在跨進程調用 actionIntent.send()...");
                             action.actionIntent.send();
                             sLastRemoteActionTimeMs.set(SystemClock.elapsedRealtime());
+
+                            // 🔑【核心修復 1】：遙控成功後，立即停止 Watchdog 並發送關閉信令給手錶
+                            serviceInstance.stopAlarmWatchdog();
+                            PhoneSyncAlarmState.enterStopping();
+                            PhoneAlarmManager.notifyWatchAlarmDismissed(context);
+
                             PhoneLog.d(TAG, "🏁 [結束] 穿透控制圓滿成功！");
                             return true;
                         } catch (Exception e) {
@@ -132,46 +138,53 @@ public class PhoneSyncNotificationService extends NotificationListenerService {
         instance = null;
     }
 
+    @Override
+    public void onNotificationPosted(StatusBarNotification sbn) {
+        super.onNotificationPosted(sbn); // 🔑 修正分號 ;
+        if (sbn == null) return;
+        long lastActionTime = sLastRemoteActionTimeMs.get();
+        long timeDiff = SystemClock.elapsedRealtime() - lastActionTime;
+        if (timeDiff < 3000) {
+            PhoneLog.d(TAG, "🛡️ [防回彈攔截] 距離手錶遠端操作僅 " + timeDiff + "ms，忽略本次通知更新");
+            return;
+        }
 
-@Override
-public void onNotificationPosted(StatusBarNotification sbn) {
-    if (sbn == null) return;
+        // 1. 开关检查
+        SharedPreferences prefs = getSharedPreferences("wearsync_prefs", Context.MODE_PRIVATE);
+        if (!prefs.getBoolean("alarm_proxy_master_switch", true)) return;
 
-    // 1. 开关检查
-    SharedPreferences prefs = getSharedPreferences("wearsync_prefs", Context.MODE_PRIVATE);
-    if (!prefs.getBoolean("alarm_proxy_master_switch", true)) return;
+        // 2. 包名检查
+        String packageName = sbn.getPackageName();
+        String selectedPkg = prefs.getString("selected_alarm_package", "com.google.android.deskclock");
 
-    // 2. 包名检查
-    String packageName = sbn.getPackageName();
-    String selectedPkg = prefs.getString("selected_alarm_package", "com.google.android.deskclock");
-    
-    // 注意：这里只检查包名不匹配时返回
-    if (!selectedPkg.equals(packageName)) {
-        return; 
-    }
+        if (!selectedPkg.equals(packageName)) {
+            return;
+        }
 
-    // 3. 【修复点】这里绝对不能再有 return 了！
-    // 必须让代码继续往下执行，去检查是不是真的闹钟
+        PhoneLog.d(TAG, "⏰检测到目标闹钟包: " + packageName);
+        Notification notification = sbn.getNotification();
+        if (notification == null) return;
 
-    PhoneLog.d(TAG, "⏰检测到目标闹钟包: " + packageName);
-    Notification notification = sbn.getNotification();
-    if (notification == null) return;
+        // 3. 闹钟特征检查
+        boolean isInsistent = (notification.flags & Notification.FLAG_INSISTENT) != 0;
+        boolean isOngoing = (notification.flags & Notification.FLAG_ONGOING_EVENT) != 0;
+        boolean isAlarmCategory = Notification.CATEGORY_ALARM.equals(notification.category);
 
-    // 4. 【新增/恢复】闹钟特征检查 (这是新版的核心逻辑)
-    boolean isInsistent = (notification.flags & Notification.FLAG_INSISTENT) != 0;
-    boolean isOngoing = (notification.flags & Notification.FLAG_ONGOING_EVENT) != 0;
-    boolean isAlarmCategory = Notification.CATEGORY_ALARM.equals(notification.category);
+        // 🔑【核心修復 2】：如果通知更新後「不再具備響鈴特徵」
+        if (!isInsistent && !isOngoing && !isAlarmCategory) {
+            PhoneLog.d(TAG, "⚠️ 拦截：包名匹配，但通知特征不符合闹钟定义 (非持续、非正在进行、非闹钟类别)");
 
-    // 只要满足任意一个特征，就认为是闹钟
-    if (!isInsistent && !isOngoing && !isAlarmCategory) {
-        PhoneLog.d(TAG, "⚠️ 拦截：包名匹配，但通知特征不符合闹钟定义 (非持续、非正在进行、非闹钟类别)");
-        return; 
-    }
+            // 如果之前鬧鐘正在響（isAlarmCurrentlyRinging == true），說明用戶在手機上滑掉/關閉了鬧鐘！
+            if (isAlarmCurrentlyRinging) {
+                PhoneLog.d(TAG, "🛑 [手機端手動關閉] 檢測到鬧鐘通知已失去響鈴特徵，發送關閉信令給手錶！");
+                stopAlarmWatchdog();
+                PhoneSyncAlarmState.enterStopping();
+                PhoneAlarmManager.notifyWatchAlarmDismissed(this);
+            }
+            return;
+        }
 
-    
-    PhoneLog.d(TAG, "✅ 确认闹钟通知，准备同步到手表 -> pkg: " + packageName);
-
-
+        PhoneLog.d(TAG, "✅ 确认闹钟通知，准备同步到手表 -> pkg: " + packageName);
 
         if (isAlarmCurrentlyRinging) {
             PhoneLog.d(TAG, "闹钟已经运行，忽略重复通知");
@@ -211,7 +224,6 @@ public void onNotificationPosted(StatusBarNotification sbn) {
 
         SharedPreferences prefs = getSharedPreferences("wearsync_prefs", Context.MODE_PRIVATE);
 
-
         boolean isAlarmMasterEnabled = prefs.getBoolean("alarm_proxy_master_switch", true);
         if (!isAlarmMasterEnabled) {
             return;
@@ -231,11 +243,10 @@ public void onNotificationPosted(StatusBarNotification sbn) {
     @Override
     public void onInterruptionFilterChanged(int interruptionFilter) {
         super.onInterruptionFilterChanged(interruptionFilter);
-        if (PhoneSyncListenerService.isInternalUpdate) {
+        if (PhoneSyncNotificationService.isInternalUpdate) {
             return;
         }
         try {
-            // 而不是重新 getCurrentInterruptionFilter()（两者在极端时序下可能不一致）
             PhoneDndManager.syncDndToWear(this, interruptionFilter);
         } catch (Exception e) {
             PhoneLog.e(TAG, e.getMessage());
