@@ -151,35 +151,37 @@ public class WearSyncListenerService extends WearableListenerService {
     }
 
 private void handleDndCommand(JSONObject json) {
-    WearLog.d(TAG, "【DND-001】開始處理勿擾指令");
+    WearLog.d(TAG, "【DND-001】开始处理勿扰指令");
+    
+    // 1. 统一从 JSON 中解析 dndStatePhone
     int dndStatePhone = json.optInt("dnd_state", -1);
     if (dndStatePhone == -1) {
         WearLog.w(TAG, "【DND-002】指令缺少 dnd_state");
         return;
     }
 
-    // 🔑 1. 獲取手錶當前 DND 狀態
+    // 2. 获取手表当前系统原始 DND Filter
     NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
     int currentWatchFilter = (nm != null) ? nm.getCurrentInterruptionFilter() : -1;
 
-    WearLog.d(TAG, "🔍 [DND檢查] 手機目標值=" + dndStatePhone + " 手錶當前值=" + currentWatchFilter);
+    WearLog.d(TAG, "🔍 [DND状态检查] 手机目标值=" + dndStatePhone + " 手表当前值=" + currentWatchFilter);
 
-    // 🔑 2. 核心判斷：如果狀態一致，直接 Return！攔截所有後續動作
+    // 🔑 3. 核心拦截点：状态一致时，直接 Return！
+    // 这样可以彻底避免状态相同时误触发后面的 BedtimeAuto 无障碍点击与省电模式！
     if (dndStatePhone == currentWatchFilter) {
-        WearLog.d(TAG, "✅ [DND一致] 跳過系統變更與子聯動，直接 Return");
-        return; // 🎯 關鍵攔截點：不再讓代碼繼續往下走！
+        WearLog.d(TAG, "✅ [DND一致] 状态相同，跳过系统变更与子联动，直接 Return");
+        return; 
     }
 
-    // 🔑 3. 狀態不一致，更新配置並調用 Manager 盲執行
-    WearLog.d(TAG, "⚡ [DND變化] 手錶=" + currentWatchFilter + " → 手機=" + dndStatePhone + "，準備執行變更");
-    
+    // 4. 状态不一致，解析延迟参数，更新配置并交给 executeDndSync 执行
     int pullDownDelayMs = json.optInt("pullDownDelayMs", 500);
     WearSyncDndManager.updateConfigs(json);
+
+    WearLog.d(TAG, "⚡ [DND变化] 手表=" + currentWatchFilter + " → 手机=" + dndStatePhone + "，准备执行变更");
     
-    // 只在確定要改變時，才調用 Manager
+    // 🎯 统一传入 this (Context), dndStatePhone, pullDownDelayMs
     WearSyncDndManager.executeDndSync(this, dndStatePhone, pullDownDelayMs);
 }
-
 
     private void handleAlarmCommand(JSONObject json, String sourceNodeId) {
         WearLog.d(TAG, "【ALM-001】开始处理闹钟指令");
