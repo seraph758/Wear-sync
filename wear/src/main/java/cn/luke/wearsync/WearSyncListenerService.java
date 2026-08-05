@@ -189,15 +189,25 @@ private void handleDndCommand(JSONObject json) {
 
         if ("FORCE_STOP_WEAR_ALARM".equalsIgnoreCase(action) || "FORCE_STOP".equalsIgnoreCase(action)) {
             WearLog.d(TAG, "【ALM-002】收到强制停止指令");
-            WearAlarmActivity.handleIncomingCommand(this, json);
+            WearAlarmActivity activity = WearAlarmActivity.getInstance();
+            if (activity != null) {
+                // 2. 如果实例存在，直接调用它的 cleanExit 方法来关闭
+                activity.cleanExit();
+                WearLog.d(TAG, "【ALM-003】已成功关闭闹钟界面");
+            } else {
+                // 3. 如果实例不存在（比如 Activity 还没启动或已被销毁），则无需操作
+                WearLog.d(TAG, "【ALM-004】闹钟界面未运行，无需关闭");
+            }
+            
+            // ✅ 修改结束：处理完关闭逻辑后直接返回，不要再调用 handleIncomingCommand
+            return; 
         } else {
-            WearLog.d(TAG, "【ALM-003】准备启动闹钟界面. Action: " + action);
+            WearLog.d(TAG, "【ALM-005】准备启动闹钟界面. Action: " + action);
             Intent alarmIntent = new Intent(this, WearAlarmActivity.class);
             alarmIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
             alarmIntent.putExtra("raw_alarm_json", json.toString());
             alarmIntent.putExtra("alarm_action", action);
             startActivity(alarmIntent);
-            WearAlarmActivity.handleIncomingCommand(this, json);
         }
     }
 

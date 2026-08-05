@@ -79,17 +79,7 @@ public class WearAlarmActivity extends ComponentActivity {
         });
     }
 
-    // ✅ 修改：handleIncomingCommand 变为纯粹的 UI 更新方法
-    public static void handleIncomingCommand(Context context, JSONObject json) {
-        WearLog.d(TAG, "收到闹钟控制指令: " + json.toString());
-        String action = json.optString("action");
-        if ("DISMISS".equals(action)) {
-            WearAlarmActivity activity = getInstance();
-            if (activity != null) {
-                activity.cleanExit();
-            }
-        }
-    }
+    
 
     private void handleIncomingTime(Intent intent) {
         if (intent == null) return;

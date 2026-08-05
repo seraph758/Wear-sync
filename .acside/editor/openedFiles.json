@@ -1,47 +1,17 @@
 {
   "allFiles": [
     {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneAlarmManager.java",
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearAlarmActivity.java",
       "selection": {
         "end": {
-          "column": 62,
-          "index": 1028,
-          "line": 29
+          "column": 4,
+          "index": 2549,
+          "line": 81
         },
         "start": {
-          "column": 41,
-          "index": 1007,
-          "line": 29
-        }
-      }
-    },
-    {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncNotificationService.java",
-      "selection": {
-        "end": {
-          "column": 41,
-          "index": 10283,
-          "line": 221
-        },
-        "start": {
-          "column": 8,
-          "index": 10250,
-          "line": 221
-        }
-      }
-    },
-    {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncListenerService.java",
-      "selection": {
-        "end": {
-          "column": 0,
-          "index": 1052,
-          "line": 27
-        },
-        "start": {
-          "column": 0,
-          "index": 1052,
-          "line": 27
+          "column": 4,
+          "index": 2549,
+          "line": 81
         }
       }
     },
@@ -49,47 +19,17 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncListenerService.java",
       "selection": {
         "end": {
-          "column": 34,
-          "index": 6906,
-          "line": 189
-        },
-        "start": {
-          "column": 13,
-          "index": 6885,
-          "line": 189
-        }
-      }
-    },
-    {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearAlarmActivity.java",
-      "selection": {
-        "end": {
           "column": 0,
-          "index": 0,
-          "line": 0
+          "index": 7988,
+          "line": 210
         },
         "start": {
           "column": 0,
-          "index": 0,
-          "line": 0
-        }
-      }
-    },
-    {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncAlarmState.java",
-      "selection": {
-        "end": {
-          "column": 0,
-          "index": 0,
-          "line": 0
-        },
-        "start": {
-          "column": 0,
-          "index": 0,
-          "line": 0
+          "index": 7988,
+          "line": 210
         }
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncNotificationService.java"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncListenerService.java"
 }
