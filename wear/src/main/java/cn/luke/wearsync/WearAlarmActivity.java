@@ -151,7 +151,7 @@ public class WearAlarmActivity extends ComponentActivity {
         WearLog.d(TAG, "🔇 闹钟震动已停止");
     }
 
-    private void cleanExit() {
+    public void cleanExit() {
         try {
             stopWatchVibration(); // ✅ 确保退出前停止震动
         } catch (Exception e) {
