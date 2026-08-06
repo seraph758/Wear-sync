@@ -5,13 +5,13 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 6083,
-          "line": 194
+          "index": 6095,
+          "line": 196
         },
         "start": {
           "column": 0,
-          "index": 6083,
-          "line": 194
+          "index": 6095,
+          "line": 196
         }
       }
     },
@@ -44,7 +44,22 @@
           "line": 161
         }
       }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncListenerService.java",
+      "selection": {
+        "end": {
+          "column": 73,
+          "index": 7099,
+          "line": 191
+        },
+        "start": {
+          "column": 73,
+          "index": 7099,
+          "line": 191
+        }
+      }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearAlarmActivity.java"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncListenerService.java"
 }

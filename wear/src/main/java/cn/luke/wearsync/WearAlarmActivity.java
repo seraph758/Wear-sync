@@ -5,8 +5,8 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
-import android.widget.Button; // ✅ 已补回
-import android.widget.TextView; // ✅ 已补回
+import android.widget.Button;
+import android.widget.TextView;
 import androidx.annotation.Nullable;
 import androidx.activity.ComponentActivity;
 import org.json.JSONObject;
@@ -14,6 +14,9 @@ import org.json.JSONObject;
 public class WearAlarmActivity extends ComponentActivity {
 
     private static final String TAG = "WearSync_WearAlarmUI";
+
+    // ✅ P0: 新增静态实例，用于外部服务获取当前 Activity
+    private static WearAlarmActivity instance;
 
     private TextView tvAlarmDay;
     private TextView tvAlarmTime;
@@ -28,6 +31,9 @@ public class WearAlarmActivity extends ComponentActivity {
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        // ✅ P0: 注册当前实例
+        instance = this;
 
         // ✅ 最先检查 FORCE_STOP，避免任何不必要的初始化
         if (getIntent() != null && "FORCE_STOP".equals(getIntent().getStringExtra("alarm_action"))) {
@@ -67,6 +73,11 @@ public class WearAlarmActivity extends ComponentActivity {
             WearSyncCommManager.getInstance(this).snoozePhoneAlarm();
             cleanExit();
         });
+    }
+
+    // ✅ P0: 新增公共静态方法，供外部安全获取实例
+    public static WearAlarmActivity getInstance() {
+        return instance;
     }
 
     private void handleIncomingTime(Intent intent) {
@@ -189,6 +200,8 @@ public class WearAlarmActivity extends ComponentActivity {
 
     @Override
     protected void onDestroy() {
+        // ✅ P0: 销毁时清空实例，防止内存泄漏
+        instance = null;
         // 最终兜底：确保震动停止
         stopWatchVibration();
         super.onDestroy();
