@@ -5,6 +5,8 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.widget.Button; // ✅ 已补回
+import android.widget.TextView; // ✅ 已补回
 import androidx.annotation.Nullable;
 import androidx.activity.ComponentActivity;
 import org.json.JSONObject;
@@ -20,14 +22,14 @@ public class WearAlarmActivity extends ComponentActivity {
     // 震动循环控制
     private Handler vibrationHandler;
     private Runnable vibrationRunnable;
-    private volatile boolean isVibrating = false; // ✅ P0: volatile 保证多线程可见性
-    private long nextVibrateTime = 0; // ✅ P1: 绝对时间调度基准
+    private volatile boolean isVibrating = false;
+    private long nextVibrateTime = 0;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // ✅ P0: 最先检查 FORCE_STOP，避免任何不必要的初始化
+        // ✅ 最先检查 FORCE_STOP，避免任何不必要的初始化
         if (getIntent() != null && "FORCE_STOP".equals(getIntent().getStringExtra("alarm_action"))) {
             WearLog.d(TAG, "收到 FORCE_STOP 指令，直接退出");
             finishAndRemoveTask();
@@ -109,7 +111,7 @@ public class WearAlarmActivity extends ComponentActivity {
         final int offDuration = rawOffDuration;
 
         vibrationHandler = new Handler(Looper.getMainLooper());
-        nextVibrateTime = SystemClock.elapsedRealtime(); // ✅ P1: 基于单调时钟初始化
+        nextVibrateTime = SystemClock.elapsedRealtime();
 
         vibrationRunnable = new Runnable() {
             @Override

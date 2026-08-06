@@ -20,13 +20,13 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 18218,
-          "line": 452
+          "index": 5332,
+          "line": 141
         },
         "start": {
           "column": 0,
-          "index": 18218,
-          "line": 452
+          "index": 5332,
+          "line": 141
         }
       }
     },
@@ -46,5 +46,5 @@
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncCameraService.java"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearAlarmActivity.java"
 }
