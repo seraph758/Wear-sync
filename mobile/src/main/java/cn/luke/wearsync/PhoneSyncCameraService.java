@@ -146,9 +146,10 @@ public class PhoneSyncCameraService extends Service {
         return null;
     }
 
-    // ==================== 相机 + 低延迟编码 + Channel 推流 ====================
+       // ==================== 相机 + 低延迟编码 + Channel 推流 ====================
     private void initCameraAndStartStreaming() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            PhoneLog.e(TAG, "❌ 缺少相机权限，服务停止");
             stopSelf();
             return;
         }
@@ -162,7 +163,7 @@ public class PhoneSyncCameraService extends Service {
             fmt.setInteger(MediaFormat.KEY_FRAME_RATE, FRAME_RATE);
             fmt.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, I_FRAME_INTERVAL);
             fmt.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
-            // ⭐ 关键：启用低延迟模式，禁用B帧，减少编码缓冲
+            // ⭐ 关键：启用低延迟模式
             fmt.setInteger(MediaFormat.KEY_LATENCY, 1);
             mEncoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);
             mEncoder.configure(fmt, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
@@ -170,7 +171,7 @@ public class PhoneSyncCameraService extends Service {
             mEncoder.setCallback(new EncoderCallback());
             PhoneLog.d(TAG, "⏸️ [1/4] 编码器配置完成，【挂起等待】通道建立后再启动");
 
-            // ✅ 2. 高清拍照 ImageReader（独立于预览流）
+            // ✅ 2. 高清拍照 ImageReader
             mPhotoReader = ImageReader.newInstance(PHOTO_WIDTH, PHOTO_HEIGHT, ImageFormat.JPEG, 2);
             mPhotoReader.setOnImageAvailableListener(reader -> {
                 try (var image = reader.acquireLatestImage()) {
@@ -183,8 +184,13 @@ public class PhoneSyncCameraService extends Service {
             stopSelf();
             return;
         }
-        PhoneLog.d(TAG, "🔍 [2/4] 编码器就绪，开始寻找手表节点并打开通道...");
-        discoverAndCacheNode();
+
+        // ✅【核心修复】删除了这里重复的 discoverAndCacheNode() 调用
+        // 直接使用 onStartCommand 里传进来的 mCachedNodeId
+        PhoneLog.d(TAG, "🔍 [2/4] 编码器就绪，直接使用已缓存的节点 ID: " + mCachedNodeId);
+        
+        // 直接打开通道
+        openChannelStream();
     }
 
     /** ✅ 高清拍照：单独发起一次全尺寸 CaptureRequest */
