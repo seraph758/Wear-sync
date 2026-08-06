@@ -24,16 +24,13 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
 import android.view.Surface;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
-
 import com.google.android.gms.wearable.ChannelClient;
 import com.google.android.gms.wearable.MessageClient;
 import com.google.android.gms.wearable.Wearable;
-
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
@@ -42,7 +39,6 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class PhoneSyncCameraService extends Service {
-
     private static final String TAG = "WearSync_CameraSvc";
 
     // ==================== 对外契约常量 ====================
@@ -56,9 +52,9 @@ public class PhoneSyncCameraService extends Service {
     // ==================== 低延迟预览参数 ====================
     private static final int PREVIEW_WIDTH = 320;
     private static final int PREVIEW_HEIGHT = 240;
-    private static final int BIT_RATE = 300_000;       // 300Kbps
+    private static final int BIT_RATE = 300_000; // 300Kbps
     private static final int FRAME_RATE = 25;
-    private static final int I_FRAME_INTERVAL = 1;     // 1秒一个关键帧
+    private static final int I_FRAME_INTERVAL = 1; // 1秒一个关键帧
 
     // ==================== 高清拍照参数 ====================
     private static final int PHOTO_WIDTH = 1920;
@@ -75,10 +71,13 @@ public class PhoneSyncCameraService extends Service {
     private CameraCaptureSession mCaptureSession;
     private MediaCodec mEncoder;
     private Surface mEncoderSurface;
-    private ImageReader mPhotoReader;          // ✅ 高清拍照专用
+    private ImageReader mPhotoReader;
     private final AtomicBoolean mIsStreaming = new AtomicBoolean(false);
-    private String mCachedNodeId;
+    
+    // ✅ 新增：标记相机硬件是否已打开
+    private final AtomicBoolean mIsCameraOpened = new AtomicBoolean(false);
 
+    private String mCachedNodeId;
     private ChannelClient mChannelClient;
     private OutputStream mChannelOutputStream;
 
@@ -104,7 +103,7 @@ public class PhoneSyncCameraService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent == null)     return START_NOT_STICKY;
+        if (intent == null) return START_NOT_STICKY;
         String action = intent.getAction();
         if (ACTION_START_CAMERA.equals(action)) {
             String remoteNodeId = intent.getStringExtra("remote_node_id");
@@ -118,30 +117,43 @@ public class PhoneSyncCameraService extends Service {
             stopStreamingAndRelease();
             stopSelf();
         }
-            return START_NOT_STICKY;
+        return START_NOT_STICKY;
     }
 
-    @Override
+       @Override
     public void onDestroy() {
+        PhoneLog.d(TAG, "🛑 服务即将销毁，开始清理资源...");
+        
+        // 1. 移除消息监听，防止收到新指令
         Wearable.getMessageClient(this).removeListener(mMessageListener);
+        
+        // 2. 核心修复：先停止推流，这会关闭相机会话和设备
+        // 这能确保在 Service 销毁前，相机的异步回调链路被切断
         stopStreamingAndRelease();
+        
+        // 3. 停止前台服务
         stopForeground(STOP_FOREGROUND_REMOVE);
+        
+        // 4. 调用父类方法，正式销毁 Service
         super.onDestroy();
-        PhoneLog.w(TAG,"🔥 CameraService destroyed");
+        
+        PhoneLog.d(TAG, "✅ 服务已安全销毁");
     }
 
-    @Nullable @Override public IBinder onBind(Intent intent) { return null; }
+    @Nullable
+    @Override
+    public IBinder onBind(Intent intent) {
+        return null;
+    }
 
     // ==================== 相机 + 低延迟编码 + Channel 推流 ====================
-
     private void initCameraAndStartStreaming() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
-                != PackageManager.PERMISSION_GRANTED) {
-            stopSelf(); return;
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            stopSelf();
+            return;
         }
         mIsStreaming.set(true);
         startBackgroundThread();
-
         try {
             // ✅ 1. 低延迟 H.264 编码器
             MediaFormat fmt = MediaFormat.createVideoFormat(
@@ -149,17 +161,14 @@ public class PhoneSyncCameraService extends Service {
             fmt.setInteger(MediaFormat.KEY_BIT_RATE, BIT_RATE);
             fmt.setInteger(MediaFormat.KEY_FRAME_RATE, FRAME_RATE);
             fmt.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, I_FRAME_INTERVAL);
-            fmt.setInteger(MediaFormat.KEY_COLOR_FORMAT,
-                    MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
+            fmt.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
             // ⭐ 关键：启用低延迟模式，禁用B帧，减少编码缓冲
             fmt.setInteger(MediaFormat.KEY_LATENCY, 1);
-
             mEncoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);
             mEncoder.configure(fmt, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
             mEncoderSurface = mEncoder.createInputSurface();
             mEncoder.setCallback(new EncoderCallback());
             PhoneLog.d(TAG, "⏸️ [1/4] 编码器配置完成，【挂起等待】通道建立后再启动");
-        
 
             // ✅ 2. 高清拍照 ImageReader（独立于预览流）
             mPhotoReader = ImageReader.newInstance(PHOTO_WIDTH, PHOTO_HEIGHT, ImageFormat.JPEG, 2);
@@ -168,10 +177,7 @@ public class PhoneSyncCameraService extends Service {
                     if (image != null) savePhoto(image);
                 }
             }, mBgHandler);
-
-          
-            
-      } catch (Exception e) {
+        } catch (Exception e) {
             PhoneLog.e(TAG, "❌ [1/4] 初始化编码器失败", e);
             stopStreamingAndRelease();
             stopSelf();
@@ -188,8 +194,7 @@ public class PhoneSyncCameraService extends Service {
             return;
         }
         try {
-            CaptureRequest.Builder builder =
-                    mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
+            CaptureRequest.Builder builder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
             builder.addTarget(mPhotoReader.getSurface());
             builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
             builder.set(CaptureRequest.JPEG_QUALITY, (byte) 95);
@@ -209,41 +214,44 @@ public class PhoneSyncCameraService extends Service {
     }
 
     // ==================== Channel 管理 ====================
-
     private void openChannelStream() {
         if (mCachedNodeId == null || !mIsStreaming.get()){
-          PhoneLog.w(TAG, "⚠️ [2/4] 节点ID为空或推流已停止，放弃打开通道");
-          return;
-         }
-         PhoneLog.d(TAG, "📡 [2/4] 正在向手表发起 Channel 连接请求 (Path: " + WEAR_CHANNEL_PATH + ")...");
-    
+            PhoneLog.w(TAG, "⚠️ [2/4] 节点ID为空或推流已停止，放弃打开通道");
+            return;
+        }
+        PhoneLog.d(TAG, "📡 [2/4] 正在向手表发起 Channel 连接请求 (Path: " + WEAR_CHANNEL_PATH + ")...");
         mChannelClient.openChannel(mCachedNodeId, WEAR_CHANNEL_PATH)
-            .addOnSuccessListener(channel -> {
-                PhoneLog.d(TAG, "🤝 [2/4] Channel 连接成功！正在获取输出流 (OutputStream)...");
-                
-                mChannelClient.getOutputStream(channel)
-                    .addOnSuccessListener(os -> {
-                        mChannelOutputStream = os;
-                        PhoneLog.d(TAG, "✅ [3/4] 输出流获取成功！通道已完全打通！");
-                        
-                        PhoneLog.d(TAG, "🎬 [3/4] 现在安全地启动编码器和相机...");
-                        // ✅ 通道通了！现在可以安全地启动编码器和相机了
-                        mEncoder.start();
-                        startCameraDevice(); 
-                    })
-                    .addOnFailureListener(e -> {
-                        PhoneLog.e(TAG, "❌ [3/4] 获取输出流失败，通道建立中断", e);
-                    });
-            })
-            .addOnFailureListener(e -> {
-                PhoneLog.e(TAG, "❌ [2/4] 打开 Channel 失败，请检查手表连接状态", e);
-            });
+                .addOnSuccessListener(channel -> {
+                    PhoneLog.d(TAG, "🤝 [2/4] Channel 连接成功！正在获取输出流 (OutputStream)...");
+                    mChannelClient.getOutputStream(channel)
+                            .addOnSuccessListener(os -> {
+                                mChannelOutputStream = os;
+                                PhoneLog.d(TAG, "✅ [3/4] 输出流获取成功！通道已完全打通！");
+                                
+                                // ✅ 通道通了！现在启动编码器
+                                mEncoder.start();
+
+                                // ✅【核心修改】检查相机是否已打开，如果打开了，就开始预览
+                                if (mIsCameraOpened.get() && mCameraDevice != null) {
+                                    PhoneLog.d(TAG, "🎬 通道和相机均已就绪，开始创建预览会话...");
+                                    startPreviewSession();
+                                } else {
+                                    PhoneLog.d(TAG, "🎬 通道已就绪，但相机尚未打开，等待相机回调...");
+                                }
+                            })
+                            .addOnFailureListener(e -> {
+                                PhoneLog.e(TAG, "❌ [3/4] 获取输出流失败，通道建立中断", e);
+                            });
+                })
+                .addOnFailureListener(e -> {
+                    PhoneLog.e(TAG, "❌ [2/4] 打开 Channel 失败，请检查手表连接状态", e);
+                });
     }
+
     private void startCameraDevice() {
         PhoneLog.d(TAG, "📷 [4/4] 正在打开硬件相机...");
         // 【新增】显式检查相机权限，防止 SecurityException
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
-                != PackageManager.PERMISSION_GRANTED) {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             PhoneLog.e(TAG, "❌ [4/4] 缺少 CAMERA 权限，推流终止。请在手机端授予相机权限后重试。");
             stopStreamingAndRelease();
             stopSelf();
@@ -260,128 +268,159 @@ public class PhoneSyncCameraService extends Service {
             stopSelf();
         }
     }
-    
-    
 
     private void stopStreamingAndRelease() {
         mIsStreaming.set(false);
+        mIsCameraOpened.set(false); // ✅ 重置相机状态
         if (mChannelOutputStream != null) {
-            try { mChannelOutputStream.close(); } catch (IOException ignored) {}
+            try {
+                mChannelOutputStream.close();
+            } catch (IOException ignored) {}
             mChannelOutputStream = null;
         }
         try {
-            if (mCaptureSession != null) { mCaptureSession.close(); mCaptureSession = null; }
-            if (mCameraDevice != null) { mCameraDevice.close(); mCameraDevice = null; }
-            if (mEncoder != null) { mEncoder.stop(); mEncoder.release(); mEncoder = null; }
-            if (mEncoderSurface != null) { mEncoderSurface.release(); mEncoderSurface = null; }
-            if (mPhotoReader != null) { mPhotoReader.close(); mPhotoReader = null; }
+            if (mCaptureSession != null) {
+                mCaptureSession.close();
+                mCaptureSession = null;
+            }
+            if (mCameraDevice != null) {
+                mCameraDevice.close();
+                mCameraDevice = null;
+            }
+            if (mEncoder != null) {
+                mEncoder.stop();
+                mEncoder.release();
+                mEncoder = null;
+            }
+            if (mEncoderSurface != null) {
+                mEncoderSurface.release();
+                mEncoderSurface = null;
+            }
+            if (mPhotoReader != null) {
+                mPhotoReader.close();
+                mPhotoReader = null;
+            }
             stopBackgroundThread();
-        } catch (Exception e) { PhoneLog.e(TAG, "⚠️ 释放异常", e); }
+        } catch (Exception e) {
+            PhoneLog.e(TAG, "⚠️ 释放异常", e);
+        }
     }
 
     // ==================== 编码器回调 → Channel 写入 ====================
-
     private class EncoderCallback extends MediaCodec.Callback {
-
         @Override
         public void onInputBufferAvailable(@NonNull MediaCodec codec, int index) {
             // 你用的是 Surface 输入（createInputSurface），不会收到 input buffer 回调
             // 留空即可
         }
+
         @Override
-        public void onOutputBufferAvailable(@NonNull MediaCodec codec, int index,
-                                            @NonNull MediaCodec.BufferInfo info) {
+        public void onOutputBufferAvailable(@NonNull MediaCodec codec, int index, @NonNull MediaCodec.BufferInfo info) {
             ByteBuffer buf = codec.getOutputBuffer(index);
             if (buf == null || !mIsStreaming.get()) {
-                codec.releaseOutputBuffer(index, false); return;
+                codec.releaseOutputBuffer(index, false);
+                return;
             }
             byte[] data = new byte[info.size];
-            buf.position(info.offset); buf.get(data);
+            buf.position(info.offset);
+            buf.get(data);
             codec.releaseOutputBuffer(index, false);
             writeFrameToChannel(data, info.presentationTimeUs, info.flags);
         }
-        @Override public void onError(@NonNull MediaCodec c, @NonNull MediaCodec.CodecException e) {
+
+        @Override
+        public void onError(@NonNull MediaCodec c, @NonNull MediaCodec.CodecException e) {
             PhoneLog.e(TAG, "❌ 编码器错误", e);
         }
-        @Override public void onOutputFormatChanged(@NonNull MediaCodec c, @NonNull MediaFormat f) {}
-    }
-    private void writeFrameToChannel(byte[] h264, long tsUs, int flags) {
-    OutputStream os = mChannelOutputStream;
-    if (os == null) return;
-    try {
-        // ✅ 新增：4字节帧长度（大端序，与 DataInputStream.readInt 匹配）
-        os.write(ByteBuffer.allocate(4).putInt(h264.length).array());
-        os.write(ByteBuffer.allocate(8).putLong(tsUs).array());
-        os.write(ByteBuffer.allocate(4).putInt(flags).array());
-        os.write(h264);
-        os.flush();
-    } catch (IOException e) {
-        PhoneLog.w(TAG, "⚠️ Channel写入失败", e);
-        mChannelOutputStream = null;
-    }
-}
 
+        @Override
+        public void onOutputFormatChanged(@NonNull MediaCodec c, @NonNull MediaFormat f) {}
+    }
+
+    private void writeFrameToChannel(byte[] h264, long tsUs, int flags) {
+        OutputStream os = mChannelOutputStream;
+        if (os == null) return;
+        try {
+            // ✅ 新增：4字节帧长度（大端序，与 DataInputStream.readInt 匹配）
+            os.write(ByteBuffer.allocate(4).putInt(h264.length).array());
+            os.write(ByteBuffer.allocate(8).putLong(tsUs).array());
+            os.write(ByteBuffer.allocate(4).putInt(flags).array());
+            os.write(h264);
+            os.flush();
+        } catch (IOException e) {
+            PhoneLog.w(TAG, "⚠️ Channel写入失败", e);
+            mChannelOutputStream = null;
+        }
+    }
 
     // ==================== Camera2 回调 ====================
-
     private class CameraStateCallback extends CameraDevice.StateCallback {
         @Override
         public void onOpened(@NonNull CameraDevice camera) {
+            PhoneLog.d(TAG, "✅ 相机硬件已打开，等待通道就绪后开始预览");
             mCameraDevice = camera;
-            try {
-                // ✅ 同时绑定预览Surface和拍照Surface
-                CaptureRequest.Builder b = camera.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
-                b.addTarget(mEncoderSurface);
-                b.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO);
-
-                // 构建 OutputConfiguration 列表
-                List<OutputConfiguration> outputConfigs = new ArrayList<>();
-                outputConfigs.add(new OutputConfiguration(mEncoderSurface));
-                outputConfigs.add(new OutputConfiguration(mPhotoReader.getSurface()));
-
-// 构建 SessionConfiguration
-                SessionConfiguration sessionConfig = new SessionConfiguration(
-                        SessionConfiguration.SESSION_REGULAR,
-                        outputConfigs,
-                        runnable -> mBgHandler.post(runnable),   // Executor
-                        new CameraCaptureSession.StateCallback() {
-                            @Override
-                            public void onConfigured(@NonNull CameraCaptureSession s) {
-                                mCaptureSession = s;
-                                try {
-                                    s.setRepeatingRequest(b.build(), null, mBgHandler);
-                                } catch (Exception e) {
-                                    PhoneLog.e(TAG, "❌ 预览请求失败", e);
-                                }
-                            }
-
-                            @Override
-                            public void onConfigureFailed(@NonNull CameraCaptureSession s) {
-                                PhoneLog.e(TAG, "❌ Session配置失败");
-                            }
-                        }
-                );
-
-                camera.createCaptureSession(sessionConfig);
-            } catch (Exception e) { PhoneLog.e(TAG, "❌ 创建Session失败", e); }
+            mIsCameraOpened.set(true); // ✅ 只设置状态
+            // ❌ 移除了 createCaptureSession 逻辑
         }
+
         @Override
         public void onDisconnected(@NonNull CameraDevice camera) {
             PhoneLog.w(TAG, "⚠️ 相机被断开");
             camera.close();
             mCameraDevice = null;
+            mIsCameraOpened.set(false);
         }
 
         @Override
         public void onError(@NonNull CameraDevice camera, int error) {
             PhoneLog.e(TAG, "❌ 相机错误: " + error);
             stopStreamingAndRelease();
-            stopSelf();     
+            stopSelf();
+        }
+    }
+
+    // ✅ 新增：专门用于创建预览会话的方法
+    private void startPreviewSession() {
+        if (mCameraDevice == null) return;
+
+        try {
+            CaptureRequest.Builder b = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
+            b.addTarget(mEncoderSurface);
+            b.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO);
+
+            List<OutputConfiguration> outputConfigs = new ArrayList<>();
+            outputConfigs.add(new OutputConfiguration(mEncoderSurface));
+            outputConfigs.add(new OutputConfiguration(mPhotoReader.getSurface()));
+
+            SessionConfiguration sessionConfig = new SessionConfiguration(
+                    SessionConfiguration.SESSION_REGULAR,
+                    outputConfigs,
+                    runnable -> mBgHandler.post(runnable),
+                    new CameraCaptureSession.StateCallback() {
+                        @Override
+                        public void onConfigured(@NonNull CameraCaptureSession s) {
+                            mCaptureSession = s;
+                            try {
+                                PhoneLog.d(TAG, "✅ 预览会话配置成功，开始推流！");
+                                s.setRepeatingRequest(b.build(), null, mBgHandler);
+                            } catch (Exception e) {
+                                PhoneLog.e(TAG, "❌ 开始预览请求失败", e);
+                            }
+                        }
+
+                        @Override
+                        public void onConfigureFailed(@NonNull CameraCaptureSession s) {
+                            PhoneLog.e(TAG, "❌ 预览会话配置失败");
+                        }
+                    }
+            );
+            mCameraDevice.createCaptureSession(sessionConfig);
+        } catch (Exception e) {
+            PhoneLog.e(TAG, "❌ 创建预览会话失败", e);
         }
     }
 
     // ==================== 节点发现 ====================
-
     private void discoverAndCacheNode() {
         mCachedNodeId = WearSyncState.getNodeId(this);
         if (mCachedNodeId != null) {
@@ -390,28 +429,32 @@ public class PhoneSyncCameraService extends Service {
             PhoneLog.w(TAG, "未获取到节点ID，手表可能未连接");
         }
     }
-    // ==================== 工具方法 ====================
 
+    // ==================== 工具方法 ====================
     private void startBackgroundThread() {
         mBgThread = new HandlerThread("CameraBg");
         mBgThread.start();
         mBgHandler = new Handler(mBgThread.getLooper());
     }
+
     private void stopBackgroundThread() {
         if (mBgThread != null) {
             mBgThread.quitSafely();
-            try { mBgThread.join(); } catch (InterruptedException ignored) {}
-            mBgThread = null; mBgHandler = null;
+            try {
+                mBgThread.join();
+            } catch (InterruptedException ignored) {}
+            mBgThread = null;
+            mBgHandler = null;
         }
     }
+
     private void createNotificationChannel() {
         NotificationChannel ch = new NotificationChannel(CHANNEL_ID, "相机同步", NotificationManager.IMPORTANCE_LOW);
         getSystemService(NotificationManager.class).createNotificationChannel(ch);
     }
+
     private Notification buildNotification() {
-        PendingIntent pi = PendingIntent.getActivity(this, 0,
-                new Intent(this, PhoneSyncMainActivity.class),
-                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        PendingIntent pi = PendingIntent.getActivity(this, 0, new Intent(this, PhoneSyncMainActivity.class), PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         return new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle("相机同步运行中")
                 .setSmallIcon(android.R.drawable.ic_menu_camera)
