@@ -59,7 +59,10 @@ jobs:
         ls -l $KEY_PATH
 
     - name: Build Release APKs
-      run: ./gradlew clean assembleRelease --warning-mode all
+      run: |
+    ./gradlew clean assembleRelease --console=plain 2>&1 \
+      | grep -vE "^(w|W)ARNING|^WARNING:|^\s*at\s+.*\(.*\.java:" || true
+
 
     - name: Copy APKs to root directory
       run: |

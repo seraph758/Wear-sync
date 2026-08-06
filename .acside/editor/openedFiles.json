@@ -74,7 +74,22 @@
           "line": 0
         }
       }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/.github/workflows/android-build.yml",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 1748,
+          "line": 64
+        },
+        "start": {
+          "column": 0,
+          "index": 1748,
+          "line": 64
+        }
+      }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncCameraService.java"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/.github/workflows/android-build.yml"
 }
