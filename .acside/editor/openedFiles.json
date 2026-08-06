@@ -19,14 +19,14 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncCameraService.java",
       "selection": {
         "end": {
-          "column": 0,
-          "index": 5432,
-          "line": 148
+          "column": 17,
+          "index": 14788,
+          "line": 376
         },
         "start": {
-          "column": 0,
-          "index": 5432,
-          "line": 148
+          "column": 2,
+          "index": 14184,
+          "line": 359
         }
       }
     },
@@ -61,35 +61,20 @@
       }
     },
     {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/AndroidManifest.xml",
-      "selection": {
-        "end": {
-          "column": 0,
-          "index": 0,
-          "line": 0
-        },
-        "start": {
-          "column": 0,
-          "index": 0,
-          "line": 0
-        }
-      }
-    },
-    {
       "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/.github/workflows/android-build.yml",
       "selection": {
         "end": {
-          "column": 0,
-          "index": 1750,
-          "line": 64
+          "column": 76,
+          "index": 1755,
+          "line": 63
         },
         "start": {
-          "column": 39,
-          "index": 1655,
-          "line": 62
+          "column": 30,
+          "index": 1602,
+          "line": 60
         }
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/.github/workflows/android-build.yml"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncCameraService.java"
 }

@@ -220,7 +220,7 @@ public class PhoneSyncCameraService extends Service {
     }
 
     // ==================== Channel 管理 ====================
-    private void openChannelStream() {
+     private void openChannelStream() {
         if (mCachedNodeId == null || !mIsStreaming.get()){
             PhoneLog.w(TAG, "⚠️ [2/4] 节点ID为空或推流已停止，放弃打开通道");
             return;
@@ -234,16 +234,12 @@ public class PhoneSyncCameraService extends Service {
                                 mChannelOutputStream = os;
                                 PhoneLog.d(TAG, "✅ [3/4] 输出流获取成功！通道已完全打通！");
                                 
-                                // ✅ 通道通了！现在启动编码器
+                                // 1. 启动编码器
                                 mEncoder.start();
-
-                                // ✅【核心修改】检查相机是否已打开，如果打开了，就开始预览
-                                if (mIsCameraOpened.get() && mCameraDevice != null) {
-                                    PhoneLog.d(TAG, "🎬 通道和相机均已就绪，开始创建预览会话...");
-                                    startPreviewSession();
-                                } else {
-                                    PhoneLog.d(TAG, "🎬 通道已就绪，但相机尚未打开，等待相机回调...");
-                                }
+    
+                                // 2. 核心顺序保障：通道打通后，【才开始】请求打开相机硬件！
+                                // 彻底避免相机开启过快、 Channel 未准备好导致的黑屏
+                                startCameraDevice(); 
                             })
                             .addOnFailureListener(e -> {
                                 PhoneLog.e(TAG, "❌ [3/4] 获取输出流失败，通道建立中断", e);
@@ -253,6 +249,7 @@ public class PhoneSyncCameraService extends Service {
                     PhoneLog.e(TAG, "❌ [2/4] 打开 Channel 失败，请检查手表连接状态", e);
                 });
     }
+
 
     private void startCameraDevice() {
         PhoneLog.d(TAG, "📷 [4/4] 正在打开硬件相机...");
@@ -358,17 +355,18 @@ public class PhoneSyncCameraService extends Service {
             mChannelOutputStream = null;
         }
     }
-
-    // ==================== Camera2 回调 ====================
+    
     private class CameraStateCallback extends CameraDevice.StateCallback {
         @Override
         public void onOpened(@NonNull CameraDevice camera) {
-            PhoneLog.d(TAG, "✅ 相机硬件已打开，等待通道就绪后开始预览");
+            PhoneLog.d(TAG, "✅ 相机硬件已打开，由于 Channel 已预先打通，直接开启预览会话");
             mCameraDevice = camera;
-            mIsCameraOpened.set(true); // ✅ 只设置状态
-            // ❌ 移除了 createCaptureSession 逻辑
+            mIsCameraOpened.set(true);
+            
+            // 顺序链条最后一环：相机就绪后直接开启预览推流，不需要再做复杂判断
+            startPreviewSession();
         }
-
+    
         @Override
         public void onDisconnected(@NonNull CameraDevice camera) {
             PhoneLog.w(TAG, "⚠️ 相机被断开");
@@ -376,7 +374,7 @@ public class PhoneSyncCameraService extends Service {
             mCameraDevice = null;
             mIsCameraOpened.set(false);
         }
-
+    
         @Override
         public void onError(@NonNull CameraDevice camera, int error) {
             PhoneLog.e(TAG, "❌ 相机错误: " + error);
@@ -384,6 +382,7 @@ public class PhoneSyncCameraService extends Service {
             stopSelf();
         }
     }
+
 
     // ✅ 新增：专门用于创建预览会话的方法
     private void startPreviewSession() {
