@@ -139,9 +139,10 @@ public class PhoneSyncFileTransferService extends Service {
 
             // 5. 獲取輸出流並傳輸
             try (OutputStream outputStream = Tasks.await(Wearable.getChannelClient(this).getOutputStream(channel))) {
-                byte[] buffer = new byte[32768];
+                byte[] buffer = new byte[16384];
                 int len;
                 long totalRead = 0;
+     int packetCount = 0;
 
                 while ((len = inputStream.read(buffer)) != -1) {
                     // 檢查是否被取消
@@ -151,6 +152,20 @@ public class PhoneSyncFileTransferService extends Service {
 
                     outputStream.write(buffer, 0, len);
                     totalRead += len;
+                    packetCount++;
+        // 1. 每發送一定數量數據包，手動 flush 確保推送到底層管道
+        if (packetCount % 4 == 0) {
+            outputStream.flush();
+        }
+
+        // 2. 主動休眠 2 毫秒，給藍牙底層傳輸和手錶端寫入 MediaStore 留出緩衝時間
+        try {
+            Thread.sleep(2);
+        } catch (InterruptedException ignored) {
+            Thread.currentThread().interrupt();
+            break;
+        }
+
                     
                     // 更新進度
                     long fileSize = item.getFileSize();
