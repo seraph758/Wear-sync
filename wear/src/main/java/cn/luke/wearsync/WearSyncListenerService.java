@@ -283,36 +283,38 @@ private void handleDndCommand(JSONObject json) {
     // --- Channel 回调 ---
 
     @Override
-    public void onChannelOpened(@NonNull ChannelClient.Channel channel) {
-        String path = channel.getPath();
-        WearLog.d(TAG, "【CHN-001】通道已打开. Path: " + path);
-        super.onChannelOpened(channel);
+public void onChannelOpened(@NonNull ChannelClient.Channel channel) {
+    String path = channel.getPath();
+    WearLog.d(TAG, "【CHN-001】通道已打开. Path: " + path);
+    super.onChannelOpened(channel);
 
-        (path.startsWith(FILE_TRANSFER_CHANNEL_PATH)) {
-            WearLog.i(TAG, "【CHN-003】匹配到文件传输通道，准备接收");
-            // 解析路径中的元数据
-            String pathData = path.substring(FILE_TRANSFER_CHANNEL_PATH.length() + 1);
-            long expectedSize = -1L;
-            String fileName;
-            int slashIndex = pathData.indexOf('/');
-            if (slashIndex != -1) {
-                try {
-                    expectedSize = Long.parseLong(pathData.substring(0, slashIndex));
-                } catch (NumberFormatException e) {
-                    WearLog.w(TAG, "【CHN-WARN】无法解析文件大小");
-                }
-                fileName = Uri.decode(pathData.substring(slashIndex + 1));
-            } else {
-                fileName = Uri.decode(pathData);
+    // ✅ 补上缺失的 if 关键字
+    if (path.startsWith(FILE_TRANSFER_CHANNEL_PATH)) {
+        WearLog.i(TAG, "【CHN-003】匹配到文件传输通道，准备接收");
+        // 解析路径中的元数据
+        String pathData = path.substring(FILE_TRANSFER_CHANNEL_PATH.length() + 1);
+        long expectedSize = -1L;
+        String fileName;
+        int slashIndex = pathData.indexOf('/');
+        if (slashIndex != -1) {
+            try {
+                expectedSize = Long.parseLong(pathData.substring(0, slashIndex));
+            } catch (NumberFormatException e) {
+                WearLog.w(TAG, "【CHN-WARN】无法解析文件大小");
             }
-            final String finalFileName = fileName;
-            final long finalExpectedSize = expectedSize;
-            final String nodeId = channel.getNodeId();
-            new Thread(() -> receiveFileFromChannel(channel, finalFileName, nodeId, finalExpectedSize)).start();
+            fileName = Uri.decode(pathData.substring(slashIndex + 1));
         } else {
-            WearLog.d(TAG, "【CHN-004】忽略未知通道: " + path);
+            fileName = Uri.decode(pathData);
         }
+        final String finalFileName = fileName;
+        final long finalExpectedSize = expectedSize;
+        final String nodeId = channel.getNodeId();
+        new Thread(() -> receiveFileFromChannel(channel, finalFileName, nodeId, finalExpectedSize)).start();
+    } else {
+        WearLog.d(TAG, "【CHN-004】忽略未知通道: " + path);
     }
+}
+
 
     @Override
     public void onChannelClosed(@NonNull ChannelClient.Channel channel, int closeReason, int appSpecificErrorCode) {
