@@ -440,44 +440,75 @@ public class PhoneSyncCameraService extends Service {
     }
 
     private void stopStreamingAndRelease() {
+        PhoneLog.d(TAG, "🧹 開始安全釋放相機與推流資源...");
         mIsStreaming.set(false);
         mIsCameraOpened.set(false);
-
+    
+        // 1. 先關閉 Session（底層仍然需要 mBgHandler 處理 onClosed 回調）
         if (mCaptureSession != null) {
-            try { mCaptureSession.close(); } catch (Exception ignored) {}
+            try {
+                mCaptureSession.close();
+                PhoneLog.d(TAG, "✅ CameraCaptureSession 已關閉");
+            } catch (Exception e) {
+                PhoneLog.w(TAG, "⚠️ 關閉 Session 異常: " + e.getMessage());
+            }
             mCaptureSession = null;
         }
+    
+        // 2. 關閉 Camera 設備
         if (mCameraDevice != null) {
-            try { mCameraDevice.close(); } catch (Exception ignored) {}
+            try {
+                mCameraDevice.close();
+                PhoneLog.d(TAG, "✅ CameraDevice 已關閉");
+            } catch (Exception e) {
+                PhoneLog.w(TAG, "⚠️ 關閉 CameraDevice 異常: " + e.getMessage());
+            }
             mCameraDevice = null;
         }
+    
+        // 3. 停止並釋放編碼器
         if (mEncoder != null) {
             try {
                 mEncoder.stop();
                 mEncoder.release();
-            } catch (Exception ignored) {}
+                PhoneLog.d(TAG, "✅ MediaCodec 編碼器已釋放");
+            } catch (Exception e) {
+                PhoneLog.w(TAG, "⚠️ 釋放 MediaCodec 異常: " + e.getMessage());
+            }
             mEncoder = null;
         }
+    
         if (mEncoderSurface != null) {
             mEncoderSurface.release();
             mEncoderSurface = null;
         }
+    
         if (mPhotoReader != null) {
             mPhotoReader.close();
             mPhotoReader = null;
         }
+    
         if (mChannelOutputStream != null) {
-            try { mChannelOutputStream.close(); } catch (Exception ignored) {}
+            try {
+                mChannelOutputStream.close();
+            } catch (Exception ignored) {}
             mChannelOutputStream = null;
         }
-
+    
+        // 4. 🔥 核心修復：最後才能銷毀背景線程与 Handler！
         if (mBgThread != null) {
             mBgThread.quitSafely();
-            try { mBgThread.join(); } catch (InterruptedException ignored) {}
+            try {
+                mBgThread.join();
+                PhoneLog.d(TAG, "🧵 HandlerThread 已退出");
+            } catch (InterruptedException e) {
+                PhoneLog.w(TAG, "⚠️ 等待 HandlerThread 退出被打斷: " + e.getMessage());
+            }
             mBgThread = null;
-            mBgHandler = null;
+            mBgHandler = null; // ✅ 最後置空，防止 CallbackProxies 空指針
         }
-        PhoneLog.d(TAG, "🧹 相機與推流資源已完全釋放");
+    
+        PhoneLog.d(TAG, "🎉 所有資源已安全清理完畢");
     }
 
     private void createNotificationChannel() {
