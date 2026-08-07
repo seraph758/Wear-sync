@@ -1,32 +1,17 @@
 {
   "allFiles": [
     {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncFileTransferManager.java",
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/.gitignore",
       "selection": {
         "end": {
-          "column": 9,
-          "index": 1943,
-          "line": 53
+          "column": 0,
+          "index": 0,
+          "line": 0
         },
         "start": {
-          "column": 8,
-          "index": 1552,
-          "line": 45
-        }
-      }
-    },
-    {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncFileTransferService.java",
-      "selection": {
-        "end": {
-          "column": 45,
-          "index": 8374,
-          "line": 220
-        },
-        "start": {
-          "column": 45,
-          "index": 8374,
-          "line": 220
+          "column": 0,
+          "index": 0,
+          "line": 0
         }
       }
     },
@@ -34,32 +19,47 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncListenerService.java",
       "selection": {
         "end": {
-          "column": 5,
-          "index": 16105,
-          "line": 397
+          "column": 0,
+          "index": 0,
+          "line": 0
         },
         "start": {
-          "column": 5,
-          "index": 16105,
-          "line": 397
+          "column": 0,
+          "index": 0,
+          "line": 0
         }
       }
     },
     {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/LogReceiverService.kt",
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearCameraActivity.java",
       "selection": {
         "end": {
-          "column": 48,
-          "index": 1496,
-          "line": 36
+          "column": 0,
+          "index": 9681,
+          "line": 243
         },
         "start": {
-          "column": 48,
-          "index": 1496,
-          "line": 36
+          "column": 0,
+          "index": 0,
+          "line": 0
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/AndroidManifest.xml",
+      "selection": {
+        "end": {
+          "column": 19,
+          "index": 3342,
+          "line": 78
+        },
+        "start": {
+          "column": 8,
+          "index": 2926,
+          "line": 70
         }
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncListenerService.java"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/AndroidManifest.xml"
 }
