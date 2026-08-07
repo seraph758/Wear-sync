@@ -44,6 +44,11 @@ jobs:
 
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
+      
+      # GitHub Actions 示例
+    - name: Check resolved wearable version
+      run: ./gradlew wear:dependencies --configuration debugCompileClasspath | grep "play-services-wearable"
+    
 
     - name: Decode Keystore
       run: |
