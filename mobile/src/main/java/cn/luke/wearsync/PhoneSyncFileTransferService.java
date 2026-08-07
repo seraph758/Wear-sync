@@ -6,6 +6,7 @@ import android.app.NotificationManager;
 import android.app.Service;
 import android.content.Intent;
 import android.net.Uri;
+import android.os.Build;
 import android.os.IBinder;
 
 import androidx.core.app.NotificationCompat;
@@ -32,11 +33,15 @@ public class PhoneSyncFileTransferService extends Service {
     private static final String CHANNEL_ID = "transfer_channel";
     private static final int NOTIFICATION_ID = 2;
 
-    // --- 必须公开，供 Manager 调用 ---
+    // --- 必須公開，供 Manager 調用 ---
     public static final String ACTION_ADD_TRANSFER = "cn.luke.wearsync.action.ADD_TRANSFER";
     public static final String EXTRA_NODE_ID = "extra_node_id";
     public static final String EXTRA_FILE_URI = "extra_file_uri";
     public static final String EXTRA_FILE_NAME = "extra_file_name";
+    public static final String EXTRA_FILE_SIZE = "extra_file_size";
+
+    // 需與手錶端 WearSyncListenerService.FILE_TRANSFER_CHANNEL_PATH 保持一致
+    private static final String FILE_TRANSFER_CHANNEL_PATH = "/wear-sync/file-transfer";
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final TransferRepository repository = TransferRepository.getInstance();
@@ -45,21 +50,26 @@ public class PhoneSyncFileTransferService extends Service {
     public void onCreate() {
         super.onCreate();
         createNotificationChannel();
-        startForeground(NOTIFICATION_ID, buildNotification("服务已启动"));
+        startForeground(NOTIFICATION_ID, buildNotification("服務已啟動"));
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent != null && ACTION_ADD_TRANSFER.equals(intent.getAction())) {
             String nodeId = intent.getStringExtra(EXTRA_NODE_ID);
+            
             Uri fileUri;
-            fileUri = intent.getParcelableExtra(EXTRA_FILE_URI, Uri.class);
-
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                fileUri = intent.getParcelableExtra(EXTRA_FILE_URI, Uri.class);
+            } else {
+                fileUri = intent.getParcelableExtra(EXTRA_FILE_URI);
+            }
 
             String fileName = intent.getStringExtra(EXTRA_FILE_NAME);
+            long fileSize = intent.getLongExtra(EXTRA_FILE_SIZE, 0L);
 
             if (nodeId != null && fileUri != null && fileName != null) {
-                TransferItem item = new TransferItem(UUID.randomUUID().toString(), nodeId, fileUri, fileName, 0);
+                TransferItem item = new TransferItem(UUID.randomUUID().toString(), nodeId, fileUri, fileName, fileSize);
                 repository.addItem(item);
                 executor.submit(this::processQueue);
             }
@@ -78,7 +88,7 @@ public class PhoneSyncFileTransferService extends Service {
         return null;
     }
 
-    // --- 核心逻辑 ---
+    // --- 核心邏輯 ---
 
     private void processQueue() {
         while (true) {
@@ -92,7 +102,7 @@ public class PhoneSyncFileTransferService extends Service {
             }
 
             if (item == null) {
-                // 队列空了或没有待处理任务
+                // 隊列空了或沒有待處理任務
                 stopSelf();
                 return;
             }
@@ -103,10 +113,10 @@ public class PhoneSyncFileTransferService extends Service {
 
     private void processItem(TransferItem item) {
         repository.updateItem(item.getId(), it -> it.setStatus(TransferStatus.SENDING));
-        startForeground(NOTIFICATION_ID, buildNotification("正在发送: " + item.getFileName()));
+        startForeground(NOTIFICATION_ID, buildNotification("正在發送: " + item.getFileName()));
 
         try {
-            // 1. 找到节点
+            // 1. 找到節點
             Node node = Tasks.await(Wearable.getNodeClient(this).getConnectedNodes())
                     .stream()
                     .filter(n -> n.getId().equals(item.getNodeId()))
@@ -115,22 +125,26 @@ public class PhoneSyncFileTransferService extends Service {
 
             if (node == null) throw new IOException("Node not found");
 
-            // 2. 打开文件输入流
+            // 2. 打開檔案輸入流
             InputStream inputStream = getContentResolver().openInputStream(item.getFileUri());
             if (inputStream == null) throw new IOException("Cannot open file input stream");
 
-            // 3. 打开 Wearable 通道
-            ChannelClient.Channel channel = Tasks.await(Wearable.getChannelClient(this)
-                    .openChannel(node.getId(), "/wear-universal-sync/file-transfer"));
+            // 3. 拼接符合手錶端解析格式的 Channel Path: /wear-sync/file-transfer/{fileSize}/{encodedFileName}
+            String channelPath = FILE_TRANSFER_CHANNEL_PATH + "/" + item.getFileSize() + "/" + Uri.encode(item.getFileName());
+            PhoneLog.d(TAG, "開啟 Channel Path: " + channelPath);
 
-            // 4. 获取输出流并传输
+            // 4. 打開 Wearable 通道
+            ChannelClient.Channel channel = Tasks.await(Wearable.getChannelClient(this)
+                    .openChannel(node.getId(), channelPath));
+
+            // 5. 獲取輸出流並傳輸
             try (OutputStream outputStream = Tasks.await(Wearable.getChannelClient(this).getOutputStream(channel))) {
-                byte[] buffer = new byte[4096];
+                byte[] buffer = new byte[32768];
                 int len;
                 long totalRead = 0;
 
                 while ((len = inputStream.read(buffer)) != -1) {
-                    // 检查是否被取消
+                    // 檢查是否被取消
                     boolean isCancelled = repository.getQueue().stream()
                             .anyMatch(i -> i.getId().equals(item.getId()) && i.getStatus() == TransferStatus.CANCELLED);
                     if (isCancelled) break;
@@ -138,19 +152,20 @@ public class PhoneSyncFileTransferService extends Service {
                     outputStream.write(buffer, 0, len);
                     totalRead += len;
                     
-                    // 更新进度 (简单计算)
-                    int progress = (int) ((totalRead * 100) / (item.getFileSize() > 0 ? item.getFileSize() : totalRead));
+                    // 更新進度
+                    long fileSize = item.getFileSize();
+                    int progress = fileSize > 0 ? (int) ((totalRead * 100) / fileSize) : 100;
                     final int finalProgress = Math.min(progress, 100);
                     repository.updateItem(item.getId(), it -> it.setProgress(finalProgress));
                 }
                 outputStream.flush();
             }
 
-            // 5. 关闭通道
+            // 6. 關閉通道與流
             Tasks.await(Wearable.getChannelClient(this).close(channel));
             inputStream.close();
 
-            // 6. 完成
+            // 7. 完成狀態更新
             boolean isCancelled = repository.getQueue().stream()
                     .anyMatch(i -> i.getId().equals(item.getId()) && i.getStatus() == TransferStatus.CANCELLED);
 
@@ -162,23 +177,22 @@ public class PhoneSyncFileTransferService extends Service {
             repository.removeItem(item.getId());
 
         } catch (Exception e) {
-            PhoneLog.e(TAG, "传输失败", e);
+            PhoneLog.e(TAG, "傳輸失敗", e);
             repository.updateItem(item.getId(), it -> it.setStatus(TransferStatus.ERROR));
-            // 失败不移除，或者根据需求移除
         }
     }
 
-    // --- 辅助方法 ---
+    // --- 輔助方法 ---
 
     private void createNotificationChannel() {
-        NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "文件传输服务", NotificationManager.IMPORTANCE_LOW);
+        NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "檔案傳輸服務", NotificationManager.IMPORTANCE_LOW);
         NotificationManager manager = getSystemService(NotificationManager.class);
         if (manager != null) manager.createNotificationChannel(channel);
     }
 
     private Notification buildNotification(String text) {
         return new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("Wear 文件同步")
+                .setContentTitle("Wear 檔案同步")
                 .setContentText(text)
                 .setSmallIcon(android.R.drawable.stat_sys_download)
                 .setOngoing(true)
@@ -186,14 +200,14 @@ public class PhoneSyncFileTransferService extends Service {
     }
 
     // ==========================================
-    // 内部类：TransferStatus (枚举)
+    // 內部類：TransferStatus (枚舉)
     // ==========================================
     public enum TransferStatus {
         PENDING, SENDING, SUCCESS, ERROR, CANCELLED
     }
 
     // ==========================================
-    // 内部类：TransferItem (数据模型)
+    // 內部類：TransferItem (數據模型)
     // ==========================================
     public static class TransferItem {
         private final String id;
@@ -226,7 +240,7 @@ public class PhoneSyncFileTransferService extends Service {
     }
 
     // ==========================================
-    // 内部类：TransferRepository (单例仓库)
+    // 內部類：TransferRepository (單例倉庫)
     // ==========================================
     private static class TransferRepository {
         private static volatile TransferRepository instance;
