@@ -38,6 +38,8 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
+import cn.luke.wearsync.PhoneSyncMainActivity;
+
 
 public class PhoneSyncCameraService extends Service {
     private static final String TAG = "WearSync_CameraSvc";
@@ -511,7 +513,7 @@ public class PhoneSyncCameraService extends Service {
     }
     private Notification buildNotification() {
         // 创建一个点击通知后可以打开应用的 PendingIntent
-        Intent notificationIntent = new Intent(this, MainActivity.class); // 确保 MainActivity 是你的主Activity
+        Intent notificationIntent = new Intent(this, PhoneSyncMainActivity.class); // 确保 MainActivity 是你的主Activity
         PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE);
 
         return new NotificationCompat.Builder(this, CHANNEL_ID)
