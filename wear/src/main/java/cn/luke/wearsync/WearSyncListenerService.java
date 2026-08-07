@@ -27,7 +27,6 @@ public class WearSyncListenerService extends WearableListenerService {
     // --- 路径常量 ---
     private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
     private static final String DATA_CHANNEL_BASE_PATH = "/wear_data_channel";
-    private static final String CAMERA_PREVIEW_STREAM_PATH = DATA_CHANNEL_BASE_PATH + "/camera";
     private static final String FILE_TRANSFER_CHANNEL_PATH = "/wear-sync/file-transfer";
     private static final String FILE_TRANSFER_STATUS_PATH = "/file-transfer-status";
 
@@ -289,10 +288,7 @@ private void handleDndCommand(JSONObject json) {
         WearLog.d(TAG, "【CHN-001】通道已打开. Path: " + path);
         super.onChannelOpened(channel);
 
-        if (CAMERA_PREVIEW_STREAM_PATH.equals(path)) {
-            WearLog.d(TAG, "【CHN-002】匹配到相机流通道，开始读取");
-            readH264ChannelStream(channel);
-        } else if (path.startsWith(FILE_TRANSFER_CHANNEL_PATH)) {
+        (path.startsWith(FILE_TRANSFER_CHANNEL_PATH)) {
             WearLog.i(TAG, "【CHN-003】匹配到文件传输通道，准备接收");
             // 解析路径中的元数据
             String pathData = path.substring(FILE_TRANSFER_CHANNEL_PATH.length() + 1);
@@ -322,47 +318,7 @@ private void handleDndCommand(JSONObject json) {
     public void onChannelClosed(@NonNull ChannelClient.Channel channel, int closeReason, int appSpecificErrorCode) {
         WearLog.d(TAG, "【CHN-005】通道已关闭. Path: " + channel.getPath() + " | Reason: " + closeReason);
     }
-
-    // --- 核心读取方法 ---
-
-    private void readH264ChannelStream(ChannelClient.Channel channel) {
-        new Thread(() -> {
-            WearLog.d(TAG, "【STR-001】启动H264读取线程");
-            try (DataInputStream dis = new DataInputStream(Tasks.await(Wearable.getChannelClient(this).getInputStream(channel)))) {
-                WearLog.d(TAG, "【STR-002】数据流准备就绪，开始循环读取");
-                long totalBytes = 0;
-                int frameCount = 0;
-                while (!Thread.currentThread().isInterrupted()) {
-                    int frameLen = dis.readInt();
-                    if (frameLen <= 0 || frameLen > 4 * 1024 * 1024) {
-                        WearLog.e(TAG, "【STR-ERR】异常帧长度: " + frameLen + "，断开连接");
-                        break;
-                    }
-                    dis.readLong(); // timestamp
-                    dis.readInt();  // flags
-                    byte[] h264Data = new byte[frameLen];
-                    dis.readFully(h264Data);
-
-                    totalBytes += frameLen + 16;
-                    frameCount++;
-
-                    if (frameCount == 1) WearLog.d(TAG, "【STR-003】收到第一帧. Len: " + frameLen);
-                    if (frameCount % 50 == 0) WearLog.d(TAG, "【STR-004】流状态. 帧数: " + frameCount + " | 总字节: " + totalBytes);
-
-                    WearCameraActivity activity = WearCameraActivity.sActivityRef.get();
-                    if (activity != null) {
-                        activity.feedH264Data(h264Data);
-                    } else {
-                        WearLog.w(TAG, "【STR-WARN】Activity为空，丢弃帧");
-                    }
-                }
-            } catch (EOFException e) {
-                WearLog.d(TAG, "【STR-005】流正常结束 (EOF)");
-            } catch (Exception e) {
-                WearLog.e(TAG, "【STR-ERR】读取H264流时发生错误", e);
-            }
-        }, "CameraStreamReader").start();
-    }
+    
 
     // --- 文件接收核心方法 ---
     private void receiveFileFromChannel(ChannelClient.Channel channel, String fileName, String nodeId, long expectedSize) {
