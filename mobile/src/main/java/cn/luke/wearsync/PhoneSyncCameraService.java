@@ -509,4 +509,18 @@ public class PhoneSyncCameraService extends Service {
         manager.createNotificationChannel(ch);
         }
     }
+    private Notification buildNotification() {
+        // 创建一个点击通知后可以打开应用的 PendingIntent
+        Intent notificationIntent = new Intent(this, MainActivity.class); // 确保 MainActivity 是你的主Activity
+        PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE);
+
+        return new NotificationCompat.Builder(this, CHANNEL_ID)
+                .setContentTitle("相机同步服务运行中")
+                .setContentText("正在与手表保持连接...")
+                .setSmallIcon(R.drawable.ic_notification) // ⚠️ 确保此图标资源存在
+                .setContentIntent(pendingIntent)
+                .setOngoing(true)
+                .build();
+    }
+
 }  

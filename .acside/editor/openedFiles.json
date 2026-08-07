@@ -19,14 +19,14 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncCameraService.java",
       "selection": {
         "end": {
-          "column": 70,
-          "index": 5036,
-          "line": 124
+          "column": 55,
+          "index": 4868,
+          "line": 120
         },
         "start": {
-          "column": 8,
-          "index": 4974,
-          "line": 124
+          "column": 55,
+          "index": 4868,
+          "line": 120
         }
       }
     },
