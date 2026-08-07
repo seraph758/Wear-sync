@@ -36,7 +36,7 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
     private Thread renderThread;
 
     // 用于在 onDestroy 中移除监听器
-    private ChannelClient.ChannelListener mChannelListener;
+    private ChannelClient.ChannelCallback mChannelListener;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -79,7 +79,7 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
         startDecoderThread();
 
         // ✅ [新增] 注册 Channel 监听器，让 Activity 自己接收视频流
-        mChannelListener = new ChannelClient.ChannelListener() {
+        mChannelListener = new ChannelClient.ChannelCallback() {
             @Override
             public void onChannelOpened(ChannelClient.Channel channel) {
                 // 检查是否是我们需要的相机数据通道
@@ -112,7 +112,7 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
                 }
             }
         };
-        Wearable.getChannelClient(this).addListener(mChannelListener);
+        Wearable.getChannelClient(this).registerChannelCallback(mChannelListener);
 
         WearLog.d(TAG, "📤 发送开启手机相机指令");
         WearSyncCommManager.getInstance(this).sendBusinessCommand("camera_control", "open_phone_camera");
@@ -235,7 +235,7 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
     protected void onDestroy() {
         // ✅ [新增] 在销毁时移除监听器，防止内存泄漏
         if (mChannelListener != null) {
-            Wearable.getChannelClient(this).removeListener(mChannelListener);
+            Wearable.getChannelClient(this).unregisterChannelCallback(mChannelListener);
         }
         cleanExit(false);
         super.onDestroy();

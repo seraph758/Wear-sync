@@ -96,7 +96,7 @@ public class PhoneSyncCameraService extends Service {
     };
 
     // ✅ 新增：Channel 监听器，用于监听手表端断开连接
-    private final ChannelClient.ChannelListener mChannelListener = new ChannelClient.ChannelListener() {
+    private final ChannelClient.ChannelCallback mChannelListener = new ChannelClient.ChannelCallback() {
         @Override
         public void onChannelOpened(ChannelClient.Channel channel) {
             // 我们主要使用 openChannel 主动连接，这里通常不需要处理
@@ -123,7 +123,7 @@ public class PhoneSyncCameraService extends Service {
         
         // ✅ 注册消息和通道监听
         Wearable.getMessageClient(this).addListener(mMessageListener);
-        Wearable.getChannelClient(this).addListener(mChannelListener);
+        Wearable.getChannelClient(this).registerChannelCallback(mChannelListener);
         
         PhoneLog.d(TAG, "✅ 服务已创建，监听器已注册");
     }
@@ -161,7 +161,7 @@ public class PhoneSyncCameraService extends Service {
         PhoneLog.d(TAG, "🛑 服务即将销毁，开始清理资源...");
         // 1. 移除监听
         Wearable.getMessageClient(this).removeListener(mMessageListener);
-        Wearable.getChannelClient(this).removeListener(mChannelListener);
+        Wearable.getChannelClient(this).unregisterChannelCallback(mChannelListener);
         // 2. 取消所有待执行的重连任务
         mMainHandler.removeCallbacksAndMessages(null);
         // 3. 停止推流
