@@ -321,36 +321,53 @@ public void onChannelOpened(@NonNull ChannelClient.Channel channel) {
         WearLog.d(TAG, "【CHN-005】通道已关闭. Path: " + channel.getPath() + " | Reason: " + closeReason);
     }
     
-
-    // --- 文件接收核心方法 ---
-    private void receiveFileFromChannel(ChannelClient.Channel channel, String fileName, String nodeId, long expectedSize) {
+private void receiveFileFromChannel(ChannelClient.Channel channel, String fileName, String nodeId, long expectedSize) {
         WearLog.i(TAG, "【FIL-001】开始接收文件: " + fileName + " (期望大小: " + expectedSize + "B)");
+        
         Uri collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
         ContentValues values = new ContentValues();
         values.put(MediaStore.Downloads.DISPLAY_NAME, fileName);
         values.put(MediaStore.Downloads.MIME_TYPE, "application/vnd.android.package-archive");
         values.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/Received");
         
-        Uri fileUri = getContentResolver().insert(collection, values);
+        Uri fileUri = null;
+        try {
+            fileUri = getContentResolver().insert(collection, values);
+        } catch (Exception e) {
+            WearLog.e(TAG, "【FIL-ERR】MediaStore 插入异常: " + e.getMessage(), e);
+        }
+
         if (fileUri == null) {
-            WearLog.e(TAG, "【FIL-ERR】无法创建文件 Uri");
+            WearLog.e(TAG, "【FIL-ERR】无法创建文件 Uri，返回值为空");
             sendFileTransferStatus(nodeId, "error:" + fileName);
             return;
         }
+        WearLog.d(TAG, "【FIL-001-1】成功创建文件 Uri: " + fileUri);
 
         try (InputStream inputStream = Tasks.await(Wearable.getChannelClient(this).getInputStream(channel));
              OutputStream outputStream = getContentResolver().openOutputStream(fileUri)) {
             
-            if (outputStream == null) throw new Exception("无法打开输出流");
+            if (outputStream == null) {
+                throw new Exception("无法打开输出流 OutputStream 为空");
+            }
+            WearLog.d(TAG, "【FIL-001-2】输入流与输出流已成功建立，开始循环读取...");
 
             byte[] buffer = new byte[32768];
             long bytesReceived = 0L;
             int bytesRead;
+            int packetCount = 0;
+
             while ((bytesRead = inputStream.read(buffer)) != -1) {
                 outputStream.write(buffer, 0, bytesRead);
                 bytesReceived += bytesRead;
+                packetCount++;
+                // 每接收约 500KB 打印一次进度日志，防止日志刷屏但能看清是否在推进
+                if (packetCount % 16 == 0) {
+                    WearLog.d(TAG, "【FIL-READ】已接收字节数: " + bytesReceived + " / " + expectedSize);
+                }
             }
             outputStream.flush();
+            WearLog.d(TAG, "【FIL-001-3】循环读取结束，总共接收: " + bytesReceived + "B");
 
             if (expectedSize != -1L && bytesReceived != expectedSize) {
                 throw new Exception("文件不完整: 期望 " + expectedSize + "B, 实际 " + bytesReceived + "B");
@@ -359,8 +376,15 @@ public void onChannelOpened(@NonNull ChannelClient.Channel channel) {
             sendFileTransferStatus(nodeId, "success:" + fileName);
 
         } catch (Exception e) {
-            WearLog.e(TAG, "【FIL-ERR】文件接收失败", e);
-            getContentResolver().delete(fileUri, null);
+            WearLog.e(TAG, "【FIL-ERR】文件接收过程中发生异常", e);
+            if (fileUri != null) {
+                try {
+                    getContentResolver().delete(fileUri, null);
+                    WearLog.d(TAG, "【FIL-CLEAN】已清理损坏的目标文件");
+                } catch (Exception ex) {
+                    WearLog.w(TAG, "【FIL-WARN】清理文件失败: " + ex.getMessage());
+                }
+            }
             sendFileTransferStatus(nodeId, "error:" + fileName);
         } finally {
             try {

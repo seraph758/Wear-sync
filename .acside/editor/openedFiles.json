@@ -4,14 +4,14 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncFileTransferManager.java",
       "selection": {
         "end": {
-          "column": 0,
-          "index": 5064,
-          "line": 137
+          "column": 9,
+          "index": 1943,
+          "line": 53
         },
         "start": {
-          "column": 0,
-          "index": 5064,
-          "line": 137
+          "column": 8,
+          "index": 1552,
+          "line": 45
         }
       }
     },
@@ -19,17 +19,47 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncFileTransferService.java",
       "selection": {
         "end": {
-          "column": 0,
-          "index": 10453,
-          "line": 273
+          "column": 45,
+          "index": 8374,
+          "line": 220
         },
         "start": {
-          "column": 0,
-          "index": 10453,
-          "line": 273
+          "column": 45,
+          "index": 8374,
+          "line": 220
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncListenerService.java",
+      "selection": {
+        "end": {
+          "column": 5,
+          "index": 16105,
+          "line": 397
+        },
+        "start": {
+          "column": 5,
+          "index": 16105,
+          "line": 397
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/LogReceiverService.kt",
+      "selection": {
+        "end": {
+          "column": 48,
+          "index": 1496,
+          "line": 36
+        },
+        "start": {
+          "column": 48,
+          "index": 1496,
+          "line": 36
         }
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncFileTransferService.java"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncListenerService.java"
 }
