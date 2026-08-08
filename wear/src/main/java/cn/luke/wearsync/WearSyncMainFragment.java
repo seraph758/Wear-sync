@@ -59,8 +59,11 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
                     WearLog.d(TAG, "✅ 本地 WearCameraActivity 启动请求已发出");
 
                     WearLog.d(TAG, "② 正在调用 WearSyncCommManager.openPhoneCamera()...");
-                    if (WearSyncCommManager != null) {
-                        WearSyncCommManager.openPhoneCamera();
+                      Context ctx = getContext();
+                    if (ctx != null) {
+                        WearSyncCommManager.getInstance(ctx).openPhoneCamera();
+                    } else {
+                        WearLog.e(TAG, "❌ [openPhoneCamera] Context 为空，无法获取 WearSyncCommManager 实例");
                     }
                     WearLog.d(TAG, "✅ WearSyncCommManager.openPhoneCamera() 指令发送完成");
                 } catch (Exception e) {
