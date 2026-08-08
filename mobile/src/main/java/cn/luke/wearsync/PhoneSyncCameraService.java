@@ -229,13 +229,18 @@ public class PhoneSyncCameraService extends Service {
             showToast("2/4 配置拍照模块...");
             // ... (保持原有 ImageReader 配置代码不变) ...
     
-        } catch (Exception e) {
-            PhoneLog.e(TAG, "❌ 初始化编码器/ImageReader 失败", e);
-            showToast("❌ 初始化失败！");
-            stopStreamingAndRelease();
-            stopSelf();
-            return;
-        }
+          } catch (Exception e) {
+        PhoneLog.e(TAG, "❌ 初始化编码器/ImageReader 失败", e);
+        
+        // 👇 修改这里：把异常类名和消息都显示出来
+        String errMsg = e.getClass().getSimpleName() + ": " + e.getMessage();
+        showToast("❌ 初始化失败: " + errMsg);
+        
+        stopStreamingAndRelease();
+        stopSelf();
+        return;
+    }
+
     
         // --- 逻辑修改点 ---
         
