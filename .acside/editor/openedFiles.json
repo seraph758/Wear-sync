@@ -1,152 +1,32 @@
 {
   "allFiles": [
     {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncMainFragment.java",
-      "selection": {
-        "end": {
-          "column": 0,
-          "index": 8055,
-          "line": 217
-        },
-        "start": {
-          "column": 0,
-          "index": 8055,
-          "line": 217
-        }
-      }
-    },
-    {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncMainActivity.java",
-      "selection": {
-        "end": {
-          "column": 0,
-          "index": 1754,
-          "line": 55
-        },
-        "start": {
-          "column": 0,
-          "index": 1754,
-          "line": 55
-        }
-      }
-    },
-    {
       "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncCameraService.java",
       "selection": {
         "end": {
-          "column": 1,
-          "index": 24564,
-          "line": 620
+          "column": 12,
+          "index": 23728,
+          "line": 618
         },
         "start": {
-          "column": 1,
-          "index": 24564,
-          "line": 620
+          "column": 12,
+          "index": 23728,
+          "line": 618
         }
       }
     },
     {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearVibratorHelper.java",
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncMainFragment.kt",
       "selection": {
         "end": {
-          "column": 0,
-          "index": 5255,
-          "line": 167
+          "column": 25,
+          "index": 40696,
+          "line": 768
         },
         "start": {
-          "column": 0,
-          "index": 5255,
-          "line": 167
-        }
-      }
-    },
-    {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncCommManager.java",
-      "selection": {
-        "end": {
-          "column": 5,
-          "index": 6476,
-          "line": 166
-        },
-        "start": {
-          "column": 4,
-          "index": 5678,
-          "line": 149
-        }
-      }
-    },
-    {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearAlarmActivity.java",
-      "selection": {
-        "end": {
-          "column": 31,
-          "index": 2034,
-          "line": 66
-        },
-        "start": {
-          "column": 20,
-          "index": 2023,
-          "line": 66
-        }
-      }
-    },
-    {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncDndManager.java",
-      "selection": {
-        "end": {
-          "column": 5,
-          "index": 2538,
-          "line": 82
-        },
-        "start": {
-          "column": 5,
-          "index": 2538,
-          "line": 82
-        }
-      }
-    },
-    {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneDndManager.java",
-      "selection": {
-        "end": {
-          "column": 61,
-          "index": 688,
-          "line": 25
-        },
-        "start": {
-          "column": 61,
-          "index": 688,
-          "line": 25
-        }
-      }
-    },
-    {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncFileTransferService.java",
-      "selection": {
-        "end": {
-          "column": 4,
-          "index": 2896,
-          "line": 74
-        },
-        "start": {
-          "column": 4,
-          "index": 1997,
-          "line": 54
-        }
-      }
-    },
-    {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/.github/workflows/android-build.yml",
-      "selection": {
-        "end": {
-          "column": 0,
-          "index": 4064,
-          "line": 131
-        },
-        "start": {
-          "column": 0,
-          "index": 4064,
-          "line": 131
+          "column": 25,
+          "index": 40696,
+          "line": 768
         }
       }
     }
