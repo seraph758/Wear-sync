@@ -7,7 +7,6 @@ import android.content.SharedPreferences;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.VibrationEffect;
-import android.preference.PreferenceManager;
 import android.provider.Settings;
 import android.widget.Toast;
 
@@ -81,11 +80,14 @@ public class WearSyncDndManager {
     /**
      * 重载方法 1：方便外部只传 Context 和 dndStatePhone
      */
-    public static void executeDndSync(Context context, int dndStatePhone) {
-        SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
+     
+     public static void executeDndSync(Context context, int dndStatePhone) {
+        // 🚀 改用跟发送端完全一致的 "dndsync_prefs" 文件名
+        SharedPreferences sp = context.getSharedPreferences("dndsync_prefs", Context.MODE_PRIVATE);
         int pullDownDelay = sp.getInt("screen_pull_down_interval", 500);
         executeDndSync(context, dndStatePhone, pullDownDelay);
     }
+       
 
     /**
      * 重载方法 2：核心执行逻辑
