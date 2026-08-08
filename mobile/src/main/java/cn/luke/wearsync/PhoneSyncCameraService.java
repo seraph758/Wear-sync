@@ -356,22 +356,30 @@ public class PhoneSyncCameraService extends Service {
                     SessionConfiguration.SESSION_REGULAR,
                     outputs,
                     executor,
-                    new CameraCaptureSession.StateCallback() {
-                        @Override
-                        public void onConfigured(@NonNull CameraCaptureSession session) {
-                            mCaptureSession = session;
-                            PhoneLog.d(TAG, "🎉 [4/4] Camera CaptureSession 配置完成，啟動預覽推流！");
-                            startPreviewRequest();
-                        }
-
-                        @Override
-                        public void onConfigureFailed(@NonNull CameraCaptureSession session) {
-                            PhoneLog.e(TAG, "❌ Session 配置失敗");
-                            stopStreamingAndRelease();
-                            stopSelf();
-                        }
+                   new CameraCaptureSession.StateCallback() {
+                @Override
+                public void onConfigured(@NonNull CameraCaptureSession session) {
+                    // 🎯 保護 2：如果在配置完成前 Session/Service 已關閉，直接釋放 Session
+                    if (!mIsStreaming.get() || mCameraDevice == null) {
+                        PhoneLog.w(TAG, "⚠️ Session 配置完成時相機已關閉，關閉無效 Session");
+                        try { session.close(); } catch (Exception ignored) {}
+                        return;
                     }
-            );
+            
+                    mCaptureSession = session;
+                    PhoneLog.d(TAG, "🎉 Camera CaptureSession 配置完成，啟動預覽推流！");
+                    startPreviewRequest();
+                }
+            
+                @Override
+                public void onConfigureFailed(@NonNull CameraCaptureSession session) {
+                    PhoneLog.e(TAG, "❌ Session 配置失敗");
+                    stopStreamingAndRelease();
+                    stopSelf();
+                }
+            }
+            
+                    );
 
             mCameraDevice.createCaptureSession(sessionConfig);
 
@@ -382,18 +390,24 @@ public class PhoneSyncCameraService extends Service {
         }
     }
 
-    private void startPreviewRequest() {
-        if (mCameraDevice == null || mCaptureSession == null || mEncoderSurface == null) return;
-
+     private void startPreviewRequest() {
+        // 🎯 保護 1：如果相機已經關閉或推流已終止，直接退出，不執行 capture
+        if (!mIsStreaming.get() || mCameraDevice == null || mCaptureSession == null || mEncoderSurface == null) {
+            PhoneLog.w(TAG, "⚠️ 相機已關閉或推流已停止，放棄發起預覽 Request");
+            return;
+        }
+    
         try {
             CaptureRequest.Builder builder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
             builder.addTarget(mEncoderSurface);
             builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO);
-
+    
             mEncoder.start(); // 啟動編碼器
             mCaptureSession.setRepeatingRequest(builder.build(), null, mBgHandler);
-            PhoneLog.d(TAG, "🚀 預覽 CaptureRequest 已提交，H.264 編碼推流進行中...");
-
+            PhoneLog.d(TAG, "🚀 預覽 CaptureRequest 已成功提交！");
+    
+        } catch (IllegalStateException e) {
+            PhoneLog.e(TAG, "⚠️ CameraDevice 已關閉，無法建立 CaptureRequest: " + e.getMessage());
         } catch (Exception e) {
             PhoneLog.e(TAG, "❌ 啟動預覽 Request 失敗", e);
             stopStreamingAndRelease();
@@ -401,6 +415,7 @@ public class PhoneSyncCameraService extends Service {
         }
     }
 
+    
     private void captureHighResPhoto() {
         if (mCameraDevice == null || mCaptureSession == null || mPhotoReader == null) {
             PhoneLog.w(TAG, "⚠️ 相機未就緒，無法執行拍照");

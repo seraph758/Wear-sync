@@ -1,17 +1,47 @@
 {
   "allFiles": [
     {
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncMainFragment.java",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 9921,
+          "line": 249
+        },
+        "start": {
+          "column": 0,
+          "index": 9921,
+          "line": 249
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncMainActivity.java",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 1754,
+          "line": 55
+        },
+        "start": {
+          "column": 0,
+          "index": 1754,
+          "line": 55
+        }
+      }
+    },
+    {
       "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncCameraService.java",
       "selection": {
         "end": {
-          "column": 5,
-          "index": 19278,
-          "line": 511
+          "column": 8,
+          "index": 14352,
+          "line": 369
         },
         "start": {
-          "column": 44,
-          "index": 17068,
-          "line": 441
+          "column": 8,
+          "index": 14352,
+          "line": 369
         }
       }
     }
