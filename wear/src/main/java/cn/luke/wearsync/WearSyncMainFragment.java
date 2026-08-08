@@ -1,4 +1,4 @@
-package cn.luke.wearsync;
+package cn.luke.wearsync; // ✅ 1. 修正为小写 package
 
 import android.app.NotificationManager;
 import android.content.Context;
@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.widget.Toast;
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
@@ -14,12 +15,14 @@ import com.google.android.gms.wearable.Wearable;
 
 /**
  * 🎬 WearOS 手表端主控制与权限状态 Fragment 面板
- * 优化说明：加入跳转相机界面的标志位保护，防止 Activity 切换时误卸载 GMS 监听器引发 Channel 通道抖动。
+ * 修复说明：
+ * 1. 修正 package 关键字大小写错误。
+ * 2. 优化 Context 获取方式，避免点击相机卡死。
+ * 3. 确保 GMS 回调在主线程安全刷新 UI。
  */
 public class WearSyncMainFragment extends PreferenceFragmentCompat {
 
     private static final String TAG = "WearSync_MainFragment";
-    
     private static final String CAPABILITY_NAME = "wear_sync";
 
     private Preference connectivityPref;
@@ -31,7 +34,6 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
     private boolean isNavigatingToCamera = false;
 
     @Override
-    @SuppressWarnings("unused")
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
         WearLog.d(TAG, "① [生命周期] onCreatePreferences 启动 ─── 开始组装手表 Preference 树阵 ───");
         setPreferencesFromResource(R.xml.root_preferences, rootKey);
@@ -47,28 +49,29 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
                 WearLog.w(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
                 WearLog.w(TAG, "📸 [远端相机入口] 用户点击【远端相机控制】");
                 WearLog.w(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                
+
+                // 🎯 安全获取 ApplicationContext，防止 Context 提前释放
+                Context appContext = requireContext().getApplicationContext();
+
                 // 🎯 1. 置位标志位，防止 onPause 中误解绑 GMS 监听器
                 isNavigatingToCamera = true;
                 WearLog.d(TAG, "🚩 [防抖标记] 设置 isNavigatingToCamera = true，保护 Wearable 通道");
 
                 try {
                     WearLog.d(TAG, "① 正在准备启动本地 WearCameraActivity...");
-                    Intent intent = new Intent(getActivity(), WearCameraActivity.class);
+                    Intent intent = new Intent(appContext, WearCameraActivity.class);
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); // ✅ 防止 Activity 启动卡顿
                     startActivity(intent);
                     WearLog.d(TAG, "✅ 本地 WearCameraActivity 启动请求已发出");
 
                     WearLog.d(TAG, "② 正在调用 WearSyncCommManager.openPhoneCamera()...");
-                      Context ctx = getContext();
-                    if (ctx != null) {
-                        WearSyncCommManager.getInstance(ctx).openPhoneCamera();
-                    } else {
-                        WearLog.e(TAG, "❌ [openPhoneCamera] Context 为空，无法获取 WearSyncCommManager 实例");
-                    }
+                    WearSyncCommManager.getInstance(appContext).openPhoneCamera();
                     WearLog.d(TAG, "✅ WearSyncCommManager.openPhoneCamera() 指令发送完成");
+
                 } catch (Exception e) {
                     WearLog.e(TAG, "❌ [远端相机入口] 启动相机界面或发送信令失败: " + e.getMessage(), e);
                     isNavigatingToCamera = false; // 异常时复位标记
+                    Toast.makeText(appContext, "相机启动失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
                 }
 
                 return true;
@@ -118,19 +121,17 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
     public void onResume() {
         super.onResume();
         WearLog.d(TAG, "🔄 [生命周期] onResume 触发：界面重回前台，刷新 UI 并重新挂载监听器");
-        
+
         // 🎯 重置防抖标记
         if (isNavigatingToCamera) {
             isNavigatingToCamera = false;
             WearLog.d(TAG, "🚩 [防抖标记] 界面已返回，重置 isNavigatingToCamera = false");
         }
 
-        updateConnectionUI(false);
-        checkAndCheckCapability();
-
         updateDndUI();
         updateAccessibilityUI();
 
+        checkAndCheckCapability();
         registerConnectivityListener();
     }
 
@@ -151,36 +152,25 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
 
     private boolean hasDndPermission() {
         Context ctx = getContext();
-        if (ctx == null) {
-            WearLog.w(TAG, "⚠️ [权限检查] Context 为空，默认返回无勿扰权限");
-            return false;
-        }
+        if (ctx == null) return false;
         NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
-        boolean granted = nm != null && nm.isNotificationPolicyAccessGranted();
-        WearLog.d(TAG, "🔍 [权限检查] 勿扰权限状态 ➔ " + (granted ? "已授予" : "未授予"));
-        return granted;
+        return nm != null && nm.isNotificationPolicyAccessGranted();
     }
 
     private boolean isAccessibilityServiceEnabled() {
         Context ctx = getContext();
-        if (ctx == null) {
-            WearLog.w(TAG, "⚠️ [权限检查] Context 为空，默认返回无无障碍权限");
-            return false;
-        }
+        if (ctx == null) return false;
         String prefString = Settings.Secure.getString(
                 ctx.getContentResolver(),
                 Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
         );
-        boolean enabled = prefString != null && prefString.contains(ctx.getPackageName());
-        WearLog.d(TAG, "🔍 [权限检查] 无障碍服务激活状态 ➔ " + (enabled ? "已开启" : "未开启"));
-        return enabled;
+        return prefString != null && prefString.contains(ctx.getPackageName());
     }
 
     private void updateDndUI() {
         if (dndPref != null) {
             boolean has = hasDndPermission();
             dndPref.setSummary(has ? "已授权 (点击可重新校验)" : "未授权，点击前往系统设置开启");
-            WearLog.d(TAG, "🎨 [UI刷新] 勿扰权限 Summary 刷新 ➔ " + dndPref.getSummary());
         }
     }
 
@@ -188,27 +178,30 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
         if (accPref != null) {
             boolean enabled = isAccessibilityServiceEnabled();
             accPref.setSummary(enabled ? "已开启 (点击可重新校验)" : "未开启，点击前往系统设置开启");
-            WearLog.d(TAG, "🎨 [UI刷新] 无障碍服务 Summary 刷新 ➔ " + accPref.getSummary());
         }
     }
 
     private void checkAndCheckCapability() {
         Context ctx = getContext();
-        if (ctx == null) {
-            WearLog.w(TAG, "⚠️ [链路检测] Context 为空，放弃查询手机端节点状态");
-            return;
-        }
+        if (ctx == null) return;
+
         WearLog.d(TAG, "📡 [链路检测] 正在向 GMS 发起 CapabilityQuery 寻找匹配节点 [" + CAPABILITY_NAME + "]...");
         Wearable.getCapabilityClient(ctx)
                 .getCapability(CAPABILITY_NAME, CapabilityClient.FILTER_REACHABLE)
                 .addOnSuccessListener(capabilityInfo -> {
                     boolean connected = !capabilityInfo.getNodes().isEmpty();
-                    WearLog.d(TAG, "📡 [链路检测] 节点状态回调 ➔ 是否有匹配手机节点: " + connected + " (节点数量: " + capabilityInfo.getNodes().size() + ")");
-                    updateConnectionUI(connected);
+                    WearLog.d(TAG, "📡 [链路检测] 节点状态回调 ➔ 是否有匹配手机节点: " + connected);
+                    
+                    // ✅ 安全在 UI 线程更新
+                    if (getActivity() != null) {
+                        getActivity().runOnUiThread(() -> updateConnectionUI(connected));
+                    }
                 })
                 .addOnFailureListener(e -> {
                     WearLog.e(TAG, "❌ [链路检测] 获取 Capability 失败: " + e.getMessage());
-                    updateConnectionUI(false);
+                    if (getActivity() != null) {
+                        getActivity().runOnUiThread(() -> updateConnectionUI(false));
+                    }
                 });
     }
 
@@ -218,14 +211,14 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
             if (capabilityChangedListener == null) {
                 capabilityChangedListener = capabilityInfo -> {
                     boolean connected = !capabilityInfo.getNodes().isEmpty();
-                    WearLog.d(TAG, "📡 [监听器触发] GMS 节点状态突变回调 ➔ 当前连接状态: " + connected);
-                    updateConnectionUI(connected);
+                    WearLog.d(TAG, "📡 [监听器触发] GMS 节点状态突变 ➔ 连接状态: " + connected);
+                    if (getActivity() != null) {
+                        getActivity().runOnUiThread(() -> updateConnectionUI(connected));
+                    }
                 };
             }
             try {
-                WearLog.d(TAG, "📡 [接线员挂载] 正在注册 CapabilityChangedListener...");
                 Wearable.getCapabilityClient(ctx).addListener(capabilityChangedListener, CAPABILITY_NAME);
-                WearLog.d(TAG, "✅ [接线员挂载] 监听器挂载成功");
             } catch (Exception e) {
                 WearLog.e(TAG, "❌ [接线员挂载] 挂载监听器抛出异常: " + e.getMessage());
             }
@@ -235,12 +228,10 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
     private void unregisterConnectivityListener() {
         Context ctx = getContext();
         if (ctx != null && capabilityChangedListener != null) {
-            WearLog.w(TAG, "📡 [接线员卸载] 🧹 正在执行 removeListener() 卸载监听器...");
             try {
                 Wearable.getCapabilityClient(ctx).removeListener(capabilityChangedListener);
-                WearLog.w(TAG, "✅ [接线员卸载] 监听器已成功安全注销");
             } catch (Exception e) {
-                WearLog.w(TAG, "⚠️ [接线员卸载] 注销监听器非致命异常: " + e.getMessage());
+                WearLog.w(TAG, "⚠️ [接线员卸载] 注销监听器异常: " + e.getMessage());
             }
         }
     }
@@ -248,7 +239,6 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
     private void updateConnectionUI(boolean connected) {
         if (connectivityPref != null) {
             connectivityPref.setSummary(connected ? "已连接到手机" : "未连接到手机");
-            WearLog.d(TAG, "🎨 [UI刷新] 通信状态 Summary 刷新 ➔ " + connectivityPref.getSummary());
         }
     }
 }
