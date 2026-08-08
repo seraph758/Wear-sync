@@ -52,22 +52,18 @@ public class PhoneSyncFileTransferService extends Service {
         createNotificationChannel();
         startForeground(NOTIFICATION_ID, buildNotification("服務已啟動"));
     }
-
+    
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent != null && ACTION_ADD_TRANSFER.equals(intent.getAction())) {
             String nodeId = intent.getStringExtra(EXTRA_NODE_ID);
             
-            Uri fileUri;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                fileUri = intent.getParcelableExtra(EXTRA_FILE_URI, Uri.class);
-            } else {
-                fileUri = intent.getParcelableExtra(EXTRA_FILE_URI);
-            }
-
+            // ✅ minSdkVersion = 35 专属写法：直接传 Uri.class，无警告、无 if-else 分支
+            Uri fileUri = intent.getParcelableExtra(EXTRA_FILE_URI, Uri.class);
+    
             String fileName = intent.getStringExtra(EXTRA_FILE_NAME);
             long fileSize = intent.getLongExtra(EXTRA_FILE_SIZE, 0L);
-
+    
             if (nodeId != null && fileUri != null && fileName != null) {
                 TransferItem item = new TransferItem(UUID.randomUUID().toString(), nodeId, fileUri, fileName, fileSize);
                 repository.addItem(item);
@@ -76,6 +72,7 @@ public class PhoneSyncFileTransferService extends Service {
         }
         return START_STICKY;
     }
+    
 
     @Override
     public void onDestroy() {
