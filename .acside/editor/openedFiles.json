@@ -64,14 +64,14 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncCommManager.java",
       "selection": {
         "end": {
-          "column": 31,
-          "index": 1315,
-          "line": 40
+          "column": 5,
+          "index": 6476,
+          "line": 166
         },
         "start": {
-          "column": 12,
-          "index": 1296,
-          "line": 40
+          "column": 4,
+          "index": 5678,
+          "line": 149
         }
       }
     },
@@ -94,14 +94,14 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncDndManager.java",
       "selection": {
         "end": {
-          "column": 0,
-          "index": 260,
-          "line": 9
+          "column": 5,
+          "index": 2538,
+          "line": 82
         },
         "start": {
-          "column": 0,
-          "index": 260,
-          "line": 9
+          "column": 5,
+          "index": 2538,
+          "line": 82
         }
       }
     },
@@ -121,5 +121,5 @@
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneDndManager.java"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncCommManager.java"
 }
