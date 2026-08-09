@@ -460,7 +460,7 @@ fun PhoneSyncMainScreen(
     onNotificationPermissionClick: () -> Unit,
     onCameraPermissionClick: () -> Unit,
     onFileTransferClick: () -> Unit
-Un) {
+) {
     MaterialTheme {
         val isDark = isSystemInDarkTheme()
         val backgroundColor = if (isDark) Color(0xFF121214) else Color(0xFFF4F4F6)
