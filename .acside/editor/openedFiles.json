@@ -1,62 +1,17 @@
 {
   "allFiles": [
     {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncMainFragment.java",
-      "selection": {
-        "end": {
-          "column": 0,
-          "index": 8374,
-          "line": 211
-        },
-        "start": {
-          "column": 0,
-          "index": 8374,
-          "line": 211
-        }
-      }
-    },
-    {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncDndManager.java",
-      "selection": {
-        "end": {
-          "column": 0,
-          "index": 0,
-          "line": 0
-        },
-        "start": {
-          "column": 0,
-          "index": 0,
-          "line": 0
-        }
-      }
-    },
-    {
       "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncMainFragment.kt",
       "selection": {
         "end": {
-          "column": 32,
-          "index": 43551,
-          "line": 812
+          "column": 42,
+          "index": 1322,
+          "line": 33
         },
         "start": {
-          "column": 32,
-          "index": 43551,
-          "line": 812
-        }
-      }
-    },
-    {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneLogFloatingService.kt",
-      "selection": {
-        "end": {
-          "column": 24,
-          "index": 2986,
-          "line": 81
-        },
-        "start": {
-          "column": 24,
-          "index": 2986,
-          "line": 81
+          "column": 42,
+          "index": 1322,
+          "line": 33
         }
       }
     }
