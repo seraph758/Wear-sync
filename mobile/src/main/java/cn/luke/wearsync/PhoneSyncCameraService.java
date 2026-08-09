@@ -205,53 +205,77 @@ public class PhoneSyncCameraService extends Service {
         return null;
     }
 
-    // ==================== 初始化与推流流程 ====================
-    private void initCameraAndStartStreaming() {
-        // 步骤 0: 权限检查
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-            PhoneLog.e(TAG, "❌ 缺少 CAMERA 权限，无法启动相机");
-            showToast("❌ 缺少相机权限！");
-            stopSelf();
-            return;
-        }
-    
-        mIsStreaming.set(true);
-        startBackgroundThread();
-    
-        try {
-            // 步骤 1: 配置 H.264 编码器
-            showToast("1/4 配置编码器...");
-            // ... (保持原有编码器配置代码不变) ...
-            mEncoder.setCallback(new EncoderCallback(), mBgHandler);
-            PhoneLog.d(TAG, "⏸️ [1/4] 编码器配置完成");
-    
-            // 步骤 2: 配置最高画质 ImageReader
-            showToast("2/4 配置拍照模块...");
-            // ... (保持原有 ImageReader 配置代码不变) ...
-    
-          } catch (Exception e) {
-        PhoneLog.e(TAG, "❌ 初始化编码器/ImageReader 失败", e);
-        
-        // 👇 修改这里：把异常类名和消息都显示出来
-        String errMsg = e.getClass().getSimpleName() + ": " + e.getMessage();
-        showToast("❌ 初始化失败: " + errMsg);
-        
-        stopStreamingAndRelease();
-        stopSelf();
-        return;
+  private void initCameraAndStartStreaming() {
+    // 步驟 0: 權限檢查
+    if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+        != PackageManager.PERMISSION_GRANTED) {
+      PhoneLog.e(TAG, "❌ 缺少 CAMERA 權限，無法啟動相機");
+      showToast("❌ 缺少相機權限！");
+      stopSelf();
+      return;
     }
 
-    
-        // --- 逻辑修改点 ---
-        
-        // 步骤 3: 立即启动相机硬件
-        showToast("3/4 启动相机硬件...");
-        startCameraHardware();
-    
-        // 步骤 4: 在后台异步发起 Channel 连接
-        showToast("4/4 连接手表通道...");
-        openChannelStream();
+    mIsStreaming.set(true);
+    startBackgroundThread();
+
+    try {
+      // 先計算最高拍照分辨率
+      calculateMaxPhotoResolution();
+
+      // 步驟 1: 配置並建立 H.264 編碼器與輸入 Surface
+      showToast("1/4 配置編碼器...");
+      MediaFormat format =
+          MediaFormat.createVideoFormat(
+              MediaFormat.MIMETYPE_VIDEO_AVC, PREVIEW_WIDTH, PREVIEW_HEIGHT);
+      format.setInteger(
+          MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
+      format.setInteger(MediaFormat.KEY_BIT_RATE, BIT_RATE);
+      format.setInteger(MediaFormat.KEY_FRAME_RATE, FRAME_RATE);
+      format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, I_FRAME_INTERVAL);
+
+      mEncoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);
+      mEncoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+
+      // 取得編碼器的輸入 Surface
+      mEncoderSurface = mEncoder.createInputSurface();
+
+      // 設定編碼回調
+      mEncoder.setCallback(new EncoderCallback(), mBgHandler);
+      PhoneLog.d(TAG, "⏸️ [1/4] 編碼器配置完成");
+
+      // 步驟 2: 配置拍照模組 ImageReader
+      showToast("2/4 配置拍照模組...");
+      mPhotoReader = ImageReader.newInstance(photoWidth, photoHeight, ImageFormat.JPEG, 2);
+      mPhotoReader.setOnImageAvailableListener(
+          reader -> {
+            Image image = reader.acquireLatestImage();
+            if (image != null) {
+              savePhoto(image);
+              image.close();
+            }
+          },
+          mBgHandler);
+      PhoneLog.d(TAG, "⏸️ [2/4] ImageReader 配置完成");
+
+    } catch (Exception e) {
+      PhoneLog.e(TAG, "❌ 初始化編碼器/ImageReader 失敗", e);
+      String errMsg =
+          e.getClass().getSimpleName() + ": " + (e.getMessage() != null ? e.getMessage() : "未知錯誤");
+      showToast("❌ 初始化失敗: " + errMsg);
+
+      stopStreamingAndRelease();
+      stopSelf();
+      return;
     }
+
+    // 步驟 3: 立即啟動相機硬體
+    showToast("3/4 啟動相機硬體...");
+    startCameraHardware();
+
+    // 步驟 4: 在背景非同步發起 Channel 連線
+    showToast("4/4 連線手錶通道...");
+    openChannelStream();
+  }
 
     private void calculateMaxPhotoResolution() {
         try {

@@ -4,74 +4,29 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncCameraService.java",
       "selection": {
         "end": {
+          "column": 28,
+          "index": 7828,
+          "line": 218
+        },
+        "start": {
+          "column": 28,
+          "index": 7828,
+          "line": 218
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncRemoteCameraActivity.java",
+      "selection": {
+        "end": {
           "column": 0,
-          "index": 8653,
-          "line": 242
-        },
-        "start": {
-          "column": 0,
-          "index": 8653,
-          "line": 242
-        }
-      }
-    },
-    {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncMainFragment.kt",
-      "selection": {
-        "end": {
-          "column": 37,
-          "index": 33485,
-          "line": 653
-        },
-        "start": {
-          "column": 40,
-          "index": 31921,
-          "line": 634
-        }
-      }
-    },
-    {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncMainFragment.java",
-      "selection": {
-        "end": {
-          "column": 3,
-          "index": 1474,
-          "line": 40
+          "index": 2180,
+          "line": 60
         },
         "start": {
           "column": 3,
-          "index": 1474,
-          "line": 40
-        }
-      }
-    },
-    {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncDndManager.java",
-      "selection": {
-        "end": {
-          "column": 7,
-          "index": 3323,
-          "line": 103
-        },
-        "start": {
-          "column": 7,
-          "index": 3323,
-          "line": 103
-        }
-      }
-    },
-    {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneDndManager.java",
-      "selection": {
-        "end": {
-          "column": 5,
-          "index": 4757,
-          "line": 131
-        },
-        "start": {
-          "column": 3,
-          "index": 2895,
-          "line": 87
+          "index": 380,
+          "line": 13
         }
       }
     }
