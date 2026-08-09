@@ -19,14 +19,14 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncMainFragment.kt",
       "selection": {
         "end": {
-          "column": 25,
-          "index": 40696,
-          "line": 768
+          "column": 37,
+          "index": 33485,
+          "line": 653
         },
         "start": {
-          "column": 25,
-          "index": 40696,
-          "line": 768
+          "column": 40,
+          "index": 31921,
+          "line": 634
         }
       }
     },
@@ -42,6 +42,36 @@
           "column": 3,
           "index": 1474,
           "line": 40
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncDndManager.java",
+      "selection": {
+        "end": {
+          "column": 7,
+          "index": 3323,
+          "line": 103
+        },
+        "start": {
+          "column": 7,
+          "index": 3323,
+          "line": 103
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneDndManager.java",
+      "selection": {
+        "end": {
+          "column": 5,
+          "index": 4757,
+          "line": 131
+        },
+        "start": {
+          "column": 3,
+          "index": 2895,
+          "line": 87
         }
       }
     }

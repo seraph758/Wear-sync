@@ -80,13 +80,25 @@ public class WearSyncDndManager {
     /**
      * 重载方法 1：方便外部只传 Context 和 dndStatePhone
      */
-     
-     public static void executeDndSync(Context context, int dndStatePhone) {
-        // 🚀 改用跟发送端完全一致的 "dndsync_prefs" 文件名
+    public static void executeDndSync(Context context, int dndStatePhone) {
+    // 1. 严格使用手机端发送端同款的檔名 "dndsync_prefs"
         SharedPreferences sp = context.getSharedPreferences("dndsync_prefs", Context.MODE_PRIVATE);
-        int pullDownDelay = sp.getInt("screen_pull_down_interval", 500);
+        
+        // 2. 双保险读取：同时尝试几种常见的 Key 写法，哪个能拿到就用哪个！
+        int pullDownDelay = sp.getInt("KEY_PULL_DOWN_DELAY", -1); // 尝试用常量的字面量
+        if (pullDownDelay == -1) {
+            pullDownDelay = sp.getInt("pull_down_delay", -1);
+        }
+        if (pullDownDelay == -1) {
+            pullDownDelay = sp.getInt("screen_pull_down_interval", 500); // 最终保底默认 500
+        }
+    
+        WearLog.d(TAG, "📥 [中轉站] 成功對齊延遲參數: " + pullDownDelay + "ms");
+    
+        // 3. 完美轉發給下面三個參數的執行核心
         executeDndSync(context, dndStatePhone, pullDownDelay);
     }
+
        
 
     /**
