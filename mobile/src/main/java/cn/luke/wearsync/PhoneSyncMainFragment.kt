@@ -481,6 +481,9 @@ fun PhoneSyncMainScreen(
         val vibrateOn = (mask and 2) != 0
         val sleepOn = (mask and 4) != 0
         val powerOn = (mask and 8) != 0
+        
+        var isServiceRunning by remember { mutableStateOf(PhoneLogFloatingService.isRunning) }
+
 
         Surface(
             modifier = Modifier.fillMaxSize(),
@@ -807,9 +810,45 @@ fun PhoneSyncMainScreen(
                                     Text("同步监听手表端核心日志", color = textColor, fontSize = 14.sp)
                                     Switch(checked = uiWearLogDebug, onCheckedChange = onWearLogToggle)
                                 }
+                                LaunchedEffect(Unit) {
+                                    snapshotFlow { PhoneLogFloatingService.isRunning }.collect {
+                                        isServiceRunning = it
+                                    }
+                                }
+                                
                                 HorizontalDivider(color = dividerColor)
-                                Button(modifier = Modifier.fillMaxWidth(), onClick = onFloatingLogClick) {
-                                    Text("开启实时悬浮监视器", fontSize = 13.sp)
+                                
+                                Button(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    onClick = {
+                                        val context = requireContext()
+                                        
+                                        // 权限检查
+                                        if (!Settings.canDrawOverlays(context)) {
+                                            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, "package:${context.packageName}".toUri())
+                                            startActivity(intent)
+                                        } else {
+                                            val intent = Intent(context, PhoneLogFloatingService::class.java)
+                                            
+                                            if (isServiceRunning) {
+                                                // 🔴 如果正在运行，执行关闭
+                                                context.stopService(intent)
+                                                // 注意：isServiceRunning 会在 Service 的 onDestroy 中被设为 false，
+                                                // 上面的 LaunchedEffect 会捕获到这个变化并更新 UI。
+                                            } else {
+                                                // 🟢 如果未运行，执行开启
+                                                // 建议 Android 8.0+ 使用 startForegroundService
+                                                ContextCompat.startForegroundService(context, intent)
+                                            }
+                                        }
+                                    }
+                                ) {
+                                    // ✅ 3. 根据状态动态显示文字
+                                    Text(
+                                        text = if (isServiceRunning) "关闭实时悬浮监视器" else "开启实时悬浮监视器",
+                                        fontSize = 13.sp
+                                    )
+                                    
                                 }
                             }
                         }
