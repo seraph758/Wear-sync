@@ -359,16 +359,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                             }
                         }
                     },
-                    onFloatingLogClick = {
-                        val context = requireContext()
-                        if (!Settings.canDrawOverlays(context)) {
-                            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, "package:${context.packageName}".toUri())
-                            startActivity(intent)
-                        } else {
-                            val intent = Intent(context, PhoneLogFloatingService::class.java)
-                            context.startService(intent)
-                        }
-                    },
+                    onFloatingLogClick = { handleFloatingLogClick() },
                     onNotificationPermissionClick = {
                         startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
                     },
@@ -391,6 +382,22 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
         Wearable.getMessageClient(requireContext()).addListener(this)
     }
 
+    private fun handleFloatingLogClick() {
+        // 现在，requireContext() 和 startActivity() 都可以正常使用了！
+        val context = requireContext()
+        if (!Settings.canDrawOverlays(context)) {
+            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, "package:${context.packageName}".toUri())
+            startActivity(intent)
+        } else {
+            val intent = Intent(context, PhoneLogFloatingService::class.java)
+            if (PhoneLogFloatingService.isRunning) {
+                context.stopService(intent)
+            } else {
+                ContextCompat.startForegroundService(context, intent)
+            }
+        }
+    }
+    
     override fun onPause() {
         super.onPause()
         unregisterConnectivityListener()
