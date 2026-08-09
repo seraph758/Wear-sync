@@ -4,14 +4,14 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncMainFragment.kt",
       "selection": {
         "end": {
-          "column": 42,
-          "index": 1322,
-          "line": 33
+          "column": 30,
+          "index": 80,
+          "line": 3
         },
         "start": {
-          "column": 42,
-          "index": 1322,
-          "line": 33
+          "column": 30,
+          "index": 80,
+          "line": 3
         }
       }
     }
