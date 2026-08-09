@@ -460,7 +460,7 @@ fun PhoneSyncMainScreen(
     onNotificationPermissionClick: () -> Unit,
     onCameraPermissionClick: () -> Unit,
     onFileTransferClick: () -> Unit
-) {
+Un) {
     MaterialTheme {
         val isDark = isSystemInDarkTheme()
         val backgroundColor = if (isDark) Color(0xFF121214) else Color(0xFFF4F4F6)
@@ -827,39 +827,11 @@ fun PhoneSyncMainScreen(
                                 HorizontalDivider(color = dividerColor)
                                 
                                 Button(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    onClick = {
-                                        val context = requireContext()
-                                        
-                                        // 权限检查
-                                        if (!Settings.canDrawOverlays(context)) {
-                                            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, "package:${context.packageName}".toUri())
-                                            startActivity(intent)
-                                        } else {
-                                            val intent = Intent(context, PhoneLogFloatingService::class.java)
-                                            
-                                            if (isServiceRunning) {
-                                                // 🔴 如果正在运行，执行关闭
-                                                context.stopService(intent)
-                                                // 注意：isServiceRunning 会在 Service 的 onDestroy 中被设为 false，
-                                                // 上面的 LaunchedEffect 会捕获到这个变化并更新 UI。
-                                            } else {
-                                                // 🟢 如果未运行，执行开启
-                                                // 建议 Android 8.0+ 使用 startForegroundService
-                                                ContextCompat.startForegroundService(context, intent)
-                                            }
+                                            modifier = Modifier.fillMaxWidth(),
+                                            onClick = { onFloatingLogClick() } // ✅ 只保留这一行
+                                        ) {
+                                            Text(text = if (isServiceRunning) "关闭实时悬浮监视器" else "开启实时悬浮监视器", fontSize = 13.sp)
                                         }
-                                    }
-                                )
-                                
-                                 {
-                                    // ✅ 3. 根据状态动态显示文字
-                                    Text(
-                                        text = if (isServiceRunning) "关闭实时悬浮监视器" else "开启实时悬浮监视器",
-                                        fontSize = 13.sp
-                                    )
-                                    
-                                }
                             }
                         }
                     }
