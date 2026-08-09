@@ -383,19 +383,22 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
     }
 
     private fun handleFloatingLogClick() {
-        // 现在，requireContext() 和 startActivity() 都可以正常使用了！
         val context = requireContext()
         if (!Settings.canDrawOverlays(context)) {
-            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, "package:${context.packageName}".toUri())
+            val intent = Intent(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                "package:${context.packageName}".toUri()
+            )
             startActivity(intent)
         } else {
             val intent = Intent(context, PhoneLogFloatingService::class.java)
             if (PhoneLogFloatingService.isRunning) {
                 context.stopService(intent)
             } else {
-                ContextCompat.startForegroundService(context, intent)
+                context.startService(intent) // ✅ 改回 startService
             }
         }
+    
     }
     
     override fun onPause() {

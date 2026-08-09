@@ -4,14 +4,29 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncMainFragment.kt",
       "selection": {
         "end": {
+          "column": 9,
+          "index": 19544,
+          "line": 399
+        },
+        "start": {
+          "column": 9,
+          "index": 19544,
+          "line": 399
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneLogFloatingService.kt",
+      "selection": {
+        "end": {
           "column": 0,
-          "index": 22031,
-          "line": 462
+          "index": 0,
+          "line": 0
         },
         "start": {
           "column": 0,
-          "index": 22031,
-          "line": 462
+          "index": 0,
+          "line": 0
         }
       }
     }
