@@ -139,7 +139,14 @@ public class WearSyncDndManager {
         // 🔑 Step 4: 震动联动 (Mask 控制：isVibrateSwitchOn 且仅在 DND 开启时震动)
         if (isVibrateSwitchOn && isDndOn) {
             WearLog.d(TAG, "📳 [开始震动]");
-            WearVibratorHelper.vibratePredefined(context, VibrationEffect.EFFECT_TICK);
+            Vibrator v = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
+                if (v != null && v.hasVibrator()) {
+                    v.cancel();
+                    v.vibrate(VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE));
+                    WearLog.d(TAG, "📳 [DND震动] 已触发 OneShot 50ms");
+                } else {
+                    WearLog.w(TAG, "⚠️ [DND震动] 无可用振动器");
+                }
         }
 
         // 🔑 Step 5: 睡眠模式自动化联动 (Mask 控制：isSleepLinkageOpen)

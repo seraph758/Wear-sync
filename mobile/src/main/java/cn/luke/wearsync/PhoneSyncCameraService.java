@@ -222,30 +222,27 @@ public class PhoneSyncCameraService extends Service {
         mIsStreaming.set(true);
         startBackgroundThread();
     
-        try {
-            // 步骤 1: 计算最高分辨率
-            showToast("0/4 正在计算最高分辨率...");
+    try {
+        // 步骤 1 & 2: 计算分辨率和配置编码器
             calculateMaxPhotoResolution();
-
-            // 步骤 2: 配置 H.264 编码器
-            showToast("1/4 正在配置 H.264 编码器...");
+            
             MediaFormat format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, PREVIEW_WIDTH, PREVIEW_HEIGHT);
             format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
             format.setInteger(MediaFormat.KEY_BIT_RATE, BIT_RATE);
             format.setInteger(MediaFormat.KEY_FRAME_RATE, FRAME_RATE);
             format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, I_FRAME_INTERVAL);
-
+            
             mEncoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);
             mEncoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+            // 【修改点】不再这里创建 Surface 和启动编码器
+            // mEncoderSurface = mEncoder.createInputSurface();
+            // mEncoder.setCallback(...);
+            // mEncoder.start(); 
             
-            // 获取编码器输入 Surface
-            mEncoderSurface = mEncoder.createInputSurface();
-            mEncoder.setCallback(new EncoderCallback(), mBgHandler);
-            PhoneLog.d(TAG, "⏸️ [1/4] 编码器配置完成");
+            PhoneLog.d(TAG, "⏸️ [1/4] 编码器已配置，等待通道连接后启动");
             showToast("1/4 编码器配置成功");
     
-            // 步骤 3: 配置拍照模块 ImageReader
-            showToast("2/4 正在配置拍照模块...");
+            // 步骤 3: 配置拍照模块 (保持不变)
             mPhotoReader = ImageReader.newInstance(photoWidth, photoHeight, ImageFormat.JPEG, 2);
             mPhotoReader.setOnImageAvailableListener(reader -> {
                 Image image = reader.acquireLatestImage();
@@ -256,8 +253,8 @@ public class PhoneSyncCameraService extends Service {
             }, mBgHandler);
             PhoneLog.d(TAG, "⏸️ [2/4] ImageReader 配置完成");
             showToast("2/4 拍照模块配置成功");
-
-          } catch (Exception e) {
+    
+        } catch (Exception e)  {
             PhoneLog.e(TAG, "❌ 初始化编码器/ImageReader 失败", e);
             String errMsg = e.getClass().getSimpleName() + ": " + (e.getMessage() != null ? e.getMessage() : "未知");
             showToast("❌ 初始化崩溃: " + errMsg);
@@ -317,23 +314,35 @@ public class PhoneSyncCameraService extends Service {
         }
 
         PhoneLog.d(TAG, "📡 [2/4] 正在发起 Channel 连接: Target=" + mCachedNodeId + ", Path=" + WEAR_CHANNEL_PATH);
-
         mChannelClient.openChannel(mCachedNodeId, WEAR_CHANNEL_PATH)
-                .addOnSuccessListener(channel -> {
-                    PhoneLog.d(TAG, "✅ [2/4] Channel 连接建立成功，获取 OutputStream...");
-                    mChannelClient.getOutputStream(channel)
-                            .addOnSuccessListener(outputStream -> {
-                                PhoneLog.d(TAG, "🎉 [2/4] OutputStream 就绪！开始启动相机硬件与推流");
-                                mChannelOutputStream = outputStream;
-                                mDataOutputStream = new DataOutputStream(outputStream); // 🎯 封装包头输出流
-                                startCameraHardware();
-                            })
-                            .addOnFailureListener(e -> {
-                                PhoneLog.e(TAG, "❌ 获取 Channel OutputStream 失败", e);
-                                stopStreamingAndRelease();
-                                stopSelf();
-                            });
-                })
+            .addOnSuccessListener(channel -> {
+                PhoneLog.d(TAG, "✅ [2/4] Channel 连接建立成功，获取 OutputStream...");
+                mChannelClient.getOutputStream(channel)
+                    .addOnSuccessListener(outputStream -> {
+                        PhoneLog.d(TAG, "🎉 [2/4] OutputStream 就绪！");
+                        mChannelOutputStream = outputStream;
+                        mDataOutputStream = new DataOutputStream(outputStream);
+    
+                        // 【修改点】在这里完成编码器的启动流程
+                        try {
+                            // 1. 获取编码器的输入 Surface
+                            mEncoderSurface = mEncoder.createInputSurface();
+                            // 2. 设置回调（如果需要）
+                            mEncoder.setCallback(new EncoderCallback(), mBgHandler);
+                            // 3. 启动编码器
+                            mEncoder.start();
+                            PhoneLog.d(TAG, "✅ 编码器已完全启动，Surface 已创建");
+                            
+                            // 4. 现在可以安全地启动相机硬件了
+                            startCameraHardware();
+                            
+                        } catch (Exception e) {
+                            PhoneLog.e(TAG, "❌ 启动编码器失败", e);
+                            stopStreamingAndRelease();
+                            stopSelf();
+                        }
+    
+                    })
                 .addOnFailureListener(e -> {
                     PhoneLog.e(TAG, "❌ 打开 Channel 通道失败", e);
                     stopStreamingAndRelease();
@@ -468,21 +477,21 @@ public class PhoneSyncCameraService extends Service {
 
 
     private void startPreviewRequest() {
-        if (!mIsStreaming.get() || mCameraDevice == null || mCaptureSession == null || mEncoderSurface == null) {
+      if (!mIsStreaming.get() || mCameraDevice == null || mCaptureSession == null || mEncoderSurface == null) {
             PhoneLog.w(TAG, "⚠️ 相机已关闭或推流已停止，放弃发起预览 Request");
             return;
         }
-    
         try {
             CaptureRequest.Builder builder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
             builder.addTarget(mEncoderSurface);
             builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO);
-    
-            mEncoder.start();
+            
+            // 【修改点】移除 mEncoder.start()，因为它已经在别处启动了
+            // mEncoder.start(); 
+            
             mCaptureSession.setRepeatingRequest(builder.build(), null, mBgHandler);
             PhoneLog.d(TAG, "🚀 预览 CaptureRequest 已成功提交！");
             showToast("🎉 推流已全面啟動！");
-    
         } catch (IllegalStateException e) {
             PhoneLog.e(TAG, "⚠️ CameraDevice 已关闭，无法建立 CaptureRequest: " + e.getMessage());
         } catch (Exception e) {
@@ -555,10 +564,13 @@ public class PhoneSyncCameraService extends Service {
             }
             mCameraDevice = null;
         }
+            
+            
     
         if (mEncoder != null) {
             try {
-                mEncoder.stop();
+                // 【修改点】先 stop 再 release
+                mEncoder.stop(); 
                 mEncoder.release();
                 PhoneLog.d(TAG, "✅ MediaCodec 编码器已释放");
             } catch (Exception e) {
