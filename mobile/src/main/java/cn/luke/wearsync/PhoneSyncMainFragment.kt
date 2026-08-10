@@ -251,7 +251,6 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                 snoozeKeyText = snoozeKeyText,
                 isAlarmMasterEnabled = isAlarmMasterEnabled,
                 isServiceRunning = isServiceRunningVal, // ✅ 传递局部变量
-                onFloatingLogClick = { handleFloatingLogClick() },
                 onPullDownIntervalChange = { newValue ->
                     screenPullDownInterval = newValue
                     sp.edit { putInt("screen_pull_down_interval", newValue) }
@@ -539,7 +538,7 @@ fun PhoneSyncMainScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Text(
-                    text = "WearSync 枢纽",
+                    text = "WearSync",
                     fontSize = 33.sp,
                     fontWeight = FontWeight.Bold,
                     color = textColor,
@@ -1043,7 +1042,7 @@ fun PhoneSyncMainScreen(
 
 @Preview(showBackground = true)
 @Composable
-fun PhoneSyncMainScreenPreview() {
+fun PreviewPhoneSyncMainScreen() {
     PhoneSyncMainScreen(
         watchWearState = "🟢 已佩戴 (On-Body)",
         isConnected = true,
