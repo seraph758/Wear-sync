@@ -1049,7 +1049,4 @@ fun PhoneSyncMainScreenPreview() {
         onCameraPermissionClick = {},
         onFileTransferClick = {}
     )
-    }
-
-
 }

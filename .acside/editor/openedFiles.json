@@ -19,14 +19,29 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncMainFragment.kt",
       "selection": {
         "end": {
-          "column": 4,
-          "index": 58090,
-          "line": 1051
+          "column": 0,
+          "index": 56806,
+          "line": 1012
         },
         "start": {
-          "column": 4,
-          "index": 58090,
-          "line": 1051
+          "column": 0,
+          "index": 56806,
+          "line": 1012
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncDndManager.java",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 0,
+          "line": 0
+        },
+        "start": {
+          "column": 0,
+          "index": 0,
+          "line": 0
         }
       }
     }
