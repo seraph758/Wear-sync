@@ -49,14 +49,14 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncDndManager.java",
       "selection": {
         "end": {
-          "column": 12,
-          "index": 4920,
-          "line": 141
+          "column": 0,
+          "index": 4980,
+          "line": 142
         },
         "start": {
-          "column": 12,
-          "index": 4920,
-          "line": 141
+          "column": 0,
+          "index": 4980,
+          "line": 142
         }
       }
     },
@@ -76,5 +76,5 @@
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncCameraService.java"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncDndManager.java"
 }
