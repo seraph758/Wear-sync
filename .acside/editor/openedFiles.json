@@ -4,14 +4,14 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncCameraService.java",
       "selection": {
         "end": {
-          "column": 6,
-          "index": 22671,
-          "line": 569
+          "column": 2,
+          "index": 12106,
+          "line": 316
         },
         "start": {
-          "column": 6,
-          "index": 22671,
-          "line": 569
+          "column": 2,
+          "index": 12106,
+          "line": 316
         }
       }
     },
@@ -49,14 +49,14 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncDndManager.java",
       "selection": {
         "end": {
-          "column": 17,
-          "index": 4997,
-          "line": 142
+          "column": 27,
+          "index": 252,
+          "line": 8
         },
         "start": {
-          "column": 17,
-          "index": 4997,
-          "line": 142
+          "column": 27,
+          "index": 252,
+          "line": 8
         }
       }
     },
@@ -76,5 +76,5 @@
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncDndManager.java"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncCameraService.java"
 }

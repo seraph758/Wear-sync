@@ -315,39 +315,38 @@ public class PhoneSyncCameraService extends Service {
 
         PhoneLog.d(TAG, "📡 [2/4] 正在发起 Channel 连接: Target=" + mCachedNodeId + ", Path=" + WEAR_CHANNEL_PATH);
         mChannelClient.openChannel(mCachedNodeId, WEAR_CHANNEL_PATH)
-            .addOnSuccessListener(channel -> {
-                PhoneLog.d(TAG, "✅ [2/4] Channel 连接建立成功，获取 OutputStream...");
-                mChannelClient.getOutputStream(channel)
-                    .addOnSuccessListener(outputStream -> {
-                        PhoneLog.d(TAG, "🎉 [2/4] OutputStream 就绪！");
-                        mChannelOutputStream = outputStream;
-                        mDataOutputStream = new DataOutputStream(outputStream);
-    
-                        // 【修改点】在这里完成编码器的启动流程
-                        try {
-                            // 1. 获取编码器的输入 Surface
-                            mEncoderSurface = mEncoder.createInputSurface();
-                            // 2. 设置回调（如果需要）
-                            mEncoder.setCallback(new EncoderCallback(), mBgHandler);
-                            // 3. 启动编码器
-                            mEncoder.start();
-                            PhoneLog.d(TAG, "✅ 编码器已完全启动，Surface 已创建");
-                            
-                            // 4. 现在可以安全地启动相机硬件了
-                            startCameraHardware();
-                            
-                        } catch (Exception e) {
-                            PhoneLog.e(TAG, "❌ 启动编码器失败", e);
-                            stopStreamingAndRelease();
-                            stopSelf();
-                        }
-    
-                    })
-                .addOnFailureListener(e -> {
-                    PhoneLog.e(TAG, "❌ 打开 Channel 通道失败", e);
+        .addOnSuccessListener(channel -> {
+            PhoneLog.d(TAG, "✅ [2/4] Channel 连接建立成功，获取 OutputStream...");
+            // 注意这里：getOutputStream 返回一个新的 Task，需要单独处理它的成功和失败
+            mChannelClient.getOutputStream(channel)
+                .addOnSuccessListener(outputStream -> {
+                    PhoneLog.d(TAG, "🎉 [2/4] OutputStream 就绪！");
+                    mChannelOutputStream = outputStream;
+                    mDataOutputStream = new DataOutputStream(outputStream);
+
+                    try {
+                        mEncoderSurface = mEncoder.createInputSurface();
+                        mEncoder.setCallback(new EncoderCallback(), mBgHandler);
+                        mEncoder.start();
+                        PhoneLog.d(TAG, "✅ 编码器已完全启动，Surface 已创建");
+                        startCameraHardware();
+                    } catch (Exception e) {
+                        PhoneLog.e(TAG, "❌ 启动编码器失败", e);
+                        stopStreamingAndRelease();
+                        stopSelf();
+                    }
+                }) // ✅ 1. 闭合 getOutputStream 的 addOnSuccessListener 的括号
+                .addOnFailureListener(e -> { // ✅ 2. 这是 getOutputStream 任务的失败监听器
+                    PhoneLog.e(TAG, "❌ 获取 Channel OutputStream 失败", e);
                     stopStreamingAndRelease();
                     stopSelf();
-                });
+                }); // ✅ 3. 结束 getOutputStream 的整个链式调用
+        }) // ✅ 4. 闭合 openChannel 的 addOnSuccessListener 的括号
+        .addOnFailureListener(e -> { // ✅ 5. 这是 openChannel 任务的失败监听器
+            PhoneLog.e(TAG, "❌ 打开 Channel 通道失败", e);
+            stopStreamingAndRelease();
+            stopSelf();
+        }); 
     }
 
       private void startCameraHardware() {
