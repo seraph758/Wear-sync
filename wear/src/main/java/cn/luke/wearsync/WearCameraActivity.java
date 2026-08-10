@@ -32,7 +32,7 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
     private MediaCodec mDecoder;
     private volatile boolean isDecoderRunning = false;
     private volatile boolean isUserExiting = false;
-    private PowerManager.WakeLock wakeLock;
+    private WearSyncScreenManager screenManager;
     private boolean isSurfaceReady = false;
     private final LinkedBlockingQueue<byte[]> frameQueue = new LinkedBlockingQueue<>(15);
     private Thread renderThread;
@@ -47,11 +47,12 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
         sActivityRef = new WeakReference<>(this);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         
-        PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
-        if (pm != null) {
-            wakeLock = pm.newWakeLock(PowerManager.FULL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP, "WearSync:CameraWakeLock");
-            wakeLock.acquire(60 * 1000L);
-        }
+        screenManager = new WearSyncScreenManager(this);
+        screenManager.bind(this);
+        
+        // 🚀 唤醒屏幕并保持常亮
+        screenManager.wakeScreen();
+        screenManager.acquireCpu(3 * 60 * 1000L); // 保持 CPU 运转
         
         setContentView(R.layout.activity_wear_camera);
         surfaceView = findViewById(R.id.surfaceView);
@@ -212,10 +213,7 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
 
         frameQueue.clear();
 
-        if (wakeLock != null && wakeLock.isHeld()) {
-            wakeLock.release();
-            wakeLock = null;
-        }
+     
 
         finishAndRemoveTask();
     }
