@@ -44,7 +44,7 @@ class LogReceiverService : WearableListenerService() {
                         PhoneLog.appendFromRemote(logChunk)
                     }
                     PhoneLog.d("LogReceiver", "🔌 输入流已关闭")
-                } catch (e: CancellationException) {
+                } catch (_: CancellationException) {
                     // 协程被正常取消时，不需要打印错误日志
                     PhoneLog.d("LogReceiver", "⚠️ 日志读取协程已被取消")
                 } catch (e: Exception) {

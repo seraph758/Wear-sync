@@ -1,10 +1,8 @@
 package cn.luke.wearsync;
 
-import android.content.Context;
 import android.media.MediaCodec;
 import android.media.MediaFormat;
 import android.os.Bundle;
-import android.os.PowerManager;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.WindowManager;
@@ -12,6 +10,7 @@ import android.widget.Button;
 
 import androidx.activity.ComponentActivity;
 import androidx.activity.OnBackPressedCallback;
+import androidx.annotation.NonNull;
 
 import com.google.android.gms.tasks.Tasks;
 import com.google.android.gms.wearable.ChannelClient;
@@ -32,7 +31,6 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
     private MediaCodec mDecoder;
     private volatile boolean isDecoderRunning = false;
     private volatile boolean isUserExiting = false;
-    private WearSyncScreenManager screenManager;
     private boolean isSurfaceReady = false;
     private final LinkedBlockingQueue<byte[]> frameQueue = new LinkedBlockingQueue<>(15);
     private Thread renderThread;
@@ -46,8 +44,8 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
         
         sActivityRef = new WeakReference<>(this);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        
-        screenManager = new WearSyncScreenManager(this);
+
+        WearSyncScreenManager screenManager = new WearSyncScreenManager(this);
         screenManager.bind(this);
         
         // 🚀 唤醒屏幕并保持常亮
@@ -63,7 +61,7 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
         // 🎯 拍照快门按钮：向手机发送触发高清拍照指令
         Button btnShutter = findViewById(R.id.btn_shutter);
         if (btnShutter != null) {
-            btnShutter.setOnClickListener(v -> {
+            btnShutter.setOnClickListener(_ -> {
                 WearLog.d(TAG, "📸 用户点击 [快门按钮]，发送最高画质拍照请求");
                 WearSyncCommManager.getInstance(getApplicationContext()).sendBusinessCommand("camera_action", "TAKE_PHOTO");
             });
@@ -83,7 +81,7 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
         // 1. 注册 Channel 回调监听视频流
         mChannelListener = new ChannelClient.ChannelCallback() {
             @Override
-            public void onChannelOpened(ChannelClient.Channel channel) {
+            public void onChannelOpened(@NonNull ChannelClient.Channel channel) {
                 if ("/wear_data_channel/camera".equals(channel.getPath())) {
                     WearLog.d(TAG, "🔗 [Activity] 相机通道已打开，开始接收推流");
                     readStreamFromChannel(channel);
@@ -91,7 +89,7 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
             }
 
             @Override
-            public void onChannelClosed(ChannelClient.Channel channel, int closeReason, int appSpecificErrorCode) {
+            public void onChannelClosed(@NonNull ChannelClient.Channel channel, int closeReason, int appSpecificErrorCode) {
                 if ("/wear_data_channel/camera".equals(channel.getPath())) {
                     WearLog.d(TAG, "🔌 [Activity] 相机通道已关闭");
                 }
@@ -219,16 +217,16 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
     }
 
     @Override
-    public void surfaceCreated(SurfaceHolder holder) {
+    public void surfaceCreated(@NonNull SurfaceHolder holder) {
         isSurfaceReady = true;
         initDecoder();
     }
 
     @Override
-    public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {}
+    public void surfaceChanged(@NonNull SurfaceHolder holder, int format, int width, int height) {}
 
     @Override
-    public void surfaceDestroyed(SurfaceHolder holder) {
+    public void surfaceDestroyed(@NonNull SurfaceHolder holder) {
         isSurfaceReady = false;
         isDecoderRunning = false;
     }

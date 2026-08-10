@@ -62,13 +62,13 @@ public class WearAlarmActivity extends ComponentActivity {
         startWatchVibration();
 
         // 按钮逻辑
-        btnDismiss.setOnClickListener(v -> {
+        btnDismiss.setOnClickListener(_ -> {
             WearLog.d(TAG, "🔘 用户点击 [关闭]");
             WearSyncCommManager.getInstance(this).dismissPhoneAlarm();
             cleanExit();
         });
 
-        btnSnooze.setOnClickListener(v -> {
+        btnSnooze.setOnClickListener(_ -> {
             WearLog.d(TAG, "🔘 用户点击 [延后]");
             WearSyncCommManager.getInstance(this).snoozePhoneAlarm();
             cleanExit();
@@ -91,7 +91,7 @@ public class WearAlarmActivity extends ComponentActivity {
                 String week = json.optString("day_tips", "");
 
                 // ✅ P2: 增加空值防御
-                if (time == null || time.trim().isEmpty()) time = "00:00";
+                if (time.trim().isEmpty()) time = "00:00";
 
                 if (tvAlarmTime != null) tvAlarmTime.setText(time);
                 if (tvAlarmDay != null) {

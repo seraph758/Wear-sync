@@ -11,6 +11,7 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
 import android.graphics.ImageFormat;
+import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraCharacteristics;
@@ -28,12 +29,14 @@ import android.media.MediaFormat;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
+import android.util.Size;
+import android.view.Surface;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
-import android.widget.Toast;
 
 import com.google.android.gms.wearable.ChannelClient;
 import com.google.android.gms.wearable.MessageClient;
@@ -45,13 +48,11 @@ import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
-import android.util.Size;
-import android.util.Range;
-import java.util.Collections;
-import java.util.Comparator;
 
 public class PhoneSyncCameraService extends Service {
     private static final String TAG = "WearSync_CameraSvc";
@@ -62,9 +63,9 @@ public class PhoneSyncCameraService extends Service {
     public static final String WEAR_MSG_PATH_TAKE_PHOTO = "/camera/take_photo";
     public static final String WEAR_CHANNEL_PATH = "/wear_data_channel/camera";
 
-    // 🎯 极低延迟手表预览参数 (320x320 正方形流，完美契合圆屏/方屏手表)
-    private static final int PREVIEW_WIDTH = 320;
-    private static final int PREVIEW_HEIGHT = 320;
+    // 🎯 极低延迟手表预览目标参数 (实际将根据硬件支持动态调整)
+    private int mPreviewWidth = 320;
+    private int mPreviewHeight = 320;
     private static final int BIT_RATE = 400_000; // 400Kbps 低码率保障流畅
     private static final int FRAME_RATE = 25;
     private static final int I_FRAME_INTERVAL = 1; // 1秒一个关键帧
@@ -85,7 +86,7 @@ public class PhoneSyncCameraService extends Service {
     private CameraDevice mCameraDevice;
     private CameraCaptureSession mCaptureSession;
     private MediaCodec mEncoder;
-    private android.view.Surface mEncoderSurface;
+    private Surface mEncoderSurface;
     private ImageReader mPhotoReader;
     
     private final AtomicBoolean mIsStreaming = new AtomicBoolean(false);
@@ -98,7 +99,7 @@ public class PhoneSyncCameraService extends Service {
     
     private int mConfigFailRetryCount = 0;
     private static final int MAX_CONFIG_RETRY = 2;
-    
+
     // 用于保存最终选定的尺寸
     private Size mPreviewSize;
     private Size mPhotoSize;
@@ -230,11 +231,12 @@ public class PhoneSyncCameraService extends Service {
         mIsStreaming.set(true);
         startBackgroundThread();
     
-    try {
-        // 步骤 1 & 2: 计算分辨率和配置编码器
-            calculateMaxPhotoResolution();
+        try {
+            // 步骤 1: 选择硬件支持的最佳分辨率 (解决 320x320 可能导致的配置失败)
+            chooseOptimalSizes();
             
-            MediaFormat format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, PREVIEW_WIDTH, PREVIEW_HEIGHT);
+            // 步骤 2: 配置视频编码器
+            MediaFormat format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, mPreviewWidth, mPreviewHeight);
             format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
             format.setInteger(MediaFormat.KEY_BIT_RATE, BIT_RATE);
             format.setInteger(MediaFormat.KEY_FRAME_RATE, FRAME_RATE);
@@ -242,15 +244,11 @@ public class PhoneSyncCameraService extends Service {
             
             mEncoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);
             mEncoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
-            // 【修改点】不再这里创建 Surface 和启动编码器
-            // mEncoderSurface = mEncoder.createInputSurface();
-            // mEncoder.setCallback(...);
-            // mEncoder.start(); 
             
-            PhoneLog.d(TAG, "⏸️ [1/4] 编码器已配置，等待通道连接后启动");
+            PhoneLog.d(TAG, "⏸️ [1/4] 编码器已配置 (" + mPreviewWidth + "x" + mPreviewHeight + ")，等待通道连接");
             showToast("1/4 编码器配置成功");
     
-            // 步骤 3: 配置拍照模块 (保持不变)
+            // 步骤 3: 配置拍照模块 (使用硬件支持的最大尺寸)
             mPhotoReader = ImageReader.newInstance(photoWidth, photoHeight, ImageFormat.JPEG, 2);
             mPhotoReader.setOnImageAvailableListener(reader -> {
                 Image image = reader.acquireLatestImage();
@@ -259,7 +257,7 @@ public class PhoneSyncCameraService extends Service {
                     image.close();
                 }
             }, mBgHandler);
-            PhoneLog.d(TAG, "⏸️ [2/4] ImageReader 配置完成");
+            PhoneLog.d(TAG, "⏸️ [2/4] ImageReader 配置完成 (" + photoWidth + "x" + photoHeight + ")");
             showToast("2/4 拍照模块配置成功");
     
         } catch (Exception e)  {
@@ -271,70 +269,68 @@ public class PhoneSyncCameraService extends Service {
             return;
         }
 
-        // 步骤 4: 启动相机会话
-        // showToast("3/4 正在打开手机摄像头硬件...");
-       //  startCameraHardware();
-    
-        // 步骤 5: 连接手表通道
+        // 步骤 4: 连接手表通道 (成功后会触发 startCameraHardware)
         showToast("4/4 正在连接手表传输通道...");
         openChannelStream();
     }
-    
+
     private void chooseOptimalSizes() {
         CameraManager manager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
         try {
-            // 1. 获取后置摄像头的 ID
-            String cameraId = manager.getCameraIdList()[0]; // 通常 0 是后置
-
-            // 2. 获取该摄像头的特性
-            CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
-            
-            // 3. 获取相机支持的所有输出尺寸映射
-            StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
-            if (map == null) {
-                throw new RuntimeException("无法获取相机的 StreamConfigurationMap");
+            // 1. 获取后置摄像头 ID
+            String cameraId = null;
+            for (String id : manager.getCameraIdList()) {
+                CameraCharacteristics characteristics = manager.getCameraCharacteristics(id);
+                Integer facing = characteristics.get(CameraCharacteristics.LENS_FACING);
+                if (facing != null && facing == CameraCharacteristics.LENS_FACING_BACK) {
+                    cameraId = id;
+                    break;
+                }
             }
+            if (cameraId == null) cameraId = manager.getCameraIdList()[0];
 
-            // 4. 获取所有支持的预览尺寸 (针对 SurfaceTexture 或 MediaRecorder 等)
-            // 使用 getOutputSizes 并传入 SurfaceTexture.class 来获取所有通用尺寸
+            // 2. 获取硬件能力
+            CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
+            StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+            if (map == null) throw new RuntimeException("无法获取 StreamConfigurationMap");
+
+            // 3. 获取支持的尺寸
             Size[] allPreviewSizes = map.getOutputSizes(SurfaceTexture.class);
-            
-            // 5. 获取所有支持的 JPEG 拍照尺寸
             Size[] allPhotoSizes = map.getOutputSizes(ImageFormat.JPEG);
 
             if (allPreviewSizes == null || allPhotoSizes == null) {
-                 throw new RuntimeException("相机不支持所需的输出格式");
+                 throw new RuntimeException("相机不支持所需格式");
             }
 
-            // 6. 【关键逻辑】选择最小的预览尺寸
-            // 为了更稳妥，我们可以加一个最低分辨率限制，比如 100 像素，防止选到一些奇怪的极小尺寸
-            mPreviewSize = Collections.min(Arrays.asList(allPreviewSizes), new CompareSizesByArea());
-            while (mPreviewSize.getWidth() < 100 || mPreviewSize.getHeight() < 100) {
-                 // 如果选中的太小，就从列表中移除它再选一次，或者直接选列表里的第二个
-                 // 这里为了简单，我们直接选一个相对小的，比如 320x240 附近的
-                 // 更好的做法是过滤掉小于某个阈值的尺寸再选最小
-                 final List<Size> filteredSizes = new ArrayList<>();
-                 for (Size size : allPreviewSizes) {
-                     if (size.getWidth() >= 160 && size.getHeight() >= 120) {
-                         filteredSizes.add(size);
-                     }
-                 }
-                 if (!filteredSizes.isEmpty()) {
-                     mPreviewSize = Collections.min(filteredSizes, new CompareSizesByArea());
-                 }
-                 break;
+            // 4. 选择最接近 320x320 的支持预览分辨率 (解决 320x320 不支持导致的配置失败)
+            mPreviewSize = allPreviewSizes[0];
+            int minDiff = Integer.MAX_VALUE;
+            for (Size size : allPreviewSizes) {
+                // 寻找最接近 320x320 的，但优先保持 4:3 或 16:9
+                int diff = Math.abs(size.getWidth() - 320) + Math.abs(size.getHeight() - 320);
+                if (diff < minDiff) {
+                    minDiff = diff;
+                    mPreviewSize = size;
+                }
             }
+            mPreviewWidth = mPreviewSize.getWidth();
+            mPreviewHeight = mPreviewSize.getHeight();
             
-            // 7. 【关键逻辑】选择最大的拍照尺寸
+            // 5. 选择最大的拍照尺寸
             mPhotoSize = Collections.max(Arrays.asList(allPhotoSizes), new CompareSizesByArea());
+            photoWidth = mPhotoSize.getWidth();
+            photoHeight = mPhotoSize.getHeight();
 
-            PhoneLog.d(TAG, "✅ 自动选择分辨率 -> 预览: " + mPreviewSize.getWidth() + "x" + mPreviewSize.getHeight() + ", 拍照: " + mPhotoSize.getWidth() + "x" + mPhotoSize.getHeight());
+            PhoneLog.d(TAG, "✅ 自动选择最佳分辨率 -> 预览: " + mPreviewWidth + "x" + mPreviewHeight + ", 拍照: " + photoWidth + "x" + photoHeight);
 
         } catch (Exception e) {
-            PhoneLog.e(TAG, "❌ 选择最佳分辨率失败", e);
-            // 设置一个安全的默认值作为后备方案
-            mPreviewSize = new Size(320, 240);
-            mPhotoSize = new Size(1920, 1080);
+            PhoneLog.e(TAG, "❌ 选择最佳分辨率失败，降级使用 640x480", e);
+            mPreviewWidth = 640;
+            mPreviewHeight = 480;
+            photoWidth = 1920;
+            photoHeight = 1080;
+            mPreviewSize = new Size(mPreviewWidth, mPreviewHeight);
+            mPhotoSize = new Size(photoWidth, photoHeight);
         }
     }
 
@@ -350,33 +346,6 @@ public class PhoneSyncCameraService extends Service {
     }
 
 
-    private void calculateMaxPhotoResolution() {
-        try {
-            CameraManager manager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
-            if (manager != null) {
-                String cameraId = manager.getCameraIdList()[0];
-                CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
-                StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
-                if (map != null) {
-                    android.util.Size[] sizes = map.getOutputSizes(ImageFormat.JPEG);
-                    if (sizes != null && sizes.length > 0) {
-                        // 寻找面积最大的分辨率 (即最高像素 4K/FULL)
-                        android.util.Size maxSize = sizes[0];
-                        for (android.util.Size size : sizes) {
-                            if (size.getWidth() * size.getHeight() > maxSize.getWidth() * maxSize.getHeight()) {
-                                maxSize = size;
-                            }
-                        }
-                        photoWidth = maxSize.getWidth();
-                        photoHeight = maxSize.getHeight();
-                        PhoneLog.d(TAG, "🔥 成功计算出相机最高硬件拍照分辨率: " + photoWidth + "x" + photoHeight);
-                    }
-                }
-            }
-        } catch (Exception e) {
-            PhoneLog.w(TAG, "⚠️ 查询最大分辨率失败，降级使用默认 1080P: " + e.getMessage());
-        }
-    }
 
     private void openChannelStream() {
         if (mCachedNodeId == null || mCachedNodeId.isEmpty()) {
@@ -536,6 +505,7 @@ public class PhoneSyncCameraService extends Service {
                                 }, 300);
                             } else {
                                 PhoneLog.e(TAG, "❌ 重试 " + MAX_CONFIG_RETRY + " 次仍失败，停止服务");
+                                showToast("❌ 相机会话配置失败，硬件可能被占用或不支持当前参数");
                                 mConfigFailRetryCount = 0;
                                 stopStreamingAndRelease();
                                 stopSelf();

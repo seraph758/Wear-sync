@@ -68,14 +68,6 @@ class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
     override val lifecycle: Lifecycle get() = lifecycleRegistry
 
     override fun onBind(intent: Intent?): IBinder? = null
-    // ✅ 第一步：添加伴生对象和状态变量
-    companion object {
-        // 使用 @Volatile 保证多线程下的可见性
-        @Volatile
-        var isRunning = false
-            private set // 只允许在类内部修改
-    }
-
 
     override fun onCreate() {
         

@@ -1,7 +1,6 @@
 package cn.luke.wearsync;
 
 import android.app.Notification;
-import android.app.NotificationManager;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Handler;
