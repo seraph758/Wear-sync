@@ -414,15 +414,15 @@ public class PhoneSyncCameraService extends Service {
             return;
         }
         try {
-            // 修复 1: 使用 android.view.Surface 完整类名，避免编译错误
-            List<android.view.Surface> outputs = new ArrayList<>(2);
-            outputs.add(mEncoderSurface);
-            outputs.add(mPhotoReader.getSurface());
+            // 修复：创建 OutputConfiguration 列表，而不是 Surface 列表
+            List<OutputConfiguration> outputConfigurations = new ArrayList<>(2);
+            outputConfigurations.add(new OutputConfiguration(mEncoderSurface));
+            outputConfigurations.add(new OutputConfiguration(mPhotoReader.getSurface()));
     
             Executor executor = command -> mBgHandler.post(command);
             SessionConfiguration sessionConfig = new SessionConfiguration(
                     SessionConfiguration.SESSION_REGULAR,
-                    outputs,
+                    outputConfigurations, // 传入修正后的列表
                     executor,
                     new CameraCaptureSession.StateCallback() {
                         @Override
@@ -445,7 +445,6 @@ public class PhoneSyncCameraService extends Service {
                             PhoneLog.e(TAG, "❌ Session 配置失败, retry=" + mConfigFailRetryCount);
                             if (mConfigFailRetryCount < MAX_CONFIG_RETRY) {
                                 mConfigFailRetryCount++;
-                                // 修复 2: 将错误的 mBackgroundHandler 改为正确的 mBgHandler
                                 mBgHandler.postDelayed(() -> {
                                     PhoneLog.d(TAG, "🔄 重试 createCameraCaptureSession...");
                                     createCameraCaptureSession();
@@ -465,6 +464,7 @@ public class PhoneSyncCameraService extends Service {
             stopSelf();
         }
     }
+
 
 
     private void startPreviewRequest() {
