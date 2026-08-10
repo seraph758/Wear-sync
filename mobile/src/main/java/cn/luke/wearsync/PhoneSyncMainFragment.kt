@@ -383,7 +383,6 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                             }
                         }
                     },
-                    isServiceRunning = isServiceRunningVal, 
                     onFloatingLogClick = { handleFloatingLogClick() },
                     onNotificationPermissionClick = {
                         startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
