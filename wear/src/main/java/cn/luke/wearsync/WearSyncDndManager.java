@@ -139,7 +139,7 @@ public class WearSyncDndManager {
         // 🔑 Step 4: 震动联动 (Mask 控制：isVibrateSwitchOn 且仅在 DND 开启时震动)
         if (isVibrateSwitchOn && isDndOn) {
             WearLog.d(TAG, "📳 [开始震动]");
-            vibrate(context);
+            WearVibratorHelper.vibratePredefined(context, VibrationEffect.EFFECT_TICK);
         }
 
         // 🔑 Step 5: 睡眠模式自动化联动 (Mask 控制：isSleepLinkageOpen)
@@ -193,10 +193,4 @@ public class WearSyncDndManager {
         WearLog.d(TAG, "🛌 [就寢模式] 已成功啟動透明自動化頁面");
     }
 
-    /**
-     * 执行预定义的震动效果
-     */
-    private static void vibrate(Context context) {
-        WearVibratorHelper.vibratePredefined(context, VibrationEffect.EFFECT_TICK);
-    }
 }

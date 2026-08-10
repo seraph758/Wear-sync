@@ -34,17 +34,47 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneLogActivity.kt",
       "selection": {
         "end": {
-          "column": 74,
-          "index": 3390,
-          "line": 76
+          "column": 0,
+          "index": 849,
+          "line": 23
         },
         "start": {
-          "column": 40,
-          "index": 3356,
-          "line": 76
+          "column": 0,
+          "index": 849,
+          "line": 23
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncDndManager.java",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 7205,
+          "line": 195
+        },
+        "start": {
+          "column": 0,
+          "index": 7205,
+          "line": 195
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearVibratorHelper.java",
+      "selection": {
+        "end": {
+          "column": 1,
+          "index": 6091,
+          "line": 193
+        },
+        "start": {
+          "column": 1,
+          "index": 6091,
+          "line": 193
         }
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneLogActivity.kt"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncDndManager.java"
 }

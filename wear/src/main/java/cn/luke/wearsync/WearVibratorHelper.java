@@ -138,17 +138,44 @@ public final class WearVibratorHelper {
         }
     }
 
-    /** 預定義觸感震動 */
+        /** 預定義觸感震動 */
+     /** 
+     * 預定義觸感震動（Wear OS 6/7 专属版）
+     * 目标环境: Android 16 (API 36) / Android 16 QPR2 (API 36.1)
+     */
     public static void vibratePredefined(Context context, int effectId) {
         Vibrator v = getDefaultVibrator(context);
         if (v == null || !v.hasVibrator()) return;
+        
         try {
             v.cancel();
+            // API 36 环境下，预定义震动是原生支持的，直接调用
             v.vibrate(VibrationEffect.createPredefined(effectId));
+            
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            // 仅捕获预定义效果无效或状态异常的特定错误
+            WearLog.e(TAG, "⚠️ 預定義震動失敗，触发兜底: " + e.getMessage());
+            fallbackTick(v);
         } catch (Exception e) {
-            WearLog.e(TAG, "預定義震動失敗: " + e.getMessage(), e);
+            // 其他未知异常也走兜底，保证绝对不静默失败
+            WearLog.e(TAG, "⚠️ 預定義震動未知异常，触发兜底", e);
+            fallbackTick(v);
         }
     }
+    
+    /**
+     * TICK 效果兜底（API 36 环境）
+     */
+    private static void fallbackTick(Vibrator v) {
+        try {
+            // 在 API 36 下，直接使用 OneShot + EFFECT_TICK 模拟
+            // 15ms 是系统预定义 TICK 的标准时长，手感一致且功耗极低
+            v.vibrate(VibrationEffect.createOneShot(15, VibrationEffect.EFFECT_TICK));
+        } catch (Exception e) {
+            WearLog.e(TAG, "❌ 兜底震动也失败", e);
+        }
+    }
+
 
     /**
      * 僅觸發一次指定時長的震動，不循環
