@@ -48,6 +48,10 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
+import android.util.Size;
+import android.util.Range;
+import java.util.Collections;
+import java.util.Comparator;
 
 public class PhoneSyncCameraService extends Service {
     private static final String TAG = "WearSync_CameraSvc";
@@ -94,6 +98,10 @@ public class PhoneSyncCameraService extends Service {
     
     private int mConfigFailRetryCount = 0;
     private static final int MAX_CONFIG_RETRY = 2;
+    
+    // 用于保存最终选定的尺寸
+    private Size mPreviewSize;
+    private Size mPhotoSize;
 
 
     // ==================== 监听器 ====================
@@ -270,6 +278,75 @@ public class PhoneSyncCameraService extends Service {
         // 步骤 5: 连接手表通道
         showToast("4/4 正在连接手表传输通道...");
         openChannelStream();
+    }
+    
+    private void chooseOptimalSizes() {
+        CameraManager manager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
+        try {
+            // 1. 获取后置摄像头的 ID
+            String cameraId = manager.getCameraIdList()[0]; // 通常 0 是后置
+
+            // 2. 获取该摄像头的特性
+            CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
+            
+            // 3. 获取相机支持的所有输出尺寸映射
+            StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+            if (map == null) {
+                throw new RuntimeException("无法获取相机的 StreamConfigurationMap");
+            }
+
+            // 4. 获取所有支持的预览尺寸 (针对 SurfaceTexture 或 MediaRecorder 等)
+            // 使用 getOutputSizes 并传入 SurfaceTexture.class 来获取所有通用尺寸
+            Size[] allPreviewSizes = map.getOutputSizes(SurfaceTexture.class);
+            
+            // 5. 获取所有支持的 JPEG 拍照尺寸
+            Size[] allPhotoSizes = map.getOutputSizes(ImageFormat.JPEG);
+
+            if (allPreviewSizes == null || allPhotoSizes == null) {
+                 throw new RuntimeException("相机不支持所需的输出格式");
+            }
+
+            // 6. 【关键逻辑】选择最小的预览尺寸
+            // 为了更稳妥，我们可以加一个最低分辨率限制，比如 100 像素，防止选到一些奇怪的极小尺寸
+            mPreviewSize = Collections.min(Arrays.asList(allPreviewSizes), new CompareSizesByArea());
+            while (mPreviewSize.getWidth() < 100 || mPreviewSize.getHeight() < 100) {
+                 // 如果选中的太小，就从列表中移除它再选一次，或者直接选列表里的第二个
+                 // 这里为了简单，我们直接选一个相对小的，比如 320x240 附近的
+                 // 更好的做法是过滤掉小于某个阈值的尺寸再选最小
+                 final List<Size> filteredSizes = new ArrayList<>();
+                 for (Size size : allPreviewSizes) {
+                     if (size.getWidth() >= 160 && size.getHeight() >= 120) {
+                         filteredSizes.add(size);
+                     }
+                 }
+                 if (!filteredSizes.isEmpty()) {
+                     mPreviewSize = Collections.min(filteredSizes, new CompareSizesByArea());
+                 }
+                 break;
+            }
+            
+            // 7. 【关键逻辑】选择最大的拍照尺寸
+            mPhotoSize = Collections.max(Arrays.asList(allPhotoSizes), new CompareSizesByArea());
+
+            PhoneLog.d(TAG, "✅ 自动选择分辨率 -> 预览: " + mPreviewSize.getWidth() + "x" + mPreviewSize.getHeight() + ", 拍照: " + mPhotoSize.getWidth() + "x" + mPhotoSize.getHeight());
+
+        } catch (Exception e) {
+            PhoneLog.e(TAG, "❌ 选择最佳分辨率失败", e);
+            // 设置一个安全的默认值作为后备方案
+            mPreviewSize = new Size(320, 240);
+            mPhotoSize = new Size(1920, 1080);
+        }
+    }
+
+    /**
+     * 比较器：用于比较 Size 对象的面积大小
+     */
+    static class CompareSizesByArea implements Comparator<Size> {
+        @Override
+        public int compare(Size lhs, Size rhs) {
+            // 使用 long 防止整数溢出
+            return Long.signum((long) lhs.getWidth() * lhs.getHeight() - (long) rhs.getWidth() * rhs.getHeight());
+        }
     }
 
 
@@ -678,11 +755,7 @@ public class PhoneSyncCameraService extends Service {
             PhoneLog.d(TAG, "ℹ️ MediaCodec 输出格式改变: " + format);
         }
     }
-    // ... 其他代码 ...
-
-    /**
-     * 在 Service 中显示 Toast 弹窗的辅助方法
-     */
+    
     private void showToast(final String message) {
         // 确保在主线程（UI线程）执行弹窗操作
             if (mMainHandler != null) {

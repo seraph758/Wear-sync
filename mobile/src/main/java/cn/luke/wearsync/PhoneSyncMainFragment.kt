@@ -45,6 +45,14 @@ import kotlinx.coroutines.tasks.await
 import org.json.JSONObject
 import java.nio.charset.StandardCharsets
 
+object AppState {
+    private val _isServiceRunning = MutableStateFlow(false)
+    val isServiceRunning: StateFlow<Boolean> = _isServiceRunning.asStateFlow()
+    fun setServiceRunning(running: Boolean) {
+        _isServiceRunning.value = running
+    }
+}
+
 class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListener {
     companion object {
         private const val TAG = "PhoneSyncMainFragment"
@@ -60,7 +68,8 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
     private val uiLogDebugSwitch = mutableStateOf(false)
     private val uiWearLogDebugSwitch = mutableStateOf(false)
     private val fileTransferStatus = mutableStateOf("等待选择文件...")
-    private val _isServiceRunning = mutableStateOf(PhoneLogFloatingService.isRunning)
+    // ✅ 从全局 AppState 收集状态
+    val isServiceRunning by AppState.isServiceRunning.collectAsState()
 
     private val alarmPickerLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
@@ -388,18 +397,26 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
     private fun handleFloatingLogClick() {
         val context = requireContext()
         if (!Settings.canDrawOverlays(context)) {
-            // ... 申请权限的代码 ...
+            val intent = Intent(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:${context.packageName}")
+            )
+            startActivityForResult(intent, 1001)
         } else {
             val intent = Intent(context, PhoneLogFloatingService::class.java)
-            if (PhoneLogFloatingService.isRunning) {
+            // ✅ 使用全局状态来判断，而不是 Service 的静态变量
+            if (AppState.isServiceRunning.value) {
                 context.stopService(intent)
-                _isServiceRunning.value = false // ✅ 确保有这行：停止服务后，更新UI状态为false
+                // ❌ 删除: _isServiceRunning.value = false
+                // Service.onDestroy() 会自动调用 AppState.setServiceRunning(false)
             } else {
                 context.startService(intent)
-                _isServiceRunning.value = true  // ✅ 确保有这行：启动服务后，更新UI状态为true
+                // ❌ 删除: _isServiceRunning.value = true
+                // Service.onCreate() 会自动调用 AppState.setServiceRunning(true)
             }
         }
     }
+
 
     
     override fun onPause() {

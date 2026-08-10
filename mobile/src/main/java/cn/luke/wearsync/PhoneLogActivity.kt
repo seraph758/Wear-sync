@@ -114,7 +114,9 @@ class PhoneLogActivity : ComponentActivity() {
                                     )
                                 }
                                 Button(
-                                    onClick = { finish() },
+                                    onClick = { 
+                                        AppState.setServiceRunning(false)
+                                        finish() },
                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF3B30)),
                                     modifier = Modifier.height(42.dp).weight(1f),
                                     contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)

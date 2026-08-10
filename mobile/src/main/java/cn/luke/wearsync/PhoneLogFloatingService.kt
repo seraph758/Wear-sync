@@ -78,12 +78,11 @@ class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
 
 
     override fun onCreate() {
-            // ✅ 第二步：服务创建时，标记为 true
-        isRunning = true
         
        
         controller.performRestore(null)
         super.onCreate()
+        AppState.setServiceRunning(true)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
 
@@ -281,6 +280,7 @@ class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
                                 }
                                 Button(
                                     onClick = {
+                                       AppState.setServiceRunning(false)
                                         startActivity(Intent(this@PhoneLogFloatingService, PhoneLogActivity::class.java).apply {
                                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
                                         })
@@ -304,7 +304,9 @@ class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
                                     Text("保存", fontSize = 11.sp)
                                 }
                                 Button(
-                                    onClick = { stopSelf() },
+                                    onClick = { 
+                                       AppState.setServiceRunning(false)
+                                       stopSelf() },
                                     contentPadding = PaddingValues(horizontal = 10.dp),
                                     modifier = Modifier.height(28.dp),
                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF3B30))
@@ -324,7 +326,7 @@ class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
 
     override fun onDestroy() {
         super.onDestroy()
-        isRunning = false
+        AppState.setServiceRunning(false)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
         floatingView?.let {
             try {
