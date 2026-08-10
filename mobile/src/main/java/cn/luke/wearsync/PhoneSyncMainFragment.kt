@@ -1020,6 +1020,7 @@ fun PhoneSyncMainScreenPreview() {
         isConnected = true,
         isNotificationAllowed = true,
         isCameraAllowed = true,
+        isServiceRunning = false, // ✅ 补上缺失的参数，预览时可设为 false 或 true
         fileTransferStatus = "等待选择文件...",
         uiLogDebug = true,
         uiWearLogDebug = false,
@@ -1048,4 +1049,7 @@ fun PhoneSyncMainScreenPreview() {
         onCameraPermissionClick = {},
         onFileTransferClick = {}
     )
+    }
+
+
 }
