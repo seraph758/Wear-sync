@@ -60,6 +60,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
     private val uiLogDebugSwitch = mutableStateOf(false)
     private val uiWearLogDebugSwitch = mutableStateOf(false)
     private val fileTransferStatus = mutableStateOf("等待选择文件...")
+    private val _isServiceRunning = mutableStateOf(PhoneLogFloatingService.isRunning)
 
     private val alarmPickerLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
@@ -196,6 +197,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                 val fileTransferStatusVal by fileTransferStatus
                 val uiLogDebugVal by uiLogDebugSwitch
                 val uiWearLogDebugVal by uiWearLogDebugSwitch
+                val isServiceRunningVal by _isServiceRunning
 
                 var mask by remember { mutableIntStateOf(sp.getInt("KEY_MASK", 15)) }
                 var screenPullDownInterval by remember { mutableIntStateOf(sp.getInt("screen_pull_down_interval", 500)) }
@@ -359,6 +361,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                             }
                         }
                     },
+                    isServiceRunning = isServiceRunningVal, 
                     onFloatingLogClick = { handleFloatingLogClick() },
                     onNotificationPermissionClick = {
                         startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
@@ -385,21 +388,19 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
     private fun handleFloatingLogClick() {
         val context = requireContext()
         if (!Settings.canDrawOverlays(context)) {
-            val intent = Intent(
-                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                "package:${context.packageName}".toUri()
-            )
-            startActivity(intent)
+            // ... 申请权限的代码 ...
         } else {
             val intent = Intent(context, PhoneLogFloatingService::class.java)
             if (PhoneLogFloatingService.isRunning) {
                 context.stopService(intent)
+                _isServiceRunning.value = false // ✅ 确保有这行：停止服务后，更新UI状态为false
             } else {
-                context.startService(intent) // ✅ 改回 startService
+                context.startService(intent)
+                _isServiceRunning.value = true  // ✅ 确保有这行：启动服务后，更新UI状态为true
             }
         }
-    
     }
+
     
     override fun onPause() {
         super.onPause()
@@ -436,6 +437,7 @@ fun PhoneSyncMainScreen(
     isConnected: Boolean,
     isNotificationAllowed: Boolean,
     isCameraAllowed: Boolean,
+    isServiceRunning: Boolean,
     fileTransferStatus: String,
     uiLogDebug: Boolean,
     uiWearLogDebug: Boolean,
@@ -493,7 +495,6 @@ fun PhoneSyncMainScreen(
         val sleepOn = (mask and 4) != 0
         val powerOn = (mask and 8) != 0
         
-        var isServiceRunning by remember { mutableStateOf(PhoneLogFloatingService.isRunning) }
 
 
         Surface(
@@ -513,7 +514,7 @@ fun PhoneSyncMainScreen(
                     fontSize = 28.sp,
                     fontWeight = FontWeight.Bold,
                     color = textColor,
-                    modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)
+                    modifier = Modifier.padding(top = 1.dp, bottom = 4.dp)
                 )
 
                 // Wear Status Card
@@ -821,11 +822,7 @@ fun PhoneSyncMainScreen(
                                     Text("同步监听手表端核心日志", color = textColor, fontSize = 14.sp)
                                     Switch(checked = uiWearLogDebug, onCheckedChange = onWearLogToggle)
                                 }
-                                LaunchedEffect(Unit) {
-                                    snapshotFlow { PhoneLogFloatingService.isRunning }.collect {
-                                        isServiceRunning = it
-                                    }
-                                }
+                                
                                 
                                 HorizontalDivider(color = dividerColor)
                                 
