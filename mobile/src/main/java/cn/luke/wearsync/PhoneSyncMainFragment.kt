@@ -206,13 +206,15 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
             // ✅ 2. 在这里直接使用上面已经收集好的状态变量
             // 删除这一行：val isServiceRunningVal by AppState.isServiceRunning.collectAsState()
              // ✅ 1. 将所有 collectAsState() 调用移到 setContent 外部
-            val watchWearStateVal by watchWearState.collectAsState()
-            val isConnectedVal by isConnectedState.collectAsState()
-            val isNotificationAllowedVal by isNotificationAllowedState.collectAsState()
-            val isCameraAllowedVal by isCameraAllowedState.collectAsState()
-            val fileTransferStatusVal by fileTransferStatus.collectAsState()
-            val uiLogDebugVal by uiLogDebugSwitch.collectAsState()
-            val uiWearLogDebugVal by uiWearLogDebugSwitch.collectAsState()
+            // ✅ 正确写法：直接使用 by 读取 MutableState 的值
+            val watchWearStateVal by watchWearState
+            val isConnectedVal by isConnectedState
+            val isNotificationAllowedVal by isNotificationAllowedState
+            val isCameraAllowedVal by isCameraAllowedState
+            val fileTransferStatusVal by fileTransferStatus
+            val uiLogDebugVal by uiLogDebugSwitch
+            val uiWearLogDebugVal by uiWearLogDebugSwitch
+
             val isServiceRunningVal by AppState.isServiceRunning.collectAsState()
             
             var mask by remember { mutableIntStateOf(sp.getInt("KEY_MASK", 15)) }
