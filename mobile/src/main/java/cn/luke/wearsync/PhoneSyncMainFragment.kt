@@ -46,8 +46,6 @@ import org.json.JSONObject
 import java.nio.charset.StandardCharsets
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import kotlinx.coroutines.flow.asStateFlow
 
 
@@ -74,8 +72,6 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
     private val uiLogDebugSwitch = mutableStateOf(false)
     private val uiWearLogDebugSwitch = mutableStateOf(false)
     private val fileTransferStatus = mutableStateOf("等待选择文件...")
-    // ✅ 从全局 AppState 收集状态
-    val isServiceRunning by AppState.isServiceRunning.collectAsState()
 
     private val alarmPickerLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
@@ -252,6 +248,8 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                 dismissKeyText = dismissKeyText,
                 snoozeKeyText = snoozeKeyText,
                 isAlarmMasterEnabled = isAlarmMasterEnabled,
+                isServiceRunning = isServiceRunningVal, // ✅ 传递局部变量
+                onFloatingLogClick = { handleFloatingLogClick() },
                 onPullDownIntervalChange = { newValue ->
                     screenPullDownInterval = newValue
                     sp.edit { putInt("screen_pull_down_interval", newValue) }
