@@ -49,13 +49,13 @@
       "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/wear/src/main/java/cn/luke/wearsync/WearSyncDndManager.java",
       "selection": {
         "end": {
-          "column": 0,
-          "index": 4980,
+          "column": 17,
+          "index": 4997,
           "line": 142
         },
         "start": {
-          "column": 0,
-          "index": 4980,
+          "column": 17,
+          "index": 4997,
           "line": 142
         }
       }

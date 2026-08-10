@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Vibrator;
 import android.os.VibrationEffect;
 import android.provider.Settings;
 import android.widget.Toast;
