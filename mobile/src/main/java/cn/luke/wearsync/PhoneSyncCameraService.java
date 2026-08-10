@@ -408,20 +408,18 @@ public class PhoneSyncCameraService extends Service {
 
 
 
-    private void createCameraCaptureSession() {
+  private void createCameraCaptureSession() {
         if (mCameraDevice == null || mEncoderSurface == null || mPhotoReader == null) {
             PhoneLog.e(TAG, "❌ 建立 Session 失败：硬件或 Surface 未就绪");
             return;
         }
-
         try {
-            List<Surface> outputs = new ArrayList<>(2);
+            // 修复 1: 使用 android.view.Surface 完整类名，避免编译错误
+            List<android.view.Surface> outputs = new ArrayList<>(2);
             outputs.add(mEncoderSurface);
             outputs.add(mPhotoReader.getSurface());
-
-
+    
             Executor executor = command -> mBgHandler.post(command);
-
             SessionConfiguration sessionConfig = new SessionConfiguration(
                     SessionConfiguration.SESSION_REGULAR,
                     outputs,
@@ -431,46 +429,43 @@ public class PhoneSyncCameraService extends Service {
                         public void onConfigured(@NonNull CameraCaptureSession session) {
                             if (!mIsStreaming.get() || mCameraDevice == null) {
                                 PhoneLog.w(TAG, "⚠️ Session 配置完成时相机已关闭，关闭无效 Session");
-                                try { session.close(); } catch (Exception ignored) {}
+                                try {
+                                    session.close();
+                                } catch (Exception ignored) {}
                                 return;
                             }
-                        
-                            mConfigFailRetryCount = 0; 
+                            mConfigFailRetryCount = 0;
                             mCaptureSession = session;
                             PhoneLog.d(TAG, "🎉 Camera CaptureSession 配置完成，启动预览推流！");
                             startPreviewRequest();
                         }
-                    
-                         @Override
+    
+                        @Override
                         public void onConfigureFailed(@NonNull CameraCaptureSession session) {
                             PhoneLog.e(TAG, "❌ Session 配置失败, retry=" + mConfigFailRetryCount);
-                            
                             if (mConfigFailRetryCount < MAX_CONFIG_RETRY) {
                                 mConfigFailRetryCount++;
-                                // 延迟 300ms 重试，给 HAL 层释放/重初始化资源的时间
-                                mBackgroundHandler.postDelayed(() -> {
+                                // 修复 2: 将错误的 mBackgroundHandler 改为正确的 mBgHandler
+                                mBgHandler.postDelayed(() -> {
                                     PhoneLog.d(TAG, "🔄 重试 createCameraCaptureSession...");
                                     createCameraCaptureSession();
                                 }, 300);
                             } else {
-                                // 重试耗尽，执行原有的清理逻辑
                                 PhoneLog.e(TAG, "❌ 重试 " + MAX_CONFIG_RETRY + " 次仍失败，停止服务");
-                                mConfigFailRetryCount = 0; // 重置计数器
+                                mConfigFailRetryCount = 0;
                                 stopStreamingAndRelease();
                                 stopSelf();
                             }
                         }
-                    }
-            );
-
+                    });
             mCameraDevice.createCaptureSession(sessionConfig);
-
         } catch (CameraAccessException e) {
             PhoneLog.e(TAG, "❌ 创建 CaptureSession 异常", e);
             stopStreamingAndRelease();
             stopSelf();
         }
     }
+
 
     private void startPreviewRequest() {
         if (!mIsStreaming.get() || mCameraDevice == null || mCaptureSession == null || mEncoderSurface == null) {
