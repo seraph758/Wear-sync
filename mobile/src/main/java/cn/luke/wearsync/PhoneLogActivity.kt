@@ -47,62 +47,89 @@ class PhoneLogActivity : ComponentActivity() {
                 }
             }
 
-            // ✅ 使用 Scaffold 统一管理顶部/底部栏与内容区域的关系
-              Scaffold(
-                containerColor = Color(0xFF121212),
-                bottomBar = {
-                    Surface(
-                        color = Color(0xFF121212),
-                        tonalElevation = 3.dp
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .navigationBarsPadding()
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            Scaffold(
+                    containerColor = Color(0xFF121212),
+                    bottomBar = {
+                        Surface(
+                            color = Color(0xFF121212),
+                            tonalElevation = 3.dp
                         ) {
-                            Button(
-                                onClick = {
-                                    startService(Intent(this@PhoneLogActivity, PhoneLogFloatingService::class.java))
-                                    finish()
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8E44AD)),
-                                modifier = Modifier.height(42.dp).weight(1f)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .navigationBarsPadding()
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Text("切换浮窗", fontSize = 12.sp)
-                            }
-                            Button(
-                                onClick = { PhoneLog.clear(); logLines = emptyList() },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3A3A3C)),
-                                modifier = Modifier.height(42.dp).weight(1f)
-                            ) {
-                                Text("清空", fontSize = 12.sp)
-                            }
-                            Button(
-                                onClick = {
-                                    val backup = PhoneLog.exportBackupFile()
-                                    if (backup != null) {
-                                        Toast.makeText(context, "备份成功！", Toast.LENGTH_LONG).show()
-                                    }
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF007AFF)),
-                                modifier = Modifier.height(42.dp).weight(1f)
-                            ) {
-                                Text("保存备份", fontSize = 12.sp)
-                            }
-                            // ✅ 新增：直接关闭全屏 Activity（不恢复悬浮窗）
-                            Button(
-                                onClick = { finish() },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF3B30)),
-                                modifier = Modifier.height(42.dp).weight(1f)
-                            ) {
-                                Text("关闭", fontSize = 12.sp)
+                                Button(
+                                    onClick = {
+                                        startService(Intent(this@PhoneLogActivity, PhoneLogFloatingService::class.java))
+                                        finish()
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8E44AD)),
+                                    modifier = Modifier.height(42.dp).weight(1f),
+                                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp) // ✅ 减少内边距腾出空间
+                                ) {
+                                    Text(
+                                        text = "浮窗",
+                                        fontSize = 12.sp,
+                                        maxLines = 1,           // ✅ 强制单行
+                                        overflow = TextOverflow.Ellipsis, // 超长时省略号（兜底）
+                                        softWrap = false        // ✅ 禁止换行
+                                    )
+                                }
+                                Button(
+                                    onClick = { PhoneLog.clear(); logLines = emptyList() },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3A3A3C)),
+                                    modifier = Modifier.height(42.dp).weight(1f),
+                                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                                ) {
+                                    Text(
+                                        text = "清空",
+                                        fontSize = 12.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        softWrap = false
+                                    )
+                                }
+                                Button(
+                                    onClick = {
+                                        val backup = PhoneLog.exportBackupFile()
+                                        if (backup != null) {
+                                            Toast.makeText(context, "备份成功！", Toast.LENGTH_LONG).show()
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF007AFF)),
+                                    modifier = Modifier.height(42.dp).weight(1f),
+                                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                                ) {
+                                    Text(
+                                        text = "备份",
+                                        fontSize = 12.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        softWrap = false
+                                    )
+                                }
+                                Button(
+                                    onClick = { finish() },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF3B30)),
+                                    modifier = Modifier.height(42.dp).weight(1f),
+                                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                                ) {
+                                    Text(
+                                        text = "关闭",
+                                        fontSize = 12.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        softWrap = false
+                                    )
+                                }
                             }
                         }
                     }
-                }
-            )
+                )
+
              { innerPadding ->
                 // ✅ 内容区域应用 Scaffold 提供的 padding，自动避开 bottomBar + 导航栏
                 Box(

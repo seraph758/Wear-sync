@@ -91,6 +91,10 @@ public class PhoneSyncCameraService extends Service {
     private ChannelClient mChannelClient;
     private OutputStream mChannelOutputStream;
     private DataOutputStream mDataOutputStream; // 🎯 新增：封装数据包头
+    
+    private int mConfigFailRetryCount = 0;
+    private static final int MAX_CONFIG_RETRY = 2;
+
 
     // ==================== 监听器 ====================
     private final MessageClient.OnMessageReceivedListener mMessageListener = event -> {
@@ -263,8 +267,8 @@ public class PhoneSyncCameraService extends Service {
         }
 
         // 步骤 4: 启动相机会话
-        showToast("3/4 正在打开手机摄像头硬件...");
-        startCameraHardware();
+        // showToast("3/4 正在打开手机摄像头硬件...");
+       //  startCameraHardware();
     
         // 步骤 5: 连接手表通道
         showToast("4/4 正在连接手表传输通道...");
@@ -411,9 +415,10 @@ public class PhoneSyncCameraService extends Service {
         }
 
         try {
-            List<OutputConfiguration> outputs = new ArrayList<>();
-            outputs.add(new OutputConfiguration(mEncoderSurface));
-            outputs.add(new OutputConfiguration(mPhotoReader.getSurface()));
+            List<Surface> outputs = new ArrayList<>(2);
+            outputs.add(mEncoderSurface);
+            outputs.add(mPhotoReader.getSurface());
+
 
             Executor executor = command -> mBgHandler.post(command);
 
@@ -429,17 +434,31 @@ public class PhoneSyncCameraService extends Service {
                                 try { session.close(); } catch (Exception ignored) {}
                                 return;
                             }
-                    
+                        
+                            mConfigFailRetryCount = 0; 
                             mCaptureSession = session;
                             PhoneLog.d(TAG, "🎉 Camera CaptureSession 配置完成，启动预览推流！");
                             startPreviewRequest();
                         }
                     
-                        @Override
+                         @Override
                         public void onConfigureFailed(@NonNull CameraCaptureSession session) {
-                            PhoneLog.e(TAG, "❌ Session 配置失败");
-                            stopStreamingAndRelease();
-                            stopSelf();
+                            PhoneLog.e(TAG, "❌ Session 配置失败, retry=" + mConfigFailRetryCount);
+                            
+                            if (mConfigFailRetryCount < MAX_CONFIG_RETRY) {
+                                mConfigFailRetryCount++;
+                                // 延迟 300ms 重试，给 HAL 层释放/重初始化资源的时间
+                                mBackgroundHandler.postDelayed(() -> {
+                                    PhoneLog.d(TAG, "🔄 重试 createCameraCaptureSession...");
+                                    createCameraCaptureSession();
+                                }, 300);
+                            } else {
+                                // 重试耗尽，执行原有的清理逻辑
+                                PhoneLog.e(TAG, "❌ 重试 " + MAX_CONFIG_RETRY + " 次仍失败，停止服务");
+                                mConfigFailRetryCount = 0; // 重置计数器
+                                stopStreamingAndRelease();
+                                stopSelf();
+                            }
                         }
                     }
             );

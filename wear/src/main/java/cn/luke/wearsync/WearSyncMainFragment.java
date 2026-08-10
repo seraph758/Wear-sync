@@ -75,9 +75,10 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
             notificationPref.setOnPreferenceClickListener(preference -> {
                 WearLog.d(TAG, "🔔 [交互] 点击通知权限，展示 ADB 授权指引");
                 String packageName = requireContext().getPackageName();
-                String adbCommand = "adb shell pm grant " + packageName
-                        + " android.permission.BIND_NOTIFICATION_LISTENER_SERVICE";
-
+                // ✅ 修正：使用 cmd notification allow_listener + 完整组件名
+                String componentName = packageName + "/cn.luke.wearsync.WearSyncNotificationService";
+                String adbCommand = "adb shell cmd notification allow_listener " + componentName;
+        
                 new AlertDialog.Builder(requireContext())
                         .setTitle("🔔 通知权限需手动授予")
                         .setMessage("WearOS 不支持通过界面授权此权限。\n\n"
@@ -89,6 +90,7 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
                 return true;
             });
         }
+
 
         // 📸 3. 远端相机控制
         if (cameraPref != null) {
@@ -134,17 +136,26 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
         Context ctx = getContext();
         if (ctx == null) return;
 
-        // --- 1. 通知使用权状态 ---
+         // --- 1. 通知使用权状态 ---
         if (notificationPref != null) {
-            NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
-            // areNotificationsEnabled() 检测通知使用权
-            // ⚠️ 注意：部分 WearOS 版本此 API 可能始终返回 true，实际生效仍依赖 ADB 授权
-            boolean hasAccess = nm != null && nm.areNotificationsEnabled();
+            boolean hasAccess = false;
+            try {
+                // ✅ 修正：直接查询 enabled_notification_listeners 白名单
+                String enabledListeners = Settings.Secure.getString(
+                        ctx.getContentResolver(), "enabled_notification_listeners");
+                if (enabledListeners != null) {
+                    hasAccess = enabledListeners.contains(ctx.getPackageName());
+                }
+            } catch (Exception e) {
+                WearLog.e(TAG, "检查通知权限时发生异常", e);
+            }
+        
             notificationPref.setSummary(hasAccess
                     ? getString(R.string.dnd_granted)   // "已授权"
                     : getString(R.string.dnd_denied));  // "未授权 · 点击获取ADB命令"
             WearLog.d(TAG, "🔔 [通知权限] " + (hasAccess ? "已授权" : "未授权"));
         }
+
 
         // --- 2. 无障碍服务状态（双重验证）---
         if (accPref != null) {
