@@ -72,8 +72,6 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
     private val uiLogDebugSwitch = mutableStateOf(false)
     private val uiWearLogDebugSwitch = mutableStateOf(false)
     private val fileTransferStatus = mutableStateOf("等待选择文件...")
-    // ✅ 从全局 AppState 收集状态
-    val isServiceRunning by AppState.isServiceRunning.collectAsState()
 
     private val alarmPickerLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
@@ -201,21 +199,19 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
     uiLogDebugSwitch.value = sp.getBoolean("phone_log_debug_visible", false)
     uiWearLogDebugSwitch.value = sp.getBoolean("wear_log_debug_visible", false)
 
-    // ✅ 1. 将所有 collectAsState() 调用移到 setContent 外部
-    val watchWearStateVal by watchWearState.collectAsState()
-    val isConnectedVal by isConnectedState.collectAsState()
-    val isNotificationAllowedVal by isNotificationAllowedState.collectAsState()
-    val isCameraAllowedVal by isCameraAllowedState.collectAsState()
-    val fileTransferStatusVal by fileTransferStatus.collectAsState()
-    val uiLogDebugVal by uiLogDebugSwitch.collectAsState()
-    val uiWearLogDebugVal by uiWearLogDebugSwitch.collectAsState()
-    val isServiceRunningVal by AppState.isServiceRunning.collectAsState()
+    // 将 State/MutableState 的快照在 setContent 外读取，避免在非 @Composable 环境调用 collectAsState
+    val watchWearStateVal = watchWearState.value
+    val isConnectedVal = isConnectedState.value
+    val isNotificationAllowedVal = isNotificationAllowedState.value
+    val isCameraAllowedVal = isCameraAllowedState.value
+    val fileTransferStatusVal = fileTransferStatus.value
+    val uiLogDebugVal = uiLogDebugSwitch.value
+    val uiWearLogDebugVal = uiWearLogDebugSwitch.value
+    val isServiceRunningVal = AppState.isServiceRunning.value
 
     return ComposeView(requireContext()).apply {
         setContent {
-            // ✅ 2. 在这里直接使用上面已经收集好的状态变量
-            // 删除这一行：val isServiceRunningVal by AppState.isServiceRunning.collectAsState()
-            
+            // 在这里直接使用上面已经收集好的状态变量
             var mask by remember { mutableIntStateOf(sp.getInt("KEY_MASK", 15)) }
             var screenPullDownInterval by remember { mutableIntStateOf(sp.getInt("screen_pull_down_interval", 500)) }
             var selectedAlarmName by remember {
@@ -332,7 +328,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                         }
                     }
                 },
- 
+                
 
                     onCameraForceStop = {
                         requireContext().startService(Intent(requireContext(), PhoneSyncCameraService::class.java)
@@ -414,14 +410,12 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
             startActivityForResult(intent, 1001)
         } else {
             val intent = Intent(context, PhoneLogFloatingService::class.java)
-            // ✅ 使用全局状态来判断，而不是 Service 的静态变量
+            // 使用全局状态来判断，而不是 Service 的静态变量
             if (AppState.isServiceRunning.value) {
                 context.stopService(intent)
-                // ❌ 删除: _isServiceRunning.value = false
                 // Service.onDestroy() 会自动调用 AppState.setServiceRunning(false)
             } else {
                 context.startService(intent)
-                // ❌ 删除: _isServiceRunning.value = true
                 // Service.onCreate() 会自动调用 AppState.setServiceRunning(true)
             }
         }
@@ -522,7 +516,6 @@ fun PhoneSyncMainScreen(
         val sleepOn = (mask and 4) != 0
         val powerOn = (mask and 8) != 0
         
-
 
         Surface(
             modifier = Modifier.fillMaxSize(),
@@ -914,7 +907,7 @@ fun PhoneSyncMainScreen(
                             Column(modifier = Modifier.padding(14.dp)) {
                                 Text(
                                     text = if (isConnected) "骨干网络畅通。正在通过 GMS Wearable CapabilityClient 实时监听手表节点的动态响应。"
-                                    else "未检测到处于活动状态的手表节点。请检查手表是否开机、蓝牙是否连接、或 Wear OS 专属配对 App 是否在后台运行。",
+                                    else "未检测到处于活动状态的手表节点。请检查手表是否开机、蓝牙是否连接、或 Wear OS 专属配对 App 是否在后台运行。"[...]
                                     fontSize = 13.sp, color = textColor, lineHeight = 18.sp
                                 )
                             }
@@ -929,10 +922,10 @@ fun PhoneSyncMainScreen(
                                     Column(modifier = Modifier.padding(10.dp).fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
                                         Column {
                                             Text("通知接管", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = textColor)
-                                            Text(text = if (isNotificationAllowed) "核心状态已就绪" else "拦截状态必备", fontSize = 11.sp, color = if (isNotificationAllowed) Color(0xFF4CAF50) else Color(0xFFF44336))
+                                            Text(text = if (isNotificationAllowed) "核心状态已就绪" else "拦截状态必备", fontSize = 11.sp, color = if (isNotificationAllowed) Color(0x[...]
                                         }
                                         if (!isNotificationAllowed) {
-                                            Button(onClick = onNotificationPermissionClick, contentPadding = PaddingValues(horizontal = 6.dp), modifier = Modifier.align(Alignment.End).height(26.dp)) {
+                                            Button(onClick = onNotificationPermissionClick, contentPadding = PaddingValues(horizontal = 6.dp), modifier = Modifier.align(Alignment.End).height(26.d[...]
                                                 Text("去授权", fontSize = 10.sp)
                                             }
                                         } else {
@@ -945,7 +938,7 @@ fun PhoneSyncMainScreen(
                                     Column(modifier = Modifier.padding(10.dp).fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
                                         Column {
                                             Text("相机硬件", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = textColor)
-                                            Text(text = if (isCameraAllowed) "取景功能正常" else "取景控制必备", fontSize = 11.sp, color = if (isCameraAllowed) Color(0xFF4CAF50) else Color(0xFFF44336))
+                                            Text(text = if (isCameraAllowed) "取景功能正常" else "取景控制必备", fontSize = 11.sp, color = if (isCameraAllowed) Color(0xFF4CAF50) else [...]
                                         }
                                         if (!isCameraAllowed) {
                                             Button(onClick = onCameraPermissionClick, contentPadding = PaddingValues(horizontal = 6.dp), modifier = Modifier.align(Alignment.End).height(26.dp)) {
@@ -983,7 +976,7 @@ fun PhoneSyncMainScreen(
                                 Text(
                                     text = fileTransferStatus,
                                     fontSize = 12.sp,
-                                    color = if (fileTransferStatus.contains("成功")) Color(0xFF4CAF50) else if (fileTransferStatus.contains("失败") || fileTransferStatus.contains("错误")) Color(0xFFF44336) else subTextColor,
+                                    color = if (fileTransferStatus.contains("成功")) Color(0xFF4CAF50) else if (fileTransferStatus.contains("失败") || fileTransferStatus.contains("错误")) C[...]
                                     modifier = Modifier.fillMaxWidth()
                                 )
                             }
@@ -998,82 +991,4 @@ fun PhoneSyncMainScreen(
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(containerColor = cardBgColor)
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Column {
-                                Text("震动反馈设置", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = textColor)
-                                Text("自定义手表端提醒震动波形与频率", fontSize = 12.sp, color = subTextColor)
-                            }
-                            Text(text = if (isVibrationExpanded) "▲" else "▼", fontSize = 14.sp, color = subTextColor)
-                        }
-                        AnimatedVisibility(visible = isVibrationExpanded) {
-                            Column(modifier = Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                HorizontalDivider(color = dividerColor)
-                                Text("震动时长: ${patternOnDuration}ms", fontSize = 13.sp, color = textColor)
-                                Slider(value = patternOnDuration.toFloat(), onValueChange = { patternOnDuration = it.toInt() }, valueRange = 100f..2000f, steps = 19, modifier = Modifier.fillMaxWidth())
-                                Text("间隔时长: ${patternOffDuration}ms", fontSize = 13.sp, color = textColor)
-                                Slider(value = patternOffDuration.toFloat(), onValueChange = { patternOffDuration = it.toInt() }, valueRange = 100f..1000f, steps = 8, modifier = Modifier.fillMaxWidth())
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text("循环震动", fontSize = 13.sp, color = textColor)
-                                    Spacer(Modifier.weight(1f))
-                                    Switch(checked = repeatIndex == 0, onCheckedChange = { repeatIndex = if (it) 0 else -1 })
-                                }
-                                HorizontalDivider(color = dividerColor)
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    OutlinedButton(
-                                        onClick = { onVibrationCommand("preview", patternOnDuration, patternOffDuration, repeatIndex) },
-                                        modifier = Modifier.weight(1f)
-                                    ) { Text("📳 预览") }
-                                    Button(
-                                        modifier = Modifier.weight(1f),
-                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
-                                        onClick = { onVibrationSave(patternOnDuration, patternOffDuration, repeatIndex) }
-                                    ) { Text("💾 保存") }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun PhoneSyncMainScreenPreview() {
-    PhoneSyncMainScreen(
-        watchWearState = "🟢 已佩戴 (On-Body)",
-        isConnected = true,
-        isNotificationAllowed = true,
-        isCameraAllowed = true,
-        isServiceRunning = false, // ✅ 补上缺失的参数，预览时可设为 false 或 true
-        fileTransferStatus = "等待选择文件...",
-        uiLogDebug = true,
-        uiWearLogDebug = false,
-        screenPullDownInterval = 500,
-        mask = 15,
-        selectedAlarmName = "Google 时钟",
-        selectedAlarmPkg = "com.google.android.deskclock",
-        dismissKeyText = "停止",
-        snoozeKeyText = "延后",
-        isAlarmMasterEnabled = true,
-        onPullDownIntervalChange = {},
-        onDndMaskUpdate = { _, _, _, _ -> },
-        onVibrationCommand = { _, _, _, _ -> },
-        onVibrationSave = { _, _, _ -> },
-        onAlarmSourceSwitch = {},
-        onAlarmMasterToggle = {},
-        onDismissKeyChange = {},
-        onSnoozeKeyChange = {},
-        onAlarmTest = {},
-        onCameraCall = {},
-        onCameraForceStop = {},
-        onPhoneLogToggle = {},
-        onWearLogToggle = {},
-        onFloatingLogClick = {},
-        onNotificationPermissionClick = {},
-        onCameraPermissionClick = {},
-        onFileTransferClick = {}
-    )
-}
+[...]
