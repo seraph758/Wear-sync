@@ -9,19 +9,29 @@ import android.service.notification.NotificationListenerService;
 public class WearSyncNotificationService extends NotificationListenerService {
     private static final String TAG = "WearSync_WearNotification";
 
-    // 用于防止内部更新导致的循环触发
     public static volatile boolean isInternalUpdate = false;
-    public static long lastInternalUpdateTime = 0;
+    public static long lastInternalUpdateTime = 0; // 🔑 善用這個時間戳
 
     @Override
     public void onInterruptionFilterChanged(int interruptionFilter) {
         super.onInterruptionFilterChanged(interruptionFilter);
+
+        // 🛡️ 第一重防護：直接檢查布林值鎖
         if (isInternalUpdate) {
-            WearLog.d(TAG, "🔒 内部更新，忽略此次 DND 变化");
+            WearLog.d(TAG, "🔒 [防回环] 内部更新标记中，忽略 DND 变化: " + interruptionFilter);
             return;
         }
-        WearLog.d(TAG, "📡 检测到本地 DND 变化: " + interruptionFilter);
-        // ✅ 直接传回调参数，不要重新读系统值
+
+        // 🛡️ 第二重防護：時間戳防抖 (如果距離上次內部更新不足 5 秒，依然視為內部觸發)
+        long timeDiff = System.currentTimeMillis() - lastInternalUpdateTime;
+        if (timeDiff < 5000) {
+            WearLog.d(TAG, "🔒 [防回环] 距离上次内部同步仅 " + timeDiff + "ms，忽略本次 DND 变化");
+            return;
+        }
+
+        WearLog.d(TAG, "📡 [手动触发] 检测到本地 DND 变化: " + interruptionFilter + "，发送逆向同步");
+        
+        // ✅ 安全發送逆向同步
         WearSyncCommManager.sendDndReverseSync(this, interruptionFilter);
     }
 }

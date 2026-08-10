@@ -14,8 +14,6 @@ import com.google.android.gms.wearable.MessageEvent;
 import com.google.android.gms.wearable.Wearable;
 import com.google.android.gms.wearable.WearableListenerService;
 import org.json.JSONObject;
-import java.io.DataInputStream;
-import java.io.EOFException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
@@ -27,7 +25,6 @@ public class WearSyncListenerService extends WearableListenerService {
     // --- 路径常量 ---
     private static final String UNIVERSAL_SYNC_PATH = "/wear-universal-sync";
     private static final String DATA_CHANNEL_BASE_PATH = "/wear_data_channel";
-    private static final String CAMERA_PREVIEW_STREAM_PATH = DATA_CHANNEL_BASE_PATH + "/camera";
     private static final String FILE_TRANSFER_CHANNEL_PATH = "/wear-sync/file-transfer";
     private static final String FILE_TRANSFER_STATUS_PATH = "/file-transfer-status";
 
@@ -41,7 +38,6 @@ public class WearSyncListenerService extends WearableListenerService {
 
     @Override
     public void onMessageReceived(@NonNull MessageEvent messageEvent) {
-        // 【1. 入口检查】
         WearLog.d(TAG, "【MSG-001】收到消息. Path: " + messageEvent.getPath() + " | Source: " + messageEvent.getSourceNodeId());
 
         if (!UNIVERSAL_SYNC_PATH.equalsIgnoreCase(messageEvent.getPath())) {
@@ -62,8 +58,6 @@ public class WearSyncListenerService extends WearableListenerService {
             String type = json.optString("type", "");
             String action = json.optString("action", "");
 
-
-            // 【2. 防循环】
             if ("wear".equalsIgnoreCase(sender)) {
                 WearLog.d(TAG, "【MSG-004】检测到来自手表的消息，防止循环，忽略");
                 return;
@@ -71,39 +65,26 @@ public class WearSyncListenerService extends WearableListenerService {
 
             WearLog.d(TAG, "【MSG-005】解析指令成功. Type: [" + type + "], Action: [" + action + "]");
 
-            // --- 模块分发 ---
-
-            // 【3. 震动模块】
             if ("vibration".equalsIgnoreCase(type)) {
                 handleVibrationCommand(json);
                 return;
             }
-
-            // 【4. DND模块】
             if ("dnd".equalsIgnoreCase(type)) {
                 handleDndCommand(json);
                 return;
             }
-
-            // 【5. 闹钟模块】
             if ("alarm".equalsIgnoreCase(type)) {
                 handleAlarmCommand(json, messageEvent.getSourceNodeId());
                 return;
             }
-
-            // 【6. 相机模块】
             if ("camera_control".equalsIgnoreCase(type)) {
                 handleCameraCommand(json, messageEvent.getSourceNodeId());
                 return;
             }
-
-            // 【7. 日志模块】
             if ("wearlog".equalsIgnoreCase(type)) {
                 handleWearLogCommand(json, messageEvent.getSourceNodeId());
                 return;
             }
-
-            // 【8. 文件传输模块】
             if ("file_transfer".equalsIgnoreCase(type)) {
                 handleFileTransferCommand(json, messageEvent.getSourceNodeId());
                 return;
@@ -115,8 +96,6 @@ public class WearSyncListenerService extends WearableListenerService {
             WearLog.e(TAG, "【MSG-ERR】解析或处理消息时崩溃", e);
         }
     }
-
-    // --- 模块处理函数 ---
 
     private void handleVibrationCommand(JSONObject json) {
         WearLog.d(TAG, "【VIB-001】开始处理震动指令");
@@ -158,24 +137,20 @@ public class WearSyncListenerService extends WearableListenerService {
             return;
         }
 
-        // 🔑 核心比对：获取手表当前系统原始值
         NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
-        int currentWatchFilter = nm.getCurrentInterruptionFilter();
+        int currentWatchFilter = (nm != null) ? nm.getCurrentInterruptionFilter() : -1;
+
+        WearLog.d(TAG, "🔍 [DND状态检查] 手机目标值=" + dndStatePhone + " 手表当前值=" + currentWatchFilter);
 
         if (dndStatePhone == currentWatchFilter) {
-            WearLog.d(TAG, "✅ [DND一致] 状态=" + currentWatchFilter + "，跳过系统变更");
-            // 状态一致，不需要改 DND，但如果有其他联动（如震动），仍可继续往下走
-        } else {
-            WearLog.d(TAG, "⚡ [DND变化] 手表=" + currentWatchFilter + " → 手机=" + dndStatePhone);
-            // 状态不同才真正去设置系统 DND
-            if (nm.isNotificationPolicyAccessGranted()) {
-                nm.setInterruptionFilter(dndStatePhone);
-            }
+            WearLog.d(TAG, "✅ [DND一致] 状态相同，跳过系统变更与子联动，直接 Return");
+            return; 
         }
 
-        // 其他联动逻辑保持不变
         int pullDownDelayMs = json.optInt("pullDownDelayMs", 500);
         WearSyncDndManager.updateConfigs(json);
+
+        WearLog.d(TAG, "⚡ [DND变化] 手表=" + currentWatchFilter + " → 手机=" + dndStatePhone + "，准备执行变更");
         WearSyncDndManager.executeDndSync(this, dndStatePhone, pullDownDelayMs);
     }
 
@@ -185,15 +160,22 @@ public class WearSyncListenerService extends WearableListenerService {
 
         if ("FORCE_STOP_WEAR_ALARM".equalsIgnoreCase(action) || "FORCE_STOP".equalsIgnoreCase(action)) {
             WearLog.d(TAG, "【ALM-002】收到强制停止指令");
-            WearAlarmActivity.handleIncomingCommand(this, json);
+            WearAlarmActivity activity = WearAlarmActivity.getInstance();
+            if (activity != null) {
+                activity.runOnUiThread(() -> {
+                    activity.cleanExit();
+                    WearLog.d(TAG, "【ALM-003】已在主线程关闭闹钟界面");
+                });
+            } else {
+                WearLog.d(TAG, "【ALM-004】闹钟界面未运行，无需关闭");
+            }
         } else {
-            WearLog.d(TAG, "【ALM-003】准备启动闹钟界面. Action: " + action);
+            WearLog.d(TAG, "【ALM-005】准备启动闹钟界面. Action: " + action);
             Intent alarmIntent = new Intent(this, WearAlarmActivity.class);
             alarmIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
             alarmIntent.putExtra("raw_alarm_json", json.toString());
             alarmIntent.putExtra("alarm_action", action);
             startActivity(alarmIntent);
-            WearAlarmActivity.handleIncomingCommand(this, json);
         }
     }
 
@@ -201,41 +183,29 @@ public class WearSyncListenerService extends WearableListenerService {
         WearLog.d(TAG, "【CAM-001】开始处理相机指令");
         String action = json.optString("action", "");
 
-        if ("CAMERA_HANDSHAKE".equalsIgnoreCase(action)) {
-            WearLog.d(TAG, "【CAM-002】收到相机握手信令");
-            return;
-        }
-        if ("STREAM_START".equalsIgnoreCase(action)) {
-            WearLog.d(TAG, "【CAM-003】收到视频流启动信令");
+        if ("CAMERA_HANDSHAKE".equalsIgnoreCase(action) || "STREAM_START".equalsIgnoreCase(action)) {
             return;
         }
         if ("STOP_CAMERA".equalsIgnoreCase(action) || "FORCE_QUIT_CAMERA".equalsIgnoreCase(action)) {
-            WearLog.d(TAG, "【CAM-004】收到停止相机指令，准备强制关闭");
             WearCameraActivity.forceClose();
             return;
         }
         if ("open_phone_camera".equalsIgnoreCase(action)) {
-            WearLog.d(TAG, "【CAM-005】收到开启手机相机指令，准备启动预览界面");
             Intent cameraIntent = new Intent(this, WearCameraActivity.class);
             cameraIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivity(cameraIntent);
             return;
         }
-        WearLog.w(TAG, "【CAM-007】未知的相机指令Action: " + action);
     }
 
     private void handleWearLogCommand(JSONObject json, String sourceNodeId) {
         boolean wearDebug = json.optBoolean("wear_log_debug", true);
-        WearLog.d(TAG, "【LOG-001】收到远程日志控制指令. 状态: " + wearDebug);
         WearLog.DEBUG = wearDebug;
 
         if (wearDebug) {
-            WearLog.d(TAG, "【LOG-002】日志已开启，准备建立日志通道");
             String logPath = DATA_CHANNEL_BASE_PATH + "/log";
             openLogChannelToPhone(sourceNodeId, logPath);
-            // 发送握手信令...
         } else {
-            WearLog.d(TAG, "【LOG-003】日志已关闭，正在清理资源");
             if (mLogChannel != null) {
                 Wearable.getChannelClient(this).close(mLogChannel)
                         .addOnSuccessListener(_ -> mLogChannel = null)
@@ -251,7 +221,6 @@ public class WearSyncListenerService extends WearableListenerService {
             String fileName = json.optString("fileName", "unknown.apk");
             long fileSize = json.optLong("fileSize", 0);
             WearLog.i(TAG, "【APK-002】准备接收文件: " + fileName + " (" + fileSize + "B)");
-            // 回复ACK...
             try {
                 JSONObject ack = new JSONObject();
                 ack.put("sender", "wear");
@@ -275,12 +244,8 @@ public class WearSyncListenerService extends WearableListenerService {
         WearLog.d(TAG, "【CHN-001】通道已打开. Path: " + path);
         super.onChannelOpened(channel);
 
-        if (CAMERA_PREVIEW_STREAM_PATH.equals(path)) {
-            WearLog.d(TAG, "【CHN-002】匹配到相机流通道，开始读取");
-            readH264ChannelStream(channel);
-        } else if (path.startsWith(FILE_TRANSFER_CHANNEL_PATH)) {
+        if (path.startsWith(FILE_TRANSFER_CHANNEL_PATH)) {
             WearLog.i(TAG, "【CHN-003】匹配到文件传输通道，准备接收");
-            // 解析路径中的元数据
             String pathData = path.substring(FILE_TRANSFER_CHANNEL_PATH.length() + 1);
             long expectedSize = -1L;
             String fileName;
@@ -298,6 +263,8 @@ public class WearSyncListenerService extends WearableListenerService {
             final String finalFileName = fileName;
             final long finalExpectedSize = expectedSize;
             final String nodeId = channel.getNodeId();
+            
+            // 启动独立线程接收
             new Thread(() -> receiveFileFromChannel(channel, finalFileName, nodeId, finalExpectedSize)).start();
         } else {
             WearLog.d(TAG, "【CHN-004】忽略未知通道: " + path);
@@ -306,79 +273,57 @@ public class WearSyncListenerService extends WearableListenerService {
 
     @Override
     public void onChannelClosed(@NonNull ChannelClient.Channel channel, int closeReason, int appSpecificErrorCode) {
-        WearLog.d(TAG, "【CHN-005】通道已关闭. Path: " + channel.getPath() + " | Reason: " + closeReason);
+        WearLog.d(TAG, "【CHN-005】通道已关闭. Path: " + channel.getPath() + " | Reason: " + closeReason + " | AppErrorCode: " + appSpecificErrorCode);
     }
 
-    // --- 核心读取方法 ---
-
-    private void readH264ChannelStream(ChannelClient.Channel channel) {
-        new Thread(() -> {
-            WearLog.d(TAG, "【STR-001】启动H264读取线程");
-            try (DataInputStream dis = new DataInputStream(Tasks.await(Wearable.getChannelClient(this).getInputStream(channel)))) {
-                WearLog.d(TAG, "【STR-002】数据流准备就绪，开始循环读取");
-                long totalBytes = 0;
-                int frameCount = 0;
-                while (!Thread.currentThread().isInterrupted()) {
-                    int frameLen = dis.readInt();
-                    if (frameLen <= 0 || frameLen > 4 * 1024 * 1024) {
-                        WearLog.e(TAG, "【STR-ERR】异常帧长度: " + frameLen + "，断开连接");
-                        break;
-                    }
-                    dis.readLong(); // timestamp
-                    dis.readInt();  // flags
-                    byte[] h264Data = new byte[frameLen];
-                    dis.readFully(h264Data);
-
-                    totalBytes += frameLen + 16;
-                    frameCount++;
-
-                    if (frameCount == 1) WearLog.d(TAG, "【STR-003】收到第一帧. Len: " + frameLen);
-                    if (frameCount % 50 == 0) WearLog.d(TAG, "【STR-004】流状态. 帧数: " + frameCount + " | 总字节: " + totalBytes);
-
-                    WearCameraActivity activity = WearCameraActivity.sActivityRef.get();
-                    if (activity != null) {
-                        activity.feedH264Data(h264Data);
-                    } else {
-                        WearLog.w(TAG, "【STR-WARN】Activity为空，丢弃帧");
-                    }
-                }
-            } catch (EOFException e) {
-                WearLog.d(TAG, "【STR-005】流正常结束 (EOF)");
-            } catch (Exception e) {
-                WearLog.e(TAG, "【STR-ERR】读取H264流时发生错误", e);
-            }
-        }, "CameraStreamReader").start();
-    }
-
-    // --- 文件接收核心方法 ---
+    // --- 文件接收核心方法（已增强日志） ---
     private void receiveFileFromChannel(ChannelClient.Channel channel, String fileName, String nodeId, long expectedSize) {
         WearLog.i(TAG, "【FIL-001】开始接收文件: " + fileName + " (期望大小: " + expectedSize + "B)");
+        
         Uri collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
         ContentValues values = new ContentValues();
         values.put(MediaStore.Downloads.DISPLAY_NAME, fileName);
         values.put(MediaStore.Downloads.MIME_TYPE, "application/vnd.android.package-archive");
         values.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/Received");
         
-        Uri fileUri = getContentResolver().insert(collection, values);
+        Uri fileUri = null;
+        try {
+            fileUri = getContentResolver().insert(collection, values);
+        } catch (Exception e) {
+            WearLog.e(TAG, "【FIL-ERR】MediaStore 插入异常: " + e.getMessage(), e);
+        }
+
         if (fileUri == null) {
-            WearLog.e(TAG, "【FIL-ERR】无法创建文件 Uri");
+            WearLog.e(TAG, "【FIL-ERR】无法创建文件 Uri，返回值为空");
             sendFileTransferStatus(nodeId, "error:" + fileName);
             return;
         }
+        WearLog.d(TAG, "【FIL-001-1】成功创建文件 Uri: " + fileUri);
 
         try (InputStream inputStream = Tasks.await(Wearable.getChannelClient(this).getInputStream(channel));
              OutputStream outputStream = getContentResolver().openOutputStream(fileUri)) {
             
-            if (outputStream == null) throw new Exception("无法打开输出流");
+            if (outputStream == null) {
+                throw new Exception("无法打开输出流 OutputStream 为空");
+            }
+            WearLog.d(TAG, "【FIL-001-2】输入流与输出流已成功建立，开始循环读取...");
 
             byte[] buffer = new byte[32768];
             long bytesReceived = 0L;
             int bytesRead;
+            int packetCount = 0;
+
             while ((bytesRead = inputStream.read(buffer)) != -1) {
                 outputStream.write(buffer, 0, bytesRead);
                 bytesReceived += bytesRead;
+                packetCount++;
+                // 每接收约 500KB 打印一次进度日志，防止日志刷屏但能看清是否在推进
+                if (packetCount % 16 == 0) {
+                    WearLog.d(TAG, "【FIL-READ】已接收字节数: " + bytesReceived + " / " + expectedSize);
+                }
             }
             outputStream.flush();
+            WearLog.d(TAG, "【FIL-001-3】循环读取结束，总共接收: " + bytesReceived + "B");
 
             if (expectedSize != -1L && bytesReceived != expectedSize) {
                 throw new Exception("文件不完整: 期望 " + expectedSize + "B, 实际 " + bytesReceived + "B");
@@ -387,8 +332,15 @@ public class WearSyncListenerService extends WearableListenerService {
             sendFileTransferStatus(nodeId, "success:" + fileName);
 
         } catch (Exception e) {
-            WearLog.e(TAG, "【FIL-ERR】文件接收失败", e);
-            getContentResolver().delete(fileUri, null);
+            WearLog.e(TAG, "【FIL-ERR】文件接收过程中发生异常", e);
+            if (fileUri != null) {
+                try {
+                    getContentResolver().delete(fileUri, null);
+                    WearLog.d(TAG, "【FIL-CLEAN】已清理损坏的目标文件");
+                } catch (Exception ex) {
+                    WearLog.w(TAG, "【FIL-WARN】清理文件失败: " + ex.getMessage());
+                }
+            }
             sendFileTransferStatus(nodeId, "error:" + fileName);
         } finally {
             try {

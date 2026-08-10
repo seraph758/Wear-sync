@@ -95,13 +95,15 @@ dependencies {
     implementation 'androidx.wear:wear:1.3.0'
     implementation 'androidx.wear:wear-remote-interactions:1.2.0'
 
-    // ==================== AndroidX 基础组件（纯 Java 优化版） ====================
+    // ==================== AndroidX 基础组件 ====================
     implementation 'androidx.appcompat:appcompat:1.7.1'
     implementation 'androidx.constraintlayout:constraintlayout:2.2.1'
-    
-    // ✅ 优化：移除了 -ktx 后缀，改为纯 Java 依赖，防止把 Kotlin 运行时打包进手表导致安装包激增
-    implementation 'androidx.preference:preference:1.2.1' 
+    implementation 'androidx.preference:preference:1.2.1'
     implementation 'androidx.core:core:1.16.0'
+
+    // ✅ 【新增】显式声明 activity，确保 OnBackPressedCallback 可用
+    // 纯 Java 版，不带 -ktx，不会引入 Kotlin 运行时
+    implementation 'androidx.activity:activity:1.9.3'
 
     // ==================== Wearable 通讯底层 ====================
     implementation 'com.google.android.gms:play-services-wearable:20.0.1'
@@ -109,12 +111,12 @@ dependencies {
     // ==================== LocalBroadcastManager ====================
     implementation 'androidx.localbroadcastmanager:localbroadcastmanager:1.1.0'
 
+    // ==================== Material ====================
+    implementation 'com.google.android.material:material:1.9.0'
+
     // ==================== 测试依赖 ====================
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.2.1'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.6.1'
-    
-    // ✅ 新增：解决 Theme.MaterialComponents.NoActionBar not found
-    implementation 'com.google.android.material:material:1.9.0'
-
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3"
 }

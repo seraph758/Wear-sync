@@ -25,7 +25,6 @@ public class PhoneSyncListenerService extends WearableListenerService {
     private static final String WEAR_LOG_CHANNEL_PATH = "/wear_data_channel/log";
 
     private static final Executor REMOTE_EXECUTOR = Executors.newSingleThreadExecutor();
-    public static boolean isInternalUpdate = false;
     private static final ExecutorService MESSAGE_EXECUTOR = Executors.newSingleThreadExecutor();
 
     // ============================================================

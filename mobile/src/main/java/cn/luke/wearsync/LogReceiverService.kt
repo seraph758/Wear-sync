@@ -34,7 +34,7 @@ class LogReceiverService : WearableListenerService() {
                     inputStream = getInputStreamSuspend(channel)
                     PhoneLog.d("LogReceiver", "🟢 成功获取输入流")
 
-                    val buffer = ByteArray(4096)
+                    val buffer = ByteArray(32768)
                     // ✅ 修复3: Kotlin 要求变量必须初始化
                     var readBytes: Int = -1
 

@@ -19,7 +19,7 @@ public class WearSyncBedtimeAutomationActivity extends androidx.activity.Compone
         screenManager = new WearSyncScreenManager(this);
         screenManager.bind(this);
         screenManager.wakeScreen();
-        screenManager.acquireCpu(8000);
+        screenManager.acquireCpu(5000);
 
         // ✅ 直接从 Intent 读取本次下发的新鲜数值，不读本地 SP
         int pullDownDelay = getIntent().getIntExtra(EXTRA_PULL_DOWN_DELAY, 500);

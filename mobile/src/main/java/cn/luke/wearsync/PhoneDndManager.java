@@ -60,7 +60,7 @@ public class PhoneDndManager {
             }
 
             // 🔑 Step 3: 标记内部更新，防止回环
-            PhoneSyncListenerService.isInternalUpdate = true;
+            PhoneSyncNotificationService.isInternalUpdate = true;
 
             // 🔑 Step 4: 直接设置目标值（无需任何映射）
             nm.setInterruptionFilter(targetFilter);
@@ -68,7 +68,7 @@ public class PhoneDndManager {
 
             // 🔑 Step 5: 延迟重置标记
             new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                PhoneSyncListenerService.isInternalUpdate = false;
+                PhoneSyncNotificationService.isInternalUpdate = false;
                 PhoneLog.d(TAG, "🔓 逆向同步标记已重置");
             }, 5000);
 
@@ -112,7 +112,6 @@ public class PhoneDndManager {
                 json.put("mask", currentMask);
                 json.put("pullDownDelayMs", delay);
                 json.put("timestamp", System.currentTimeMillis());
-                json.put("source", "phone_dnd_change");
 
                 byte[] data = json.toString().getBytes(StandardCharsets.UTF_8);
                 String nodeId = WearSyncState.getNodeId(context);

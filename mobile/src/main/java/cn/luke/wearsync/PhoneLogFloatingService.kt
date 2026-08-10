@@ -68,10 +68,21 @@ class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
     override val lifecycle: Lifecycle get() = lifecycleRegistry
 
     override fun onBind(intent: Intent?): IBinder? = null
+    // ✅ 第一步：添加伴生对象和状态变量
+    companion object {
+        // 使用 @Volatile 保证多线程下的可见性
+        @Volatile
+        var isRunning = false
+            private set // 只允许在类内部修改
+    }
+
 
     override fun onCreate() {
+        
+       
         controller.performRestore(null)
         super.onCreate()
+        AppState.setServiceRunning(true)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
 
@@ -269,6 +280,7 @@ class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
                                 }
                                 Button(
                                     onClick = {
+                                       AppState.setServiceRunning(false)
                                         startActivity(Intent(this@PhoneLogFloatingService, PhoneLogActivity::class.java).apply {
                                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
                                         })
@@ -292,7 +304,9 @@ class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
                                     Text("保存", fontSize = 11.sp)
                                 }
                                 Button(
-                                    onClick = { stopSelf() },
+                                    onClick = { 
+                                       AppState.setServiceRunning(false)
+                                       stopSelf() },
                                     contentPadding = PaddingValues(horizontal = 10.dp),
                                     modifier = Modifier.height(28.dp),
                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF3B30))
@@ -312,6 +326,7 @@ class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
 
     override fun onDestroy() {
         super.onDestroy()
+        AppState.setServiceRunning(false)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
         floatingView?.let {
             try {

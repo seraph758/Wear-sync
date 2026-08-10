@@ -9,98 +9,148 @@ import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.WindowManager;
 import android.widget.Button;
+
 import androidx.activity.ComponentActivity;
 import androidx.activity.OnBackPressedCallback;
+
+import com.google.android.gms.tasks.Tasks;
+import com.google.android.gms.wearable.ChannelClient;
+import com.google.android.gms.wearable.Wearable;
+
+import java.io.DataInputStream;
+import java.io.InputStream;
 import java.lang.ref.WeakReference;
 import java.nio.ByteBuffer;
+import java.util.concurrent.LinkedBlockingQueue;
 
 public class WearCameraActivity extends ComponentActivity implements SurfaceHolder.Callback {
     private static final String TAG = "WearSync_WearCameraUI";
-
-    // 弱引用持有当前 Activity 实例，防止内存泄漏
+    
     public static WeakReference<WearCameraActivity> sActivityRef = new WeakReference<>(null);
 
     private SurfaceView surfaceView;
     private MediaCodec mDecoder;
-    private boolean isDecoderRunning = false;
-    private boolean isUserExiting = false;
-    private PowerManager.WakeLock wakeLock;
-    private long activityCreateTime;
+    private volatile boolean isDecoderRunning = false;
+    private volatile boolean isUserExiting = false;
+    private WearSyncScreenManager screenManager;
     private boolean isSurfaceReady = false;
-    private final java.util.concurrent.ConcurrentLinkedQueue<byte[]> frameQueue = new java.util.concurrent.ConcurrentLinkedQueue<>();
+    private final LinkedBlockingQueue<byte[]> frameQueue = new LinkedBlockingQueue<>(15);
     private Thread renderThread;
+
+    private ChannelClient.ChannelCallback mChannelListener;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        activityCreateTime = System.currentTimeMillis();
-        WearLog.d(TAG, "🟢 [生命周期] onCreate 啟動時間戳: " + activityCreateTime);
+        WearLog.d(TAG, "🟢 [生命周期] WearCameraActivity onCreate 启动");
+        
         sActivityRef = new WeakReference<>(this);
-
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
-        if (pm != null) {
-            wakeLock = pm.newWakeLock(PowerManager.FULL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP, "WearSync:CameraWakeLock");
-            wakeLock.acquire(60 * 1000L);
-            WearLog.d(TAG, "🔋 WakeLock acquired for 1 mins");
-        }
-
+        
+        screenManager = new WearSyncScreenManager(this);
+        screenManager.bind(this);
+        
+        // 🚀 唤醒屏幕并保持常亮
+        screenManager.wakeScreen();
+        screenManager.acquireCpu(3 * 60 * 1000L); // 保持 CPU 运转
+        
         setContentView(R.layout.activity_wear_camera);
-
         surfaceView = findViewById(R.id.surfaceView);
         if (surfaceView != null) {
             surfaceView.getHolder().addCallback(this);
-        } else {
-            WearLog.e(TAG, "❌ 找不到 SurfaceView，请检查布局文件 ID 是否为 surfaceView");
         }
 
-        Button btnClose = findViewById(R.id.btn_shutter);
-        if (btnClose != null) {
-            btnClose.setOnClickListener(_ -> {
-                WearLog.d(TAG, "🔘 用户点击 [关闭相机]");
-                WearSyncCommManager.getInstance(this).sendBusinessCommand("camera_action", "STOP_CAMERA");
-                cleanExit(false);
+        // 🎯 拍照快门按钮：向手机发送触发高清拍照指令
+        Button btnShutter = findViewById(R.id.btn_shutter);
+        if (btnShutter != null) {
+            btnShutter.setOnClickListener(v -> {
+                WearLog.d(TAG, "📸 用户点击 [快门按钮]，发送最高画质拍照请求");
+                WearSyncCommManager.getInstance(getApplicationContext()).sendBusinessCommand("camera_action", "TAKE_PHOTO");
             });
         }
 
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
             public void handleOnBackPressed() {
-                WearLog.d(TAG, "🔙 用户按下返回键");
-                WearSyncCommManager.getInstance(WearCameraActivity.this)
-                        .sendBusinessCommand("camera_action", "STOP_CAMERA");
+                WearLog.d(TAG, "🔙 用户按下返回键，准备关闭远端相机");
+                WearSyncCommManager.getInstance(getApplicationContext()).sendBusinessCommand("camera_action", "STOP_CAMERA");
                 cleanExit(false);
             }
         });
 
         startDecoderThread();
 
-        // 🟢 [新增] 启动时向手机发送开启相机指令
+        // 1. 注册 Channel 回调监听视频流
+        mChannelListener = new ChannelClient.ChannelCallback() {
+            @Override
+            public void onChannelOpened(ChannelClient.Channel channel) {
+                if ("/wear_data_channel/camera".equals(channel.getPath())) {
+                    WearLog.d(TAG, "🔗 [Activity] 相机通道已打开，开始接收推流");
+                    readStreamFromChannel(channel);
+                }
+            }
+
+            @Override
+            public void onChannelClosed(ChannelClient.Channel channel, int closeReason, int appSpecificErrorCode) {
+                if ("/wear_data_channel/camera".equals(channel.getPath())) {
+                    WearLog.d(TAG, "🔌 [Activity] 相机通道已关闭");
+                }
+            }
+        };
+        Wearable.getChannelClient(this).registerChannelCallback(mChannelListener);
+
+        // 2. 向手机发送开启相机指令
         WearLog.d(TAG, "📤 发送开启手机相机指令");
-        WearSyncCommManager.getInstance(this).sendBusinessCommand("camera_control", "open_phone_camera");
+        WearSyncCommManager.getInstance(getApplicationContext()).sendBusinessCommand("camera_control", "open_phone_camera");
     }
 
-    // ✅ 供 ListenerService 直接调用的静态强制关闭方法
+    private void readStreamFromChannel(ChannelClient.Channel channel) {
+        new Thread(() -> {
+            WearLog.d(TAG, "🚀 启动 Channel-Reader 线程准备读取 H.264 视频流");
+            try {
+                InputStream is = Tasks.await(Wearable.getChannelClient(this).getInputStream(channel));
+                try (DataInputStream dis = new DataInputStream(is)) {
+                    while (!Thread.currentThread().isInterrupted() && !isUserExiting) {
+                        // 🎯 完美读取手机端 DataOutputStream 写入的完整包头
+                        int length = dis.readInt();
+                        dis.readLong(); // 时间戳
+                        dis.readInt();  // 标志位
+
+                        if (length > 0 && length < 1000000) {
+                            byte[] frameData = new byte[length];
+                            dis.readFully(frameData);
+                            feedH264Data(frameData);
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                WearLog.e(TAG, "❌ 读取相机 Channel 流发生异常: " + e.getMessage());
+            }
+        }, "Channel-Reader-Thread").start();
+    }
+
     public static void forceClose() {
         WearCameraActivity activity = sActivityRef.get();
         if (activity != null && !activity.isUserExiting) {
-            WearLog.w(TAG, "🚨 [外部指令] 触发 forceClose，准备干净退出");
             activity.runOnUiThread(() -> activity.cleanExit(true));
         }
     }
 
     public void feedH264Data(byte[] h264Data) {
         if (h264Data != null && h264Data.length > 0) {
-            frameQueue.offer(h264Data);
+            if (!frameQueue.offer(h264Data)) {
+                frameQueue.poll();
+                frameQueue.offer(h264Data);
+            }
         }
     }
 
     private void startDecoderThread() {
         renderThread = new Thread(() -> {
-            while (!Thread.currentThread().isInterrupted()) {
-                byte[] frameData = frameQueue.poll();
-                if (frameData != null && isSurfaceReady) {
-                    try {
+            while (!Thread.currentThread().isInterrupted() && !isUserExiting) {
+                try {
+                    byte[] frameData = frameQueue.take();
+                    if (frameData != null && isSurfaceReady && mDecoder != null && isDecoderRunning) {
                         int inputBufferId = mDecoder.dequeueInputBuffer(10000);
                         if (inputBufferId >= 0) {
                             ByteBuffer inputBuffer = mDecoder.getInputBuffer(inputBufferId);
@@ -115,60 +165,57 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
                         if (outputBufferId >= 0) {
                             mDecoder.releaseOutputBuffer(outputBufferId, true);
                         }
-                    } catch (Exception e) {
-                        WearLog.e(TAG, "解码帧时出错", e);
                     }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                } catch (Exception e) {
+                    WearLog.e(TAG, "❌ 解码视频帧异常", e);
                 }
             }
-        });
+        }, "RenderThread");
         renderThread.start();
     }
 
     private void initDecoder() {
         try {
-            MediaFormat format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, 640, 480);
+            // 🎯 对齐手机端的 320x320 画面尺寸
+            MediaFormat format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, 320, 320);
             mDecoder = MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);
             mDecoder.configure(format, surfaceView.getHolder().getSurface(), null, 0);
             mDecoder.start();
             isDecoderRunning = true;
-            WearLog.d(TAG, "解码器初始化成功");
+            WearLog.d(TAG, "🎉 H.264 解码器初始化成功 (320x320)");
         } catch (Exception e) {
-            WearLog.e(TAG, "初始化解码器失败", e);
+            WearLog.e(TAG, "❌ 初始化解码器失败: " + e.getMessage(), e);
         }
     }
 
     private void cleanExit(boolean fromPhone) {
         if (isUserExiting) return;
         isUserExiting = true;
-        WearLog.d(TAG, "🚪 [干净退出] 开始执行，来源: " + (fromPhone ? "手机指令" : "用户操作"));
 
         if (renderThread != null) {
             renderThread.interrupt();
-            try { renderThread.join(1000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
             renderThread = null;
         }
 
         if (mDecoder != null) {
-            try { mDecoder.stop(); mDecoder.release(); } catch (Exception e) { WearLog.e(TAG, "释放解码器异常", e); }
+            try {
+                isDecoderRunning = false;
+                mDecoder.stop();
+                mDecoder.release();
+            } catch (Exception e) {
+                WearLog.e(TAG, "⚠️ 释放解码器异常", e);
+            }
             mDecoder = null;
-            isDecoderRunning = false;
         }
 
         frameQueue.clear();
 
-        if (wakeLock != null && wakeLock.isHeld()) {
-            wakeLock.release();
-            wakeLock = null;
-            WearLog.d(TAG, "🔋 WakeLock released");
-        }
-
-        if (sActivityRef != null) {
-            sActivityRef.clear();
-            sActivityRef = null;
-        }
+     
 
         finishAndRemoveTask();
-        WearLog.d(TAG, "✅ [干净退出] 完成");
     }
 
     @Override
@@ -183,10 +230,14 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
     @Override
     public void surfaceDestroyed(SurfaceHolder holder) {
         isSurfaceReady = false;
+        isDecoderRunning = false;
     }
 
     @Override
     protected void onDestroy() {
+        if (mChannelListener != null) {
+            Wearable.getChannelClient(this).unregisterChannelCallback(mChannelListener);
+        }
         cleanExit(false);
         super.onDestroy();
     }

@@ -15,27 +15,25 @@ public class PhoneConnectionManager {
     private static final String TAG = "WearSync_ConnMgr";
     private static final String CAPABILITY_NAME = "wear_sync";
 
-    // ✅ 补全缺失的单例实例变量
     private static volatile PhoneConnectionManager instance;
-
     private final Context appContext;
 
-    // ✅ 补全缺失的私有构造函数
     private PhoneConnectionManager(Context context) {
         this.appContext = context.getApplicationContext();
 
-        // ✅ 注册监听器：手表连接/断开时自动更新缓存
+        // 🔑 1. 防重复注册：先移除再添加
+        Wearable.getCapabilityClient(appContext).removeListener(this::onCapabilityChanged, CAPABILITY_NAME);
         Wearable.getCapabilityClient(appContext).addListener(
             this::onCapabilityChanged,
             CAPABILITY_NAME
         );
 
-        // ✅ 初始化时主动查询一次
+        // 🔑 2. 初始化时主动查询一次
         discoverAndCacheWatchNode();
     }
 
-    // ✅ 补全缺失的静态初始化入口
-    public static void init(Context context) {
+    // 🔑 容错初始化入口：外部可以直接 getInstance(context)
+    public static PhoneConnectionManager getInstance(Context context) {
         if (instance == null) {
             synchronized (PhoneConnectionManager.class) {
                 if (instance == null) {
@@ -43,17 +41,10 @@ public class PhoneConnectionManager {
                 }
             }
         }
-    }
-
-    // ✅ 补全获取实例的方法（供外部读取状态或手动刷新时使用）
-    public static PhoneConnectionManager getInstance() {
-        if (instance == null) {
-            throw new IllegalStateException("PhoneConnectionManager 尚未初始化，请先在 Application.onCreate() 中调用 init()");
-        }
         return instance;
     }
 
-    private void discoverAndCacheWatchNode() {
+    public void discoverAndCacheWatchNode() {
         Wearable.getCapabilityClient(appContext)
             .getCapability(CAPABILITY_NAME, CapabilityClient.FILTER_REACHABLE)
             .addOnSuccessListener(this::updateNodeCache)
@@ -69,14 +60,31 @@ public class PhoneConnectionManager {
     }
 
     private void updateNodeCache(CapabilityInfo capabilityInfo) {
+        if (capabilityInfo == null) return;
+
         Set<Node> nodes = capabilityInfo.getNodes();
-        if (!nodes.isEmpty()) {
-            String nodeId = nodes.iterator().next().getId();
+        Node targetNode = null;
+
+        // 🔑 优先寻找近场直连 (isNearby) 的活跃手表
+        for (Node node : nodes) {
+            if (node.isNearby()) {
+                targetNode = node;
+                break;
+            }
+        }
+
+        // 如果没有 nearby 的，退而求其次选择列表里的第一个
+        if (targetNode == null && !nodes.isEmpty()) {
+            targetNode = nodes.iterator().next();
+        }
+
+        if (targetNode != null) {
+            String nodeId = targetNode.getId();
             WearSyncState.setNodeId(appContext, nodeId);
-            PhoneLog.d(TAG, "✅ 已更新手表节点缓存: " + nodeId);
+            PhoneLog.d(TAG, "✅ 已成功绑定并缓存活跃手表节点: " + nodeId + " (" + targetNode.getDisplayName() + ")");
         } else {
             WearSyncState.clear(appContext);
-            PhoneLog.w(TAG, "⚠️ 无可用手表节点，已清空缓存");
+            PhoneLog.w(TAG, "⚠️ 当前无可用/连通的手表节点，已清空节点缓存");
         }
     }
 }

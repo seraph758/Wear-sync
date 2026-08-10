@@ -18,7 +18,6 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
 
-
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -26,11 +25,10 @@
         android:label="Wear Sync"
         android:supportsRtl="true"
         android:theme="@style/Theme.WearSync">
-        <!-- ✅ 关键修复：添加以下 meta-data 标签 -->
+
         <meta-data
             android:name="com.google.android.wearable.capability.resource"
             android:resource="@array/android_wear_capabilities" />
-
 
         <uses-library
             android:name="com.google.android.wearable"
@@ -39,6 +37,7 @@
         <meta-data
             android:name="com.google.android.wearable.standalone"
             android:value="false" />
+
         <activity
             android:name="cn.luke.wearsync.WearSyncMainActivity"
             android:exported="true"
@@ -55,10 +54,12 @@
             android:exported="false"
             android:launchMode="singleTop"
             android:theme="@style/Theme.WearSync.Alarm"
-            android:taskAffinity="cn.luke.wearsync.alarm" >
-            
+            android:taskAffinity="cn.luke.wearsync.alarm"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true">
             <meta-data android:name="android.wear.resume_to_app" android:value="true" />
         </activity>
+
         <activity
             android:name=".WearSyncBedtimeAutomationActivity"
             android:theme="@android:style/Theme.Translucent.NoTitleBar.Fullscreen"
@@ -66,17 +67,22 @@
             android:noHistory="true"
             android:taskAffinity=""
             android:launchMode="singleInstance"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
             android:exported="false" />
-
+        
         <activity
             android:name="cn.luke.wearsync.WearCameraActivity"
             android:exported="false"
             android:launchMode="singleTask"
             android:theme="@style/Theme.WearSync.Camera"
-            android:taskAffinity="cn.luke.wearsync.camera" android:allowTaskReparenting="true">
-
+            android:taskAffinity="cn.luke.wearsync.camera"
+            android:allowTaskReparenting="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true">
             <meta-data android:name="android.wear.resume_to_app" android:value="true" />
         </activity>
+
         <service
             android:name="cn.luke.wearsync.WearSyncAccessService"
             android:description="@string/access_desc"
@@ -97,12 +103,11 @@
             android:exported="true"
             android:permission="com.google.android.gms.wearable.BIND_CHANNEL">
         </service>
+
         <service
             android:name="cn.luke.wearsync.WearSyncListenerService"
             android:enabled="true"
             android:exported="true">
-        
-            <!-- Filter 1: 专门接收消息，带精确路径过滤 -->
             <intent-filter>
                 <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED"/>
                 <data 
@@ -110,14 +115,10 @@
                     android:host="*" 
                     android:path="/wear-universal-sync" />
             </intent-filter>
-        
-            <!-- Filter 2: 专门接收通道事件，不加路径限制 -->
             <intent-filter>
                 <action android:name="com.google.android.gms.wearable.CHANNEL_EVENT"/>
             </intent-filter>
-        
         </service>
-
 
         <service
             android:name="cn.luke.wearsync.WearSyncNotificationService"

@@ -31,6 +31,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.edit
+import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
@@ -43,6 +44,18 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import org.json.JSONObject
 import java.nio.charset.StandardCharsets
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+
+
+object AppState {
+    private val _isServiceRunning = MutableStateFlow(false)
+    val isServiceRunning: StateFlow<Boolean> = _isServiceRunning.asStateFlow()
+    fun setServiceRunning(running: Boolean) {
+        _isServiceRunning.value = running
+    }
+}
 
 class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListener {
     companion object {
@@ -178,140 +191,152 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
         }
     }
 
-    override fun onCreateView(
-        inflater: LayoutInflater, container: ViewGroup?,
-        savedInstanceState: Bundle?
-    ): View {
-        val sp = requireContext().getSharedPreferences("dndsync_prefs", Context.MODE_PRIVATE)
-        uiLogDebugSwitch.value = sp.getBoolean("phone_log_debug_visible", false)
-        uiWearLogDebugSwitch.value = sp.getBoolean("wear_log_debug_visible", false)
+   override fun onCreateView(
+    inflater: LayoutInflater, container: ViewGroup?,
+    savedInstanceState: Bundle?
+): View {
+    val sp = requireContext().getSharedPreferences("dndsync_prefs", Context.MODE_PRIVATE)
+    uiLogDebugSwitch.value = sp.getBoolean("phone_log_debug_visible", false)
+    uiWearLogDebugSwitch.value = sp.getBoolean("wear_log_debug_visible", false)
 
-        return ComposeView(requireContext()).apply {
-            setContent {
-                val watchWearStateVal by watchWearState
-                val isConnectedVal by isConnectedState
-                val isNotificationAllowedVal by isNotificationAllowedState
-                val isCameraAllowedVal by isCameraAllowedState
-                val fileTransferStatusVal by fileTransferStatus
-                val uiLogDebugVal by uiLogDebugSwitch
-                val uiWearLogDebugVal by uiWearLogDebugSwitch
+   
 
-                var mask by remember { mutableIntStateOf(sp.getInt("KEY_MASK", 15)) }
-                var screenPullDownInterval by remember { mutableIntStateOf(sp.getInt("screen_pull_down_interval", 500)) }
-                var selectedAlarmName by remember {
-                    mutableStateOf(sp.getString("selected_alarm_name", "Google 时钟") ?: "Google 时钟")
-                }
-                var selectedAlarmPkg by remember {
-                    mutableStateOf(sp.getString("selected_alarm_package", "com.google.android.deskclock") ?: "com.google.android.deskclock")
-                }
-                var dismissKeyText by remember {
-                    mutableStateOf(sp.getString("alarm_dismiss_key", "停止") ?: "停止")
-                }
-                var snoozeKeyText by remember {
-                    mutableStateOf(sp.getString("alarm_snooze_key", "延后") ?: "延后")
-                }
-                var isAlarmMasterEnabled by remember {
-                    mutableStateOf(sp.getBoolean("alarm_proxy_master_switch", true))
-                }
+    return ComposeView(requireContext()).apply {
+        setContent {
+            // ✅ 2. 在这里直接使用上面已经收集好的状态变量
+            // 删除这一行：val isServiceRunningVal by AppState.isServiceRunning.collectAsState()
+             // ✅ 1. 将所有 collectAsState() 调用移到 setContent 外部
+            // ✅ 正确写法：直接使用 by 读取 MutableState 的值
+            val watchWearStateVal by watchWearState
+            val isConnectedVal by isConnectedState
+            val isNotificationAllowedVal by isNotificationAllowedState
+            val isCameraAllowedVal by isCameraAllowedState
+            val fileTransferStatusVal by fileTransferStatus
+            val uiLogDebugVal by uiLogDebugSwitch
+            val uiWearLogDebugVal by uiWearLogDebugSwitch
 
-                PhoneSyncMainScreen(
-                    watchWearState = watchWearStateVal,
-                    isConnected = isConnectedVal,
-                    isNotificationAllowed = isNotificationAllowedVal,
-                    isCameraAllowed = isCameraAllowedVal,
-                    fileTransferStatus = fileTransferStatusVal,
-                    uiLogDebug = uiLogDebugVal,
-                    uiWearLogDebug = uiWearLogDebugVal,
-                    screenPullDownInterval = screenPullDownInterval,
-                    mask = mask,
-                    selectedAlarmName = selectedAlarmName,
-                    selectedAlarmPkg = selectedAlarmPkg,
-                    dismissKeyText = dismissKeyText,
-                    snoozeKeyText = snoozeKeyText,
-                    isAlarmMasterEnabled = isAlarmMasterEnabled,
-                    onPullDownIntervalChange = { newValue ->
-                        screenPullDownInterval = newValue
-                        sp.edit { putInt("screen_pull_down_interval", newValue) }
-                    },
-                    onDndMaskUpdate = { newMaster, newVibrate, newSleep, newPower ->
-                        var newMask = 0
-                        if (newMaster) newMask = newMask or 1
-                        if (newVibrate) newMask = newMask or 2
-                        if (newSleep) newMask = newMask or 4
-                        if (newPower) newMask = newMask or 8
-                        mask = newMask
-                        sp.edit { putInt("KEY_MASK", newMask) }
-                        PhoneLog.d("WearSync_Main", "⚙️ 勿扰同步配置已更新：mask=$newMask")
-                    },
-                    onVibrationCommand = { action, on, off, repeat ->
-                        sendVibrationCommand(action, on, off, repeat)
-                    },
-                    onVibrationSave = { on, off, repeat ->
-                        val prefs = requireContext().getSharedPreferences("wear_vibration_prefs", Context.MODE_PRIVATE)
-                        prefs.edit {
-                            putInt("onDuration", on)
-                            putInt("offDuration", off)
-                            putInt("repeatIndex", repeat)
+            val isServiceRunningVal by AppState.isServiceRunning.collectAsState()
+            
+            var mask by remember { mutableIntStateOf(sp.getInt("KEY_MASK", 15)) }
+            var screenPullDownInterval by remember { mutableIntStateOf(sp.getInt("screen_pull_down_interval", 500)) }
+            var selectedAlarmName by remember {
+                mutableStateOf(sp.getString("selected_alarm_name", "Google 时钟") ?: "Google 时钟")
+            }
+            var selectedAlarmPkg by remember {
+                mutableStateOf(sp.getString("selected_alarm_package", "com.google.android.deskclock") ?: "com.google.android.deskclock")
+            }
+            var dismissKeyText by remember {
+                mutableStateOf(sp.getString("alarm_dismiss_key", "停止") ?: "停止")
+            }
+            var snoozeKeyText by remember {
+                mutableStateOf(sp.getString("alarm_snooze_key", "延后") ?: "延后")
+            }
+            var isAlarmMasterEnabled by remember {
+                mutableStateOf(sp.getBoolean("alarm_proxy_master_switch", true))
+            }
+
+            PhoneSyncMainScreen(
+                watchWearState = watchWearStateVal,
+                isConnected = isConnectedVal,
+                isNotificationAllowed = isNotificationAllowedVal,
+                isCameraAllowed = isCameraAllowedVal,
+                fileTransferStatus = fileTransferStatusVal,
+                uiLogDebug = uiLogDebugVal,
+                uiWearLogDebug = uiWearLogDebugVal,
+                screenPullDownInterval = screenPullDownInterval,
+                mask = mask,
+                selectedAlarmName = selectedAlarmName,
+                selectedAlarmPkg = selectedAlarmPkg,
+                dismissKeyText = dismissKeyText,
+                snoozeKeyText = snoozeKeyText,
+                isAlarmMasterEnabled = isAlarmMasterEnabled,
+                isServiceRunning = isServiceRunningVal, // ✅ 传递局部变量
+                onFloatingLogClick = { handleFloatingLogClick() },
+                onPullDownIntervalChange = { newValue ->
+                    screenPullDownInterval = newValue
+                    sp.edit { putInt("screen_pull_down_interval", newValue) }
+                },
+                onDndMaskUpdate = { newMaster, newVibrate, newSleep, newPower ->
+                    var newMask = 0
+                    if (newMaster) newMask = newMask or 1
+                    if (newVibrate) newMask = newMask or 2
+                    if (newSleep) newMask = newMask or 4
+                    if (newPower) newMask = newMask or 8
+                    mask = newMask
+                    sp.edit { putInt("KEY_MASK", newMask) }
+                    PhoneLog.d("WearSync_Main", "⚙️ 勿扰同步配置已更新：mask=$newMask")
+                },
+                onVibrationCommand = { action, on, off, repeat ->
+                    sendVibrationCommand(action, on, off, repeat)
+                },
+                onVibrationSave = { on, off, repeat ->
+                    val prefs = requireContext().getSharedPreferences("wear_vibration_prefs", Context.MODE_PRIVATE)
+                    prefs.edit {
+                        putInt("onDuration", on)
+                        putInt("offDuration", off)
+                        putInt("repeatIndex", repeat)
+                    }
+                    PhoneLog.d("WearSync_Main", "💾 震动参数已保存到手机端: on=${on}ms, off=${off}ms, repeat=$repeat")
+                    sendVibrationCommand("save", on, off, repeat)
+                },
+                onAlarmSourceSwitch = {
+                    PhoneSyncAppPicker.show(requireContext()) { pkg, name ->
+                        selectedAlarmName = name
+                        selectedAlarmPkg = pkg
+                        sp.edit {
+                            putString("selected_alarm_package", pkg)
+                            putString("selected_alarm_name", name)
                         }
-                        PhoneLog.d("WearSync_Main", "💾 震动参数已保存到手机端: on=${on}ms, off=${off}ms, repeat=$repeat")
-                        sendVibrationCommand("save", on, off, repeat)
-                    },
-                    onAlarmSourceSwitch = {
-                        PhoneSyncAppPicker.show(requireContext()) { pkg, name ->
-                            selectedAlarmName = name
-                            selectedAlarmPkg = pkg
-                            sp.edit {
-                                putString("selected_alarm_package", pkg)
-                                putString("selected_alarm_name", name)
-                            }
-                            PhoneLog.d("WearSync_Main", "🎯 切换时钟源: $name [$pkg]")
+                        PhoneLog.d("WearSync_Main", "🎯 切换时钟源: $name [$pkg]")
+                    }
+                },
+                onAlarmMasterToggle = { isEnabled ->
+                    isAlarmMasterEnabled = isEnabled
+                    sp.edit { putBoolean("alarm_proxy_master_switch", isEnabled) }
+                },
+                onDismissKeyChange = {
+                    dismissKeyText = it
+                    sp.edit { putString("alarm_dismiss_key", it) }
+                },
+                onSnoozeKeyChange = {
+                    snoozeKeyText = it
+                    sp.edit { putString("alarm_snooze_key", it) }
+                },
+                onAlarmTest = { action ->
+                    try {
+                        PhoneAlarmManager.handleWatchCommand(requireContext(), action)
+                    } catch (_: Exception) { }
+                },
+                onCameraCall = {
+                    if (!isCameraAllowedVal) {
+                        requestCameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                    } else {
+                        val localIntent = Intent(requireContext(), PhoneSyncRemoteCameraActivity::class.java).apply {
+                            putExtra(PhoneSyncRemoteCameraActivity.EXTRA_SOURCE, PhoneSyncRemoteCameraActivity.SOURCE_LOCAL)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         }
-                    },
-                    onAlarmMasterToggle = { isEnabled ->
-                        isAlarmMasterEnabled = isEnabled
-                        sp.edit { putBoolean("alarm_proxy_master_switch", isEnabled) }
-                    },
-                    onDismissKeyChange = {
-                        dismissKeyText = it
-                        sp.edit { putString("alarm_dismiss_key", it) }
-                    },
-                    onSnoozeKeyChange = {
-                        snoozeKeyText = it
-                        sp.edit { putString("alarm_snooze_key", it) }
-                    },
-                    onAlarmTest = { action ->
-                        try {
-                            PhoneAlarmManager.handleWatchCommand(requireContext(), action)
-                        } catch (_: Exception) { }
-                    },
-                    onCameraCall = {
-                        if (!isCameraAllowedVal) {
-                            requestCameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-                        } else {
-                            val localIntent = Intent(requireContext(), PhoneSyncRemoteCameraActivity::class.java).apply {
-                                putExtra(PhoneSyncRemoteCameraActivity.EXTRA_SOURCE, PhoneSyncRemoteCameraActivity.SOURCE_LOCAL)
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            }
-                            requireContext().startActivity(localIntent)
+                        requireContext().startActivity(localIntent)
 
-                            val nodeId = WearSyncState.getNodeId(requireContext())
-                            if (!nodeId.isNullOrEmpty()) {
-                                viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
-                                    try {
-                                        val json = JSONObject().apply {
-                                            put("sender", "phone")
-                                            put("type", "camera_control")
-                                            put("action", "open_phone_camera")
-                                            put("timestamp", System.currentTimeMillis())
-                                        }
-                                        Wearable.getMessageClient(requireContext()).sendMessage(
-                                            nodeId, UNIVERSAL_SYNC_PATH, json.toString().toByteArray(StandardCharsets.UTF_8)
-                                        ).await()
-                                    } catch (_: Exception) { }
-                                }
+                        val nodeId = WearSyncState.getNodeId(requireContext())
+                        if (!nodeId.isNullOrEmpty()) {
+                            viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
+                                try {
+                                    val json = JSONObject().apply {
+                                        put("sender", "phone")
+                                        put("type", "camera_control")
+                                        put("action", "open_phone_camera")
+                                        put("timestamp", System.currentTimeMillis())
+                                    }
+                                    Wearable.getMessageClient(requireContext()).sendMessage(
+                                        nodeId, UNIVERSAL_SYNC_PATH, json.toString().toByteArray(StandardCharsets.UTF_8)
+                                    ).await()
+                                } catch (_: Exception) { }
                             }
                         }
-                    },
+                    }
+                },
+ 
+
                     onCameraForceStop = {
                         requireContext().startService(Intent(requireContext(), PhoneSyncCameraService::class.java)
                             .setAction(PhoneSyncCameraService.ACTION_STOP_CAMERA))
@@ -358,16 +383,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                             }
                         }
                     },
-                    onFloatingLogClick = {
-                        val context = requireContext()
-                        if (!Settings.canDrawOverlays(context)) {
-                            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, "package:${context.packageName}".toUri())
-                            startActivity(intent)
-                        } else {
-                            val intent = Intent(context, PhoneLogFloatingService::class.java)
-                            context.startService(intent)
-                        }
-                    },
+                    onFloatingLogClick = { handleFloatingLogClick() },
                     onNotificationPermissionClick = {
                         startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
                     },
@@ -390,6 +406,31 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
         Wearable.getMessageClient(requireContext()).addListener(this)
     }
 
+    private fun handleFloatingLogClick() {
+        val context = requireContext()
+        if (!Settings.canDrawOverlays(context)) {
+            val intent = Intent(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:${context.packageName}")
+            )
+            startActivityForResult(intent, 1001)
+        } else {
+            val intent = Intent(context, PhoneLogFloatingService::class.java)
+            // ✅ 使用全局状态来判断，而不是 Service 的静态变量
+            if (AppState.isServiceRunning.value) {
+                context.stopService(intent)
+                // ❌ 删除: _isServiceRunning.value = false
+                // Service.onDestroy() 会自动调用 AppState.setServiceRunning(false)
+            } else {
+                context.startService(intent)
+                // ❌ 删除: _isServiceRunning.value = true
+                // Service.onCreate() 会自动调用 AppState.setServiceRunning(true)
+            }
+        }
+    }
+
+
+    
     override fun onPause() {
         super.onPause()
         unregisterConnectivityListener()
@@ -425,6 +466,7 @@ fun PhoneSyncMainScreen(
     isConnected: Boolean,
     isNotificationAllowed: Boolean,
     isCameraAllowed: Boolean,
+    isServiceRunning: Boolean,
     fileTransferStatus: String,
     uiLogDebug: Boolean,
     uiWearLogDebug: Boolean,
@@ -481,6 +523,8 @@ fun PhoneSyncMainScreen(
         val vibrateOn = (mask and 2) != 0
         val sleepOn = (mask and 4) != 0
         val powerOn = (mask and 8) != 0
+        
+
 
         Surface(
             modifier = Modifier.fillMaxSize(),
@@ -496,10 +540,10 @@ fun PhoneSyncMainScreen(
             ) {
                 Text(
                     text = "WearSync 枢纽",
-                    fontSize = 28.sp,
+                    fontSize = 33.sp,
                     fontWeight = FontWeight.Bold,
                     color = textColor,
-                    modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)
+                    modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)
                 )
 
                 // Wear Status Card
@@ -807,10 +851,16 @@ fun PhoneSyncMainScreen(
                                     Text("同步监听手表端核心日志", color = textColor, fontSize = 14.sp)
                                     Switch(checked = uiWearLogDebug, onCheckedChange = onWearLogToggle)
                                 }
+                                
+                                
                                 HorizontalDivider(color = dividerColor)
-                                Button(modifier = Modifier.fillMaxWidth(), onClick = onFloatingLogClick) {
-                                    Text("开启实时悬浮监视器", fontSize = 13.sp)
-                                }
+                                
+                                Button(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            onClick = { onFloatingLogClick() } // ✅ 只保留这一行
+                                        ) {
+                                            Text(text = if (isServiceRunning) "关闭实时悬浮监视器" else "开启实时悬浮监视器", fontSize = 13.sp)
+                                        }
                             }
                         }
                     }
@@ -999,6 +1049,7 @@ fun PhoneSyncMainScreenPreview() {
         isConnected = true,
         isNotificationAllowed = true,
         isCameraAllowed = true,
+        isServiceRunning = false, // ✅ 补上缺失的参数，预览时可设为 false 或 true
         fileTransferStatus = "等待选择文件...",
         uiLogDebug = true,
         uiWearLogDebug = false,
