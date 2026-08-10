@@ -1,62 +1,17 @@
 {
   "allFiles": [
     {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneLogFloatingService.kt",
-      "selection": {
-        "end": {
-          "column": 72,
-          "index": 13892,
-          "line": 282
-        },
-        "start": {
-          "column": 72,
-          "index": 13892,
-          "line": 282
-        }
-      }
-    },
-    {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneLogActivity.kt",
-      "selection": {
-        "end": {
-          "column": 73,
-          "index": 5793,
-          "line": 117
-        },
-        "start": {
-          "column": 73,
-          "index": 5793,
-          "line": 117
-        }
-      }
-    },
-    {
       "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncMainFragment.kt",
       "selection": {
         "end": {
-          "column": 5,
-          "index": 20333,
-          "line": 417
+          "column": 21,
+          "index": 15472,
+          "line": 332
         },
         "start": {
-          "column": 42,
-          "index": 19429,
-          "line": 396
-        }
-      }
-    },
-    {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncCameraService.java",
-      "selection": {
-        "end": {
-          "column": 30,
-          "index": 17012,
-          "line": 428
-        },
-        "start": {
-          "column": 19,
-          "index": 17001,
-          "line": 428
+          "column": 21,
+          "index": 15472,
+          "line": 332
         }
       }
     }
