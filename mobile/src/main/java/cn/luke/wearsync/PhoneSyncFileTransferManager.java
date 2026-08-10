@@ -32,35 +32,36 @@ public class PhoneSyncFileTransferManager {
     private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
 
     public interface TransferCallback {
-        void onComplete();
+        void onHandshakeSuccess();
+        void onStatusUpdate(@NonNull String status);
         void onError(@NonNull String message);
     }
 
     /**
-     * 發送檔案到手錶（握手機制）
+     * 发送文件到手表（握手机制）
      */
     public static void sendFileToWear(@NonNull Context context, @NonNull String nodeId, @NonNull Uri fileUri, @NonNull String fileName, @Nullable TransferCallback callback) {
         sAppContext = context.getApplicationContext();
         MessageClient messageClient = Wearable.getMessageClient(context);
 
-        // 1. 獲取檔案大小
+        // 1. 获取文件大小
         long fileSize = 0L;
         try (ParcelFileDescriptor pfd = context.getContentResolver().openFileDescriptor(fileUri, "r")) {
             if (pfd != null) fileSize = pfd.getStatSize();
         } catch (Exception e) {
-            PhoneLog.e(TAG, "獲取檔案大小失敗", e);
-            if (callback != null) callback.onError("無法讀取檔案: " + e.getMessage());
+            PhoneLog.e(TAG, "获取文件大小失败", e);
+            if (callback != null) callback.onError("无法读取文件: " + e.getMessage());
             return;
         }
 
-        // 2. 暫存數據，等待手錶回復
+        // 2. 暂存数据，等待手表回复
         sPendingNodeId = nodeId;
         sPendingFileUri = fileUri;
         sPendingFileName = fileName;
-        sPendingFileSize = fileSize; // 儲存 fileSize
+        sPendingFileSize = fileSize; 
         sPendingCallback = callback;
 
-        // 3. 構建並發送 PREPARE 信令
+        // 3. 构建并发送 PREPARE 信令
         JSONObject prepareJson = new JSONObject();
         try {
             prepareJson.put("sender", "phone");
@@ -69,62 +70,84 @@ public class PhoneSyncFileTransferManager {
             prepareJson.put("fileName", fileName);
             prepareJson.put("fileSize", fileSize);
         } catch (Exception e) {
-            PhoneLog.e(TAG, "構建信令JSON失敗", e);
-            if (callback != null) callback.onError("信令構建異常");
+            PhoneLog.e(TAG, "构建信令JSON失败", e);
+            if (callback != null) callback.onError("信令构建异常");
             return;
         }
 
-        PhoneLog.d(TAG, "發送 PREPARE_RECEIVE 信令到節點: " + nodeId);
+        PhoneLog.d(TAG, "发送 PREPARE_RECEIVE 信令到节点: " + nodeId);
+        if (callback != null) callback.onStatusUpdate("正在请求手表准备接收...");
 
-        // 4. 發送信令
+        // 4. 发送信令
         messageClient.sendMessage(nodeId, UNIVERSAL_SYNC_PATH, prepareJson.toString().getBytes(StandardCharsets.UTF_8))
-                .addOnSuccessListener(statusCode -> PhoneLog.d(TAG, "PREPARE_RECEIVE 信令已發出，等待手錶 ACK..."))
+                .addOnSuccessListener(statusCode -> PhoneLog.d(TAG, "PREPARE_RECEIVE 信令已发出，等待手表 ACK..."))
                 .addOnFailureListener(e -> {
-                    PhoneLog.e(TAG, "PREPARE_RECEIVE 發送失敗", e);
-                    if (sPendingCallback != null) sPendingCallback.onError("信令發送失敗: " + e.getMessage());
+                    PhoneLog.e(TAG, "PREPARE_RECEIVE 发送失败", e);
+                    if (sPendingCallback != null) sPendingCallback.onError("信令发送失败: " + e.getMessage());
                     clearPendingData();
                 });
 
-        // 5. 啟動超時計時器
+        // 5. 启动超时刻度器
         MAIN_HANDLER.postDelayed(() -> {
             if (sPendingFileUri != null) {
-                PhoneLog.w(TAG, "等待手錶 ACK 超時(10s)，取消傳輸");
-                if (sPendingCallback != null) sPendingCallback.onError("手錶響應超時");
+                PhoneLog.w(TAG, "等待手表 ACK 超时(10s)，取消传输");
+                if (sPendingCallback != null) sPendingCallback.onError("手表响应超时");
                 clearPendingData();
             }
         }, ACK_TIMEOUT_MS);
     }
 
     /**
-     * 當收到手錶的 READY_TO_RECEIVE 信號時調用此方法
+     * 当收到手表的 READY_TO_RECEIVE 信号时调用此方法
      */
     public static void onWearReadyToReceive() {
-        // 收到ACK，取消超時計時器
+        // 收到ACK，取消超时刻度器
         MAIN_HANDLER.removeCallbacksAndMessages(null);
-        PhoneLog.d(TAG, "收到手錶準備就緒信號，開始傳輸檔案...");
+        PhoneLog.d(TAG, "收到手表准备就绪信号，开始传输文件...");
 
         if (sPendingFileUri == null || sPendingNodeId == null) {
-            PhoneLog.w(TAG, "收到就緒信號，但無待傳輸任務");
+            PhoneLog.w(TAG, "收到就绪信号，但无待传输任务");
             return;
         }
 
-        // 啟動後台服務進行傳輸
+        // 启动后台服务进行传输
         Intent serviceIntent = new Intent(sAppContext, PhoneSyncFileTransferService.class);
         serviceIntent.setAction(PhoneSyncFileTransferService.ACTION_ADD_TRANSFER);
         serviceIntent.putExtra(PhoneSyncFileTransferService.EXTRA_NODE_ID, sPendingNodeId);
         serviceIntent.putExtra(PhoneSyncFileTransferService.EXTRA_FILE_URI, sPendingFileUri);
         serviceIntent.putExtra(PhoneSyncFileTransferService.EXTRA_FILE_NAME, sPendingFileName);
-        serviceIntent.putExtra(PhoneSyncFileTransferService.EXTRA_FILE_SIZE, sPendingFileSize); // 將 fileSize 傳給 Service
+        serviceIntent.putExtra(PhoneSyncFileTransferService.EXTRA_FILE_SIZE, sPendingFileSize);
+
+        // 🎯 核心修复：授予 URI 读取权限，防止 Service 无法读取文件
+        serviceIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
 
         sAppContext.startForegroundService(serviceIntent);
 
-        // 通知調用方任務已移交後台服務處理（建議 UI 提示“已開始後台傳輸”）
         if (sPendingCallback != null) {
-            sPendingCallback.onComplete();
+            sPendingCallback.onHandshakeSuccess();
+            sPendingCallback.onStatusUpdate("握手成功，正在后台发送中...");
         }
         
-        // 清理暫存數據
-        clearPendingData();
+        // 注意：这里不要清理 sPendingCallback，因为后续还需要接收 status_update
+        sPendingFileUri = null; 
+        sPendingNodeId = null;
+    }
+
+    /**
+     * 更新当前传输任务的状态（由 PhoneSyncListenerService 调用）
+     */
+    public static void updateTransferStatus(String status) {
+        if (sPendingCallback != null) {
+            if (status.startsWith("success")) {
+                sPendingCallback.onStatusUpdate("✅ 传输完成: " + status.substring(status.indexOf(":") + 1));
+                clearPendingData();
+            } else if (status.startsWith("error")) {
+                sPendingCallback.onError("❌ 手表端接收失败: " + status.substring(status.indexOf(":") + 1));
+                clearPendingData();
+            } else {
+                sPendingCallback.onStatusUpdate(status);
+            }
+        }
     }
 
     private static void clearPendingData() {

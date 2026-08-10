@@ -761,8 +761,13 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                     it,
                     fileName,
                     object : PhoneSyncFileTransferManager.TransferCallback {
-                        override fun onComplete() {
-                            fileTransferStatus.value = "✅ 传输成功"
+                        override fun onHandshakeSuccess() {
+                            // 握手成功，不需要立刻设为成功，等待后续 status 变化
+                            PhoneLog.d(TAG, "🤝 文件传输握手成功")
+                        }
+
+                        override fun onStatusUpdate(status: String) {
+                            fileTransferStatus.value = status
                         }
 
                         override fun onError(message: String) {

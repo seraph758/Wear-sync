@@ -113,71 +113,79 @@ public class PhoneSyncFileTransferService extends Service {
         startForeground(NOTIFICATION_ID, buildNotification("正在發送: " + item.getFileName()));
 
         try {
-            // 1. 找到節點
+            PhoneLog.d(TAG, "🚀 [开始传输] " + item.getFileName() + " Size: " + item.getFileSize());
+            // 1. 找到节点
             Node node = Tasks.await(Wearable.getNodeClient(this).getConnectedNodes())
                     .stream()
                     .filter(n -> n.getId().equals(item.getNodeId()))
                     .findFirst()
                     .orElse(null);
 
-            if (node == null) throw new IOException("Node not found");
+            if (node == null) throw new IOException("无法找到指定的手表节点 (Node ID: " + item.getNodeId() + ")");
 
-            // 2. 打開檔案輸入流
+            // 2. 打开文件输入流
             InputStream inputStream = getContentResolver().openInputStream(item.getFileUri());
-            if (inputStream == null) throw new IOException("Cannot open file input stream");
+            if (inputStream == null) throw new IOException("无法通过 Uri 打开文件流: " + item.getFileUri());
 
-            // 3. 拼接符合手錶端解析格式的 Channel Path: /wear-sync/file-transfer/{fileSize}/{encodedFileName}
+            // 3. 拼接符合手表端解析格式的 Channel Path
             String channelPath = FILE_TRANSFER_CHANNEL_PATH + "/" + item.getFileSize() + "/" + Uri.encode(item.getFileName());
-            PhoneLog.d(TAG, "開啟 Channel Path: " + channelPath);
+            PhoneLog.d(TAG, "📡 正在建立传输通道: " + channelPath);
 
-            // 4. 打開 Wearable 通道
+            // 4. 打开 Wearable 通道
             ChannelClient.Channel channel = Tasks.await(Wearable.getChannelClient(this)
                     .openChannel(node.getId(), channelPath));
+            PhoneLog.d(TAG, "✅ 通道已建立，准备获取输出流...");
 
-            // 5. 獲取輸出流並傳輸
+            // 5. 获取输出流并传输
             try (OutputStream outputStream = Tasks.await(Wearable.getChannelClient(this).getOutputStream(channel))) {
+                PhoneLog.d(TAG, "🟢 数据流已开启，开始写入字节...");
                 byte[] buffer = new byte[16384];
                 int len;
                 long totalRead = 0;
-     int packetCount = 0;
+                int packetCount = 0;
 
                 while ((len = inputStream.read(buffer)) != -1) {
-                    // 檢查是否被取消
+                    // 检查是否被取消
                     boolean isCancelled = repository.getQueue().stream()
                             .anyMatch(i -> i.getId().equals(item.getId()) && i.getStatus() == TransferStatus.CANCELLED);
-                    if (isCancelled) break;
+                    if (isCancelled) {
+                        PhoneLog.w(TAG, "🛑 传输任务被中途取消");
+                        break;
+                    }
 
                     outputStream.write(buffer, 0, len);
                     totalRead += len;
                     packetCount++;
-        // 1. 每發送一定數量數據包，手動 flush 確保推送到底層管道
-        if (packetCount % 4 == 0) {
-            outputStream.flush();
-        }
 
-        // 2. 主動休眠 2 毫秒，給藍牙底層傳輸和手錶端寫入 MediaStore 留出緩衝時間
-        try {
-            Thread.sleep(2);
-        } catch (InterruptedException ignored) {
-            Thread.currentThread().interrupt();
-            break;
-        }
+                    // 每隔几包同步一次状态
+                    if (packetCount % 8 == 0) {
+                        outputStream.flush();
+                        long fileSize = item.getFileSize();
+                        int progress = fileSize > 0 ? (int) ((totalRead * 100) / fileSize) : 100;
+                        final int finalProgress = Math.min(progress, 100);
+                        repository.updateItem(item.getId(), it -> it.setProgress(finalProgress));
+                        // 告知 Manager 进度
+                        PhoneSyncFileTransferManager.updateTransferStatus("正在发送: " + finalProgress + "%");
+                    }
 
-                    
-                    // 更新進度
-                    long fileSize = item.getFileSize();
-                    int progress = fileSize > 0 ? (int) ((totalRead * 100) / fileSize) : 100;
-                    final int finalProgress = Math.min(progress, 100);
-                    repository.updateItem(item.getId(), it -> it.setProgress(finalProgress));
+                    // 限制速度，防止蓝牙缓冲区溢出
+                    try {
+                        Thread.sleep(1);
+                    } catch (InterruptedException ignored) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
                 }
                 outputStream.flush();
+                PhoneLog.d(TAG, "🏁 字节流写入完毕，总计: " + totalRead + " bytes");
             }
 
-            // 6. 關閉通道與流
+            // 6. 关闭通道与流
             Tasks.await(Wearable.getChannelClient(this).close(channel));
             inputStream.close();
+            PhoneLog.d(TAG, "📤 后台文件分块推送完成，等待手表端落盘回执...");
 
-            // 7. 完成狀態更新
+            // 7. 完成状态更新
             boolean isCancelled = repository.getQueue().stream()
                     .anyMatch(i -> i.getId().equals(item.getId()) && i.getStatus() == TransferStatus.CANCELLED);
 
@@ -185,12 +193,14 @@ public class PhoneSyncFileTransferService extends Service {
                 repository.updateItem(item.getId(), it -> it.setStatus(TransferStatus.CANCELLED));
             } else {
                 repository.updateItem(item.getId(), it -> it.setStatus(TransferStatus.SUCCESS));
+                // 注意：这里不要直接告诉 UI 成功，等 Listener 收到手表端 SUCCESS 回传再更新
             }
             repository.removeItem(item.getId());
 
         } catch (Exception e) {
-            PhoneLog.e(TAG, "傳輸失敗", e);
+            PhoneLog.e(TAG, "❌ 传输核心链路异常", e);
             repository.updateItem(item.getId(), it -> it.setStatus(TransferStatus.ERROR));
+            PhoneSyncFileTransferManager.updateTransferStatus("error:底层链路异常 - " + e.getMessage());
         }
     }
 

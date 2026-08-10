@@ -23,6 +23,7 @@ import android.hardware.camera2.params.SessionConfiguration;
 import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.Image;
 import android.media.ImageReader;
+import android.os.Environment;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaFormat;
@@ -43,14 +44,19 @@ import com.google.android.gms.wearable.MessageClient;
 import com.google.android.gms.wearable.Wearable;
 
 import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -60,6 +66,7 @@ public class PhoneSyncCameraService extends Service {
     // ==================== 常量定义 ====================
     public static final String ACTION_START_CAMERA = "cn.luke.wearsync.action.START_CAMERA";
     public static final String ACTION_STOP_CAMERA = "cn.luke.wearsync.action.STOP_CAMERA";
+    public static final String ACTION_TAKE_PHOTO = "cn.luke.wearsync.action.TAKE_PHOTO";
     public static final String WEAR_MSG_PATH_TAKE_PHOTO = "/camera/take_photo";
     public static final String WEAR_CHANNEL_PATH = "/wear_data_channel/camera";
 
@@ -185,6 +192,9 @@ public class PhoneSyncCameraService extends Service {
             PhoneLog.d(TAG, "🛑 收到停止相机指令，清理资源并停止服务");
             stopStreamingAndRelease();
             stopSelf();
+        } else if (ACTION_TAKE_PHOTO.equals(action)) {
+            PhoneLog.d(TAG, "📸 收到 Intent 拍照指令");
+            captureHighResPhoto();
         }
 
         return START_NOT_STICKY;
@@ -558,6 +568,8 @@ public class PhoneSyncCameraService extends Service {
             builder.addTarget(mPhotoReader.getSurface());
             builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
             builder.set(CaptureRequest.JPEG_QUALITY, (byte) 95);
+            // 🔄 设置拍照时的图片旋转角度（顺时针 90 度）
+            builder.set(CaptureRequest.JPEG_ORIENTATION, 90);
 
             mCaptureSession.capture(builder.build(), null, mBgHandler);
             PhoneLog.d(TAG, "📸 最高画质拍照请求已提交给 Session (" + photoWidth + "x" + photoHeight + ")");
@@ -571,9 +583,23 @@ public class PhoneSyncCameraService extends Service {
             ByteBuffer buffer = image.getPlanes()[0].getBuffer();
             byte[] data = new byte[buffer.remaining()];
             buffer.get(data);
-            PhoneLog.d(TAG, "✅ 高清照片捕获成功，数据大小: " + data.length + " bytes (" + photoWidth + "x" + photoHeight + ")");
+            
+            // 🎯 将照片保存到公共下载目录的 WearSync 文件夹
+            File downloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+            File wearSyncDir = new File(downloadDir, "WearSync/Camera");
+            if (!wearSyncDir.exists()) wearSyncDir.mkdirs();
+            
+            String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(new Date());
+            File photoFile = new File(wearSyncDir, "IMG_" + timeStamp + ".jpg");
+            
+            try (FileOutputStream fos = new FileOutputStream(photoFile)) {
+                fos.write(data);
+                PhoneLog.d(TAG, "✅ 高清照片已保存至: " + photoFile.getAbsolutePath() + " (" + data.length + " bytes)");
+                showToast("📸 拍照成功: " + photoFile.getName());
+            }
         } catch (Exception e) {
-            PhoneLog.e(TAG, "❌ 读取照片数据失败", e);
+            PhoneLog.e(TAG, "❌ 保存照片失败", e);
+            showToast("❌ 拍照失败: " + e.getMessage());
         }
     }
 

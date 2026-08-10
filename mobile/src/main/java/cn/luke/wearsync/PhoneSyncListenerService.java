@@ -1,15 +1,29 @@
 package cn.luke.wearsync;
 
 import android.content.Intent;
+import android.net.Uri;
+
 import androidx.annotation.NonNull;
+import androidx.wear.remote.interactions.RemoteActivityHelper;
+
 import com.google.android.gms.tasks.Tasks;
+import com.google.android.gms.wearable.ChannelClient;
 import com.google.android.gms.wearable.MessageEvent;
 import com.google.android.gms.wearable.Node;
 import com.google.android.gms.wearable.Wearable;
 import com.google.android.gms.wearable.WearableListenerService;
+import com.google.common.util.concurrent.ListenableFuture;
+
 import org.json.JSONObject;
+
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -35,9 +49,18 @@ public class PhoneSyncListenerService extends WearableListenerService {
         // 1. 更新节点ID
         WearSyncState.setNodeId(this, messageEvent.getSourceNodeId());
 
+        String path = messageEvent.getPath();
+        
+        // 处理文件传输状态回传路径
+        if ("/file-transfer-status".equals(path)) {
+            String status = new String(messageEvent.getData(), StandardCharsets.UTF_8);
+            PhoneLog.d(TAG, "📥 [传输回执] " + status);
+            PhoneSyncFileTransferManager.updateTransferStatus(status);
+            return;
+        }
+
         // 2. 路径校验
-        // ✅ String receivedPath = messageEvent.getPath();
-        PhoneLog.d(TAG, "🔍 收到消息，路径为: [" + messageEvent.getPath() + "]，期望路径: [" + UNIVERSAL_SYNC_PATH + "]");
+        PhoneLog.d(TAG, "🔍 收到消息，路径为: [" + path + "]，期望路径: [" + UNIVERSAL_SYNC_PATH + "]");
         if (!UNIVERSAL_SYNC_PATH.equals(messageEvent.getPath())) {
             super.onMessageReceived(messageEvent);
             return;
@@ -92,9 +115,17 @@ public class PhoneSyncListenerService extends WearableListenerService {
             case "camera_action": 
                 handleCamera(action);
                 break;
+            case "body_status":
+                handleBodyStatus(action);
+                break;
             default:
                 PhoneLog.w(TAG, "unknown type: " + type);
         }
+    }
+
+    private void handleBodyStatus(String action) {
+        PhoneLog.i(TAG, "🧘 [佩戴状态] 手表端目前状态: " + action);
+        // 如果是离腕，可以在此处执行额外逻辑，如锁定某些功能
     }
 
     // ============================================================
@@ -166,6 +197,13 @@ public class PhoneSyncListenerService extends WearableListenerService {
             return;
         }
 
+        if ("TAKE_PHOTO".equalsIgnoreCase(action)) {
+            Intent photo = new Intent(this, PhoneSyncCameraService.class);
+            photo.setAction(PhoneSyncCameraService.ACTION_TAKE_PHOTO);
+            startService(photo);
+            return;
+        }
+
         if ("LOG_CHANNEL_HANDSHAKE".equalsIgnoreCase(action)) {
             PhoneLog.d(TAG, "🤝 收到手表日志通道握手，数据通道已准备就绪！");
             // 这里不需要做任何事，onChannelOpened 会处理流的读取
@@ -182,12 +220,12 @@ public class PhoneSyncListenerService extends WearableListenerService {
     private void executeRemoteActivityLaunch(String nodeId) {
         try {
             PhoneLog.d(TAG, "🚀 REMOTE -> " + nodeId);
-            androidx.wear.remote.interactions.RemoteActivityHelper helper = new androidx.wear.remote.interactions.RemoteActivityHelper(
+            RemoteActivityHelper helper = new RemoteActivityHelper(
                     this, REMOTE_EXECUTOR);
             Intent intent = new Intent(Intent.ACTION_VIEW);
-            intent.setData(android.net.Uri.parse("wearsync://camera"));
+            intent.setData(Uri.parse("wearsync://camera"));
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            com.google.common.util.concurrent.ListenableFuture<Void> future = helper.startRemoteActivity(intent, nodeId);
+            ListenableFuture<Void> future = helper.startRemoteActivity(intent, nodeId);
             future.addListener(() -> {
                 try {
                     future.get();
@@ -202,14 +240,14 @@ public class PhoneSyncListenerService extends WearableListenerService {
     }
 
     @Override
-    public void onChannelOpened(@NonNull com.google.android.gms.wearable.ChannelClient.Channel channel) {
+    public void onChannelOpened(@NonNull ChannelClient.Channel channel) {
         String path = channel.getPath();
         PhoneLog.d(TAG, "🛰️ [手機雷達] 偵測到 Channel 管道握手! Path: " + path);
 
         // 1. 处理日志通道 (原有逻辑)
         if (WEAR_LOG_CHANNEL_PATH.equals(path)) {
             PhoneLog.d(TAG, "🎯 [暗號吻合] 正在建立手錶日誌接收流...");
-            com.google.android.gms.wearable.Wearable.getChannelClient(this)
+            Wearable.getChannelClient(this)
                     .getInputStream(channel)
                     .addOnSuccessListener(inputStream -> {
                         PhoneLog.d("PhoneLog_Trace", "🟢 [日誌流就緒] 啟動背景讀取執行緒...");
@@ -222,14 +260,14 @@ public class PhoneSyncListenerService extends WearableListenerService {
     /**
      * 📥 统一的无线日志与大包测试流读取器（带线程同步保护）
      */
-    private void readLogStream(java.io.InputStream inputStream) {
-        java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", java.util.Locale.getDefault());
-        try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
+    private void readLogStream(InputStream inputStream) {
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault());
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 // 补充时间戳
                 if (line.startsWith("[WEAR]") && !line.contains("] [20")) {
-                    String timeStr = sdf.format(new java.util.Date());
+                    String timeStr = sdf.format(new Date());
                     line = "[WEAR] [" + timeStr + "]" + line.substring(6);
                 }
                 synchronized (PhoneLog.class) {

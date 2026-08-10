@@ -56,6 +56,8 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
         surfaceView = findViewById(R.id.surfaceView);
         if (surfaceView != null) {
             surfaceView.getHolder().addCallback(this);
+            // 🔄 将画面顺时针旋转 90 度以适配手表显示方向
+            surfaceView.setRotation(90f);
         }
 
         // 🎯 拍照快门按钮：向手机发送触发高清拍照指令

@@ -100,8 +100,8 @@
 
         <service
             android:name="cn.luke.wearsync.WearSyncBodyDetectService"
-            android:exported="true"
-            android:permission="com.google.android.gms.wearable.BIND_CHANNEL">
+            android:enabled="true"
+            android:exported="false">
         </service>
 
         <service

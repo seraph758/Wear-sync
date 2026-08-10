@@ -12,6 +12,10 @@ import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
+import androidx.preference.SwitchPreferenceCompat;
+import androidx.core.content.ContextCompat;
+import android.content.pm.PackageManager;
+import android.Manifest;
 import com.google.android.gms.wearable.CapabilityClient;
 import com.google.android.gms.wearable.Wearable;
 
@@ -32,6 +36,9 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
     private Preference notificationPref; // 重命名：dndPref → notificationPref
     private Preference accPref;
     private Preference cameraPref;
+    private SwitchPreferenceCompat bodyDetectPref;
+
+    private static final int PERMISSION_REQUEST_BODY_SENSORS = 1001;
 
     private CapabilityClient.OnCapabilityChangedListener capabilityChangedListener;
 
@@ -43,6 +50,7 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
         connectivityPref = findPreference("connectivity_state_key");
         notificationPref = findPreference("dnd_permission_key"); // key 保持不变以兼容 XML
         accPref = findPreference("acc_permission_key");
+        bodyDetectPref = findPreference("body_detect_key");
         cameraPref = findPreference("camera_control_key");
 
         updatePermissionStatus();
@@ -91,8 +99,20 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
             });
         }
 
+        // 🧘 3. 离腕检测开关
+        if (bodyDetectPref != null) {
+            bodyDetectPref.setOnPreferenceChangeListener((preference, newValue) -> {
+                boolean enabled = (boolean) newValue;
+                if (enabled) {
+                    return checkAndRequestBodySensors();
+                } else {
+                    stopBodyDetectService();
+                    return true;
+                }
+            });
+        }
 
-        // 📸 3. 远端相机控制
+        // 📸 4. 远端相机控制
         if (cameraPref != null) {
             cameraPref.setOnPreferenceClickListener(preference -> {
                 WearLog.w(TAG, "📸 [交互] 用户点击【远端相机控制】");
@@ -135,6 +155,19 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
     private void updatePermissionStatus() {
         Context ctx = getContext();
         if (ctx == null) return;
+
+        // --- 0. 离腕检测服务状态同步 ---
+        if (bodyDetectPref != null) {
+            boolean isRunning = false;
+            try {
+                // 检查权限是否仍然有效，如果无效则强制关闭开关
+                if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.BODY_SENSORS) 
+                        != PackageManager.PERMISSION_GRANTED) {
+                    bodyDetectPref.setChecked(false);
+                    stopBodyDetectService();
+                }
+            } catch (Exception ignored) {}
+        }
 
          // --- 1. 通知使用权状态 ---
         if (notificationPref != null) {
@@ -210,6 +243,54 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
         if (ctx != null && capabilityChangedListener != null) {
             Wearable.getCapabilityClient(ctx).removeListener(capabilityChangedListener);
         }
+    }
+
+    // ==================== 离腕检测逻辑 ====================
+
+    private boolean checkAndRequestBodySensors() {
+        Context ctx = getContext();
+        if (ctx == null) return false;
+
+        if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.BODY_SENSORS)
+                == PackageManager.PERMISSION_GRANTED) {
+            startBodyDetectService();
+            return true;
+        } else {
+            requestPermissions(new String[]{Manifest.permission.BODY_SENSORS},
+                    PERMISSION_REQUEST_BODY_SENSORS);
+            return false; // 异步请求，先返回 false，结果在回调处理
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        if (requestCode == PERMISSION_REQUEST_BODY_SENSORS) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                WearLog.d(TAG, "✅ 传感器权限已授予，启动离腕检测");
+                if (bodyDetectPref != null) bodyDetectPref.setChecked(true);
+                startBodyDetectService();
+            } else {
+                WearLog.w(TAG, "❌ 传感器权限被拒绝");
+                Toast.makeText(getContext(), "需传感器权限才能使用离腕检测", Toast.LENGTH_SHORT).show();
+                if (bodyDetectPref != null) bodyDetectPref.setChecked(false);
+            }
+        }
+    }
+
+    private void startBodyDetectService() {
+        Context ctx = getContext();
+        if (ctx == null) return;
+        WearLog.d(TAG, "🚀 启动 WearSyncBodyDetectService");
+        Intent intent = new Intent(ctx, WearSyncBodyDetectService.class);
+        ctx.startService(intent);
+    }
+
+    private void stopBodyDetectService() {
+        Context ctx = getContext();
+        if (ctx == null) return;
+        WearLog.d(TAG, "🛑 停止 WearSyncBodyDetectService");
+        Intent intent = new Intent(ctx, WearSyncBodyDetectService.class);
+        ctx.stopService(intent);
     }
 
     private void updateConnectionUI(boolean connected) {
