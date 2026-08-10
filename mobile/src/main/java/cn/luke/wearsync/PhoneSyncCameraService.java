@@ -340,7 +340,7 @@ public class PhoneSyncCameraService extends Service {
       private void startCameraHardware() {
         CameraManager manager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
         if (manager == null) {
-            showToast("❌ 错误：无法获取 CameraManager");
+            showToast("❌ 錯誤：無法獲取 CameraManager");
             stopStreamingAndRelease();
             stopSelf();
             return;
@@ -348,9 +348,20 @@ public class PhoneSyncCameraService extends Service {
 
         try {
             String cameraId = manager.getCameraIdList()[0];
-            PhoneLog.d(TAG, "📷 [3/4] 正在开启相机硬件, ID: " + cameraId);
+            PhoneLog.d(TAG, "📷 [3/4] 正在強制開啟相機硬體, ID: " + cameraId);
+            showToast("3/4 正在調用系統相機...");
+
+            // 💡 核心保險：如果之前有殘留的相機實例，強制關閉它，避免佔用死鎖
+            if (mCameraDevice != null) {
+                try {
+                    mCameraDevice.close();
+                    mCameraDevice = null;
+                    PhoneLog.w(TAG, "⚠️ 強制關閉先前的相機佔用實例");
+                } catch (Exception ignored) {}
+            }
 
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                showToast("❌ 缺少相機權限");
                 return;
             }
 
@@ -359,32 +370,38 @@ public class PhoneSyncCameraService extends Service {
                 public void onOpened(@NonNull CameraDevice camera) {
                     mCameraDevice = camera;
                     mIsCameraOpened.set(true);
-                    PhoneLog.d(TAG, "✅ [3/4] 相机硬件已成功开启，建立 Session...");
-                    showToast("✅ 摄像头硬件已打开，正在配对会话...");
+                    PhoneLog.d(TAG, "✅ [3/4] 相機硬體已成功開啟！");
+                    showToast("✅ 相機硬件已打開，正在建立預覽會話...");
+                    
+                    // 立即建立 CaptureSession
                     createCameraCaptureSession();
                 }
 
                 @Override
                 public void onDisconnected(@NonNull CameraDevice camera) {
-                    showToast("⚠️ 摄像头连接断开");
+                    PhoneLog.w(TAG, "⚠️ 相機斷開連接");
+                    showToast("⚠️ 相機連接斷開");
                     stopStreamingAndRelease();
                     stopSelf();
                 }
 
                 @Override
                 public void onError(@NonNull CameraDevice camera, int error) {
-                    showToast("❌ 摄像头开启错误 Code: " + error);
+                    PhoneLog.e(TAG, "❌ 相機開啟錯誤, Error Code: " + error);
+                    showToast("❌ 相機被佔用或錯誤 (Err: " + error + ")");
                     stopStreamingAndRelease();
                     stopSelf();
                 }
             }, mBgHandler);
 
         } catch (Exception e) {
-            showToast("❌ 打开摄像头异常: " + e.getMessage());
+            PhoneLog.e(TAG, "❌ 打開相機異常", e);
+            showToast("❌ 打開相機異常: " + e.getMessage());
             stopStreamingAndRelease();
             stopSelf();
         }
     }
+
 
 
     private void createCameraCaptureSession() {
@@ -450,11 +467,13 @@ public class PhoneSyncCameraService extends Service {
             mEncoder.start();
             mCaptureSession.setRepeatingRequest(builder.build(), null, mBgHandler);
             PhoneLog.d(TAG, "🚀 预览 CaptureRequest 已成功提交！");
+            showToast("🎉 推流已全面啟動！");
     
         } catch (IllegalStateException e) {
             PhoneLog.e(TAG, "⚠️ CameraDevice 已关闭，无法建立 CaptureRequest: " + e.getMessage());
         } catch (Exception e) {
             PhoneLog.e(TAG, "❌ 启动预览 Request 失败", e);
+            showToast("❌ 預覽請求失敗: " + e.getMessage());
             stopStreamingAndRelease();
             stopSelf();
         }

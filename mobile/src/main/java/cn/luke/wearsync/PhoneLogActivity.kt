@@ -48,10 +48,9 @@ class PhoneLogActivity : ComponentActivity() {
             }
 
             // ✅ 使用 Scaffold 统一管理顶部/底部栏与内容区域的关系
-            Scaffold(
+              Scaffold(
                 containerColor = Color(0xFF121212),
                 bottomBar = {
-                    // ✅ 关键：为底部按钮区域添加导航栏内边距，避免与系统导航栏融合
                     Surface(
                         color = Color(0xFF121212),
                         tonalElevation = 3.dp
@@ -59,7 +58,7 @@ class PhoneLogActivity : ComponentActivity() {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .navigationBarsPadding() // 避开系统导航栏
+                                .navigationBarsPadding()
                                 .padding(horizontal = 16.dp, vertical = 12.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
@@ -92,10 +91,19 @@ class PhoneLogActivity : ComponentActivity() {
                             ) {
                                 Text("保存备份", fontSize = 12.sp)
                             }
+                            // ✅ 新增：直接关闭全屏 Activity（不恢复悬浮窗）
+                            Button(
+                                onClick = { finish() },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF3B30)),
+                                modifier = Modifier.height(42.dp).weight(1f)
+                            ) {
+                                Text("关闭", fontSize = 12.sp)
+                            }
                         }
                     }
                 }
-            ) { innerPadding ->
+            )
+             { innerPadding ->
                 // ✅ 内容区域应用 Scaffold 提供的 padding，自动避开 bottomBar + 导航栏
                 Box(
                     modifier = Modifier
