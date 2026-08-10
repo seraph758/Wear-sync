@@ -19,6 +19,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlin.time.Duration.Companion.milliseconds
+import androidx.compose.ui.text.style.TextOverflow
+
 
 class PhoneLogActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {

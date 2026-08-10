@@ -511,10 +511,10 @@ fun PhoneSyncMainScreen(
             ) {
                 Text(
                     text = "WearSync 枢纽",
-                    fontSize = 28.sp,
+                    fontSize = 33.sp,
                     fontWeight = FontWeight.Bold,
                     color = textColor,
-                    modifier = Modifier.padding(top = 1.dp, bottom = 4.dp)
+                    modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)
                 )
 
                 // Wear Status Card
