@@ -68,6 +68,11 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
         imgPreview = findViewById(R.id.img_preview);
         tvStatusHint = findViewById(R.id.tv_status_hint);
 
+        // 🎯 预览图点击即可关闭
+        if (imgPreview != null) {
+            imgPreview.setOnClickListener(v -> hidePhotoPreview());
+        }
+
         if (surfaceView != null) {
             surfaceView.getHolder().addCallback(this);
             // 🔄 移除手表端旋转，由手机端推流时完成旋转
@@ -101,6 +106,11 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
             public void handleOnBackPressed() {
+                // 🎯 如果预览图可见，先关闭预览
+                if (imgPreview != null && imgPreview.getVisibility() == View.VISIBLE) {
+                    hidePhotoPreview();
+                    return;
+                }
                 WearLog.d(TAG, "🔙 用户按下返回键，准备关闭远端相机");
                 WearSyncCommManager.getInstance(getApplicationContext()).sendBusinessCommand("camera_action", "STOP_CAMERA");
                 cleanExit(false);
@@ -186,18 +196,19 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
                 imgPreview.setVisibility(View.VISIBLE);
                 imgPreview.setAlpha(0.0f);
                 imgPreview.animate().alpha(1.0f).setDuration(500).start();
-                
-                // 3秒后自动隐藏预览返回取景
-                imgPreview.postDelayed(() -> {
-                    if (!isUserExiting) {
-                        imgPreview.animate().alpha(0.0f).setDuration(500).withEndAction(() -> {
-                            imgPreview.setVisibility(View.GONE);
-                        }).start();
-                    }
-                }, 3000);
+                // 🚀 已移除 3 秒自动隐藏逻辑，现在支持手动关闭
             } catch (Exception e) {
                 WearLog.e(TAG, "❌ 显示照片预览失败", e);
             }
+        });
+    }
+
+    private void hidePhotoPreview() {
+        if (imgPreview == null || imgPreview.getVisibility() != View.VISIBLE) return;
+        runOnUiThread(() -> {
+            imgPreview.animate().alpha(0.0f).setDuration(500).withEndAction(() -> {
+                imgPreview.setVisibility(View.GONE);
+            }).start();
         });
     }
 
