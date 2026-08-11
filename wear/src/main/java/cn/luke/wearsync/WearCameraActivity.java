@@ -1,12 +1,19 @@
 package cn.luke.wearsync;
 
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.media.MediaCodec;
 import android.media.MediaFormat;
+import android.net.Uri;
 import android.os.Bundle;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
+import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.ImageView;
 
 import androidx.activity.ComponentActivity;
 import androidx.activity.OnBackPressedCallback;
@@ -28,6 +35,8 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
     public static WeakReference<WearCameraActivity> sActivityRef = new WeakReference<>(null);
 
     private SurfaceView surfaceView;
+    private ImageView imgPreview;
+    private View viewFlash;
     private MediaCodec mDecoder;
     private volatile boolean isDecoderRunning = false;
     private volatile boolean isUserExiting = false;
@@ -36,6 +45,7 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
     private Thread renderThread;
 
     private ChannelClient.ChannelCallback mChannelListener;
+    private BroadcastReceiver mFileReceiver;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -54,10 +64,12 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
         
         setContentView(R.layout.activity_wear_camera);
         surfaceView = findViewById(R.id.surfaceView);
+        imgPreview = findViewById(R.id.img_preview);
+        viewFlash = findViewById(R.id.view_flash);
+
         if (surfaceView != null) {
             surfaceView.getHolder().addCallback(this);
-            // 🔄 将画面顺时针旋转 90 度以适配手表显示方向
-            surfaceView.setRotation(90f);
+            // 🔄 移除手表端旋转，由手机端推流时完成旋转
         }
 
         // 🎯 拍照快门按钮：向手机发送触发高清拍照指令
@@ -66,8 +78,24 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
             btnShutter.setOnClickListener(_ -> {
                 WearLog.d(TAG, "📸 用户点击 [快门按钮]，发送最高画质拍照请求");
                 WearSyncCommManager.getInstance(getApplicationContext()).sendBusinessCommand("camera_action", "TAKE_PHOTO");
+                showShutterFeedback();
             });
         }
+        
+        // 注册文件接收广播
+        mFileReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                if ("cn.luke.wearsync.ACTION_FILE_RECEIVED".equals(intent.getAction())) {
+                    String uriStr = intent.getStringExtra("file_uri");
+                    if (uriStr != null) {
+                        showPhotoPreview(Uri.parse(uriStr));
+                    }
+                }
+            }
+        };
+        IntentFilter filter = new IntentFilter("cn.luke.wearsync.ACTION_FILE_RECEIVED");
+        registerReceiver(mFileReceiver, filter, Context.RECEIVER_EXPORTED);
 
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
@@ -136,6 +164,38 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
         }
     }
 
+    private void showShutterFeedback() {
+        if (viewFlash == null) return;
+        viewFlash.setVisibility(View.VISIBLE);
+        viewFlash.setAlpha(1.0f);
+        viewFlash.animate().alpha(0.0f).setDuration(300).withEndAction(() -> {
+            viewFlash.setVisibility(View.GONE);
+        }).start();
+    }
+
+    private void showPhotoPreview(Uri uri) {
+        if (imgPreview == null) return;
+        runOnUiThread(() -> {
+            try {
+                imgPreview.setImageURI(uri);
+                imgPreview.setVisibility(View.VISIBLE);
+                imgPreview.setAlpha(0.0f);
+                imgPreview.animate().alpha(1.0f).setDuration(500).start();
+                
+                // 3秒后自动隐藏预览返回取景
+                imgPreview.postDelayed(() -> {
+                    if (!isUserExiting) {
+                        imgPreview.animate().alpha(0.0f).setDuration(500).withEndAction(() -> {
+                            imgPreview.setVisibility(View.GONE);
+                        }).start();
+                    }
+                }, 3000);
+            } catch (Exception e) {
+                WearLog.e(TAG, "❌ 显示照片预览失败", e);
+            }
+        });
+    }
+
     public void feedH264Data(byte[] h264Data) {
         if (h264Data != null && h264Data.length > 0) {
             if (!frameQueue.offer(h264Data)) {
@@ -181,6 +241,7 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
         try {
             // 🎯 对齐手机端的 320x320 画面尺寸
             MediaFormat format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, 320, 320);
+            
             mDecoder = MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);
             mDecoder.configure(format, surfaceView.getHolder().getSurface(), null, 0);
             mDecoder.start();
@@ -237,6 +298,9 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
     protected void onDestroy() {
         if (mChannelListener != null) {
             Wearable.getChannelClient(this).unregisterChannelCallback(mChannelListener);
+        }
+        if (mFileReceiver != null) {
+            unregisterReceiver(mFileReceiver);
         }
         cleanExit(false);
         super.onDestroy();

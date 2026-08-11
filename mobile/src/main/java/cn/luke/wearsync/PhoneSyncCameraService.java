@@ -23,16 +23,16 @@ import android.hardware.camera2.params.SessionConfiguration;
 import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.Image;
 import android.media.ImageReader;
-import android.os.Environment;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaFormat;
+import android.net.Uri;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
 import android.util.Size;
 import android.view.Surface;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -233,7 +233,6 @@ public class PhoneSyncCameraService extends Service {
         // 步骤 0: 权限检查
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             PhoneLog.e(TAG, "❌ 缺少 CAMERA 权限，无法启动相机");
-            showToast("❌ 缺少相机权限！");
             stopSelf();
             return;
         }
@@ -251,12 +250,13 @@ public class PhoneSyncCameraService extends Service {
             format.setInteger(MediaFormat.KEY_BIT_RATE, BIT_RATE);
             format.setInteger(MediaFormat.KEY_FRAME_RATE, FRAME_RATE);
             format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, I_FRAME_INTERVAL);
+            // 🔄 关键：在编码格式中加入旋转 90 度的标记
+            format.setInteger(MediaFormat.KEY_ROTATION, 90);
             
             mEncoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);
             mEncoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
             
             PhoneLog.d(TAG, "⏸️ [1/4] 编码器已配置 (" + mPreviewWidth + "x" + mPreviewHeight + ")，等待通道连接");
-            showToast("1/4 编码器配置成功");
     
             // 步骤 3: 配置拍照模块 (使用硬件支持的最大尺寸)
             mPhotoReader = ImageReader.newInstance(photoWidth, photoHeight, ImageFormat.JPEG, 2);
@@ -268,19 +268,15 @@ public class PhoneSyncCameraService extends Service {
                 }
             }, mBgHandler);
             PhoneLog.d(TAG, "⏸️ [2/4] ImageReader 配置完成 (" + photoWidth + "x" + photoHeight + ")");
-            showToast("2/4 拍照模块配置成功");
     
         } catch (Exception e)  {
             PhoneLog.e(TAG, "❌ 初始化编码器/ImageReader 失败", e);
-            String errMsg = e.getClass().getSimpleName() + ": " + (e.getMessage() != null ? e.getMessage() : "未知");
-            showToast("❌ 初始化崩溃: " + errMsg);
             stopStreamingAndRelease();
             stopSelf();
             return;
         }
 
         // 步骤 4: 连接手表通道 (成功后会触发 startCameraHardware)
-        showToast("4/4 正在连接手表传输通道...");
         openChannelStream();
     }
 
@@ -408,7 +404,6 @@ public class PhoneSyncCameraService extends Service {
       private void startCameraHardware() {
         CameraManager manager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
         if (manager == null) {
-            showToast("❌ 錯誤：無法獲取 CameraManager");
             stopStreamingAndRelease();
             stopSelf();
             return;
@@ -417,7 +412,6 @@ public class PhoneSyncCameraService extends Service {
         try {
             String cameraId = manager.getCameraIdList()[0];
             PhoneLog.d(TAG, "📷 [3/4] 正在強制開啟相機硬體, ID: " + cameraId);
-            showToast("3/4 正在調用系統相機...");
 
             // 💡 核心保險：如果之前有殘留的相機實例，強制關閉它，避免佔用死鎖
             if (mCameraDevice != null) {
@@ -429,7 +423,6 @@ public class PhoneSyncCameraService extends Service {
             }
 
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-                showToast("❌ 缺少相機權限");
                 return;
             }
 
@@ -439,7 +432,6 @@ public class PhoneSyncCameraService extends Service {
                     mCameraDevice = camera;
                     mIsCameraOpened.set(true);
                     PhoneLog.d(TAG, "✅ [3/4] 相機硬體已成功開啟！");
-                    showToast("✅ 相機硬件已打開，正在建立預覽會話...");
                     
                     // 立即建立 CaptureSession
                     createCameraCaptureSession();
@@ -448,7 +440,6 @@ public class PhoneSyncCameraService extends Service {
                 @Override
                 public void onDisconnected(@NonNull CameraDevice camera) {
                     PhoneLog.w(TAG, "⚠️ 相機斷開連接");
-                    showToast("⚠️ 相機連接斷開");
                     stopStreamingAndRelease();
                     stopSelf();
                 }
@@ -456,7 +447,6 @@ public class PhoneSyncCameraService extends Service {
                 @Override
                 public void onError(@NonNull CameraDevice camera, int error) {
                     PhoneLog.e(TAG, "❌ 相機開啟錯誤, Error Code: " + error);
-                    showToast("❌ 相機被佔用或錯誤 (Err: " + error + ")");
                     stopStreamingAndRelease();
                     stopSelf();
                 }
@@ -464,7 +454,6 @@ public class PhoneSyncCameraService extends Service {
 
         } catch (Exception e) {
             PhoneLog.e(TAG, "❌ 打開相機異常", e);
-            showToast("❌ 打開相機異常: " + e.getMessage());
             stopStreamingAndRelease();
             stopSelf();
         }
@@ -515,7 +504,6 @@ public class PhoneSyncCameraService extends Service {
                                 }, 300);
                             } else {
                                 PhoneLog.e(TAG, "❌ 重试 " + MAX_CONFIG_RETRY + " 次仍失败，停止服务");
-                                showToast("❌ 相机会话配置失败，硬件可能被占用或不支持当前参数");
                                 mConfigFailRetryCount = 0;
                                 stopStreamingAndRelease();
                                 stopSelf();
@@ -547,12 +535,10 @@ public class PhoneSyncCameraService extends Service {
             
             mCaptureSession.setRepeatingRequest(builder.build(), null, mBgHandler);
             PhoneLog.d(TAG, "🚀 预览 CaptureRequest 已成功提交！");
-            showToast("🎉 推流已全面啟動！");
         } catch (IllegalStateException e) {
             PhoneLog.e(TAG, "⚠️ CameraDevice 已关闭，无法建立 CaptureRequest: " + e.getMessage());
         } catch (Exception e) {
             PhoneLog.e(TAG, "❌ 启动预览 Request 失败", e);
-            showToast("❌ 預覽請求失敗: " + e.getMessage());
             stopStreamingAndRelease();
             stopSelf();
         }
@@ -584,9 +570,9 @@ public class PhoneSyncCameraService extends Service {
             byte[] data = new byte[buffer.remaining()];
             buffer.get(data);
             
-            // 🎯 将照片保存到公共下载目录的 WearSync 文件夹
-            File downloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
-            File wearSyncDir = new File(downloadDir, "WearSync/Camera");
+            // 🎯 将照片保存到 DCIM/WearSync 目录
+            File dcimDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM);
+            File wearSyncDir = new File(dcimDir, "WearSync");
             if (!wearSyncDir.exists()) wearSyncDir.mkdirs();
             
             String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(new Date());
@@ -595,11 +581,15 @@ public class PhoneSyncCameraService extends Service {
             try (FileOutputStream fos = new FileOutputStream(photoFile)) {
                 fos.write(data);
                 PhoneLog.d(TAG, "✅ 高清照片已保存至: " + photoFile.getAbsolutePath() + " (" + data.length + " bytes)");
-                showToast("📸 拍照成功: " + photoFile.getName());
+                
+                // 🚀 传输照片到手表预览
+                if (mCachedNodeId != null) {
+                    Uri uri = Uri.fromFile(photoFile);
+                    PhoneSyncFileTransferManager.sendFileToWear(this, mCachedNodeId, uri, photoFile.getName(), null);
+                }
             }
         } catch (Exception e) {
             PhoneLog.e(TAG, "❌ 保存照片失败", e);
-            showToast("❌ 拍照失败: " + e.getMessage());
         }
     }
 
@@ -751,13 +741,5 @@ public class PhoneSyncCameraService extends Service {
             PhoneLog.d(TAG, "ℹ️ MediaCodec 输出格式改变: " + format);
         }
     }
-    
-    private void showToast(final String message) {
-        // 确保在主线程（UI线程）执行弹窗操作
-            if (mMainHandler != null) {
-                mMainHandler.post(() -> Toast.makeText(PhoneSyncCameraService.this, message, Toast.LENGTH_SHORT).show());
-            }
-        
-    } // <-- 这是类的结束大括号
 
 }

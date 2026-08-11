@@ -331,6 +331,11 @@ public class WearSyncListenerService extends WearableListenerService {
             WearLog.i(TAG, "【FIL-002】文件接收成功! 大小: " + bytesReceived + "B");
             sendFileTransferStatus(nodeId, "success:" + fileName);
 
+            // 🚀 发送本地广播，通知 Activity 预览照片
+            Intent intent = new Intent("cn.luke.wearsync.ACTION_FILE_RECEIVED");
+            intent.putExtra("file_uri", fileUri.toString());
+            sendBroadcast(intent);
+
         } catch (Exception e) {
             WearLog.e(TAG, "【FIL-ERR】文件接收过程中发生异常", e);
             if (fileUri != null) {

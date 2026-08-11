@@ -782,14 +782,30 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
     }
 
     override fun onMessageReceived(messageEvent: MessageEvent) {
-        if (messageEvent.path == "/wearsync-body-status") {
-            val rawStatus = String(messageEvent.data, StandardCharsets.UTF_8)
-            activity?.runOnUiThread {
-                if (rawStatus == "off_body") {
-                    watchWearState.value = "🚫 已摘下 (Off-Body)"
-                } else if (rawStatus == "on_body") {
-                    watchWearState.value = "🟢 已佩戴 (On-Body)"
+        if (messageEvent.path == "/wearsync-body-status" || messageEvent.path == "/wear-universal-sync") {
+            try {
+                val dataStr = String(messageEvent.data, StandardCharsets.UTF_8)
+                if (messageEvent.path == "/wear-universal-sync") {
+                    val json = JSONObject(dataStr)
+                    if (json.optString("type") == "body_status") {
+                        val action = json.optString("action").lowercase()
+                        updateBodyStatus(action)
+                    }
+                } else {
+                    updateBodyStatus(dataStr.lowercase())
                 }
+            } catch (_: Exception) {
+                // Ignore if not a valid body status message
+            }
+        }
+    }
+
+    private fun updateBodyStatus(status: String) {
+        activity?.runOnUiThread {
+            if (status.contains("off")) {
+                watchWearState.value = "🚫 已摘下 (Off-Body)"
+            } else if (status.contains("on")) {
+                watchWearState.value = "🟢 已佩戴 (On-Body)"
             }
         }
     }

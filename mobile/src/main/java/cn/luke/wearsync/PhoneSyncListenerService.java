@@ -69,8 +69,15 @@ public class PhoneSyncListenerService extends WearableListenerService {
         // 3. 在后台线程处理消息
         MESSAGE_EXECUTOR.execute(() -> {
             try {
-                String jsonStr = new String(messageEvent.getData(), StandardCharsets.UTF_8);
-                JSONObject json = new JSONObject(jsonStr);
+                byte[] data = messageEvent.getData();
+                String dataStr = new String(data, StandardCharsets.UTF_8);
+
+                if ("/wearsync-body-status".equals(messageEvent.getPath())) {
+                    handleBodyStatus(dataStr);
+                    return;
+                }
+
+                JSONObject json = new JSONObject(dataStr);
 
                 // 4. 忽略来自手机自身的消息
                 String sender = json.optString("sender", "");
