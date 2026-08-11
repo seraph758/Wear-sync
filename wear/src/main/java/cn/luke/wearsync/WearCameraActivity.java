@@ -14,6 +14,7 @@ import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.ImageView;
+import android.widget.TextView;
 
 import androidx.activity.ComponentActivity;
 import androidx.activity.OnBackPressedCallback;
@@ -36,7 +37,7 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
 
     private SurfaceView surfaceView;
     private ImageView imgPreview;
-    private View viewFlash;
+    private TextView tvStatusHint;
     private MediaCodec mDecoder;
     private volatile boolean isDecoderRunning = false;
     private volatile boolean isUserExiting = false;
@@ -65,7 +66,7 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
         setContentView(R.layout.activity_wear_camera);
         surfaceView = findViewById(R.id.surfaceView);
         imgPreview = findViewById(R.id.img_preview);
-        viewFlash = findViewById(R.id.view_flash);
+        tvStatusHint = findViewById(R.id.tv_status_hint);
 
         if (surfaceView != null) {
             surfaceView.getHolder().addCallback(this);
@@ -78,7 +79,7 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
             btnShutter.setOnClickListener(_ -> {
                 WearLog.d(TAG, "📸 用户点击 [快门按钮]，发送最高画质拍照请求");
                 WearSyncCommManager.getInstance(getApplicationContext()).sendBusinessCommand("camera_action", "TAKE_PHOTO");
-                showShutterFeedback();
+                showCaptureHint("📸 正在拍照...");
             });
         }
         
@@ -164,19 +165,23 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
         }
     }
 
-    private void showShutterFeedback() {
-        if (viewFlash == null) return;
-        viewFlash.setVisibility(View.VISIBLE);
-        viewFlash.setAlpha(1.0f);
-        viewFlash.animate().alpha(0.0f).setDuration(300).withEndAction(() -> {
-            viewFlash.setVisibility(View.GONE);
-        }).start();
+    private void showCaptureHint(String text) {
+        if (tvStatusHint == null) return;
+        runOnUiThread(() -> {
+            tvStatusHint.setText(text);
+            tvStatusHint.setVisibility(View.VISIBLE);
+            tvStatusHint.setAlpha(1.0f);
+            tvStatusHint.animate().alpha(0.0f).setDuration(1500).withEndAction(() -> {
+                tvStatusHint.setVisibility(View.GONE);
+            }).start();
+        });
     }
 
     private void showPhotoPreview(Uri uri) {
         if (imgPreview == null) return;
         runOnUiThread(() -> {
             try {
+                showCaptureHint("✨ 照片已保存并同步");
                 imgPreview.setImageURI(uri);
                 imgPreview.setVisibility(View.VISIBLE);
                 imgPreview.setAlpha(0.0f);
@@ -241,6 +246,8 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
         try {
             // 🎯 对齐手机端的 320x320 画面尺寸
             MediaFormat format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, 320, 320);
+            // 🔄 关键：告诉硬件解码器将流旋转 90 度以匹配手机传感器方向
+            format.setInteger(MediaFormat.KEY_ROTATION, 90);
             
             mDecoder = MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);
             mDecoder.configure(format, surfaceView.getHolder().getSurface(), null, 0);

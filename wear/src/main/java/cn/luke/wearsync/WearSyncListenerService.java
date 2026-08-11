@@ -283,7 +283,15 @@ public class WearSyncListenerService extends WearableListenerService {
         Uri collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
         ContentValues values = new ContentValues();
         values.put(MediaStore.Downloads.DISPLAY_NAME, fileName);
-        values.put(MediaStore.Downloads.MIME_TYPE, "application/vnd.android.package-archive");
+        
+        // 🎯 修复：根据扩展名动态设置 MIME，不再强制 APK
+        String mimeType = "application/octet-stream";
+        if (fileName.endsWith(".jpg") || fileName.endsWith(".jpeg")) {
+            mimeType = "image/jpeg";
+        } else if (fileName.endsWith(".apk")) {
+            mimeType = "application/vnd.android.package-archive";
+        }
+        values.put(MediaStore.Downloads.MIME_TYPE, mimeType);
         values.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/Received");
         
         Uri fileUri = null;

@@ -65,6 +65,7 @@ data class PhoneSyncUIState(
     val isNotificationAllowed: Boolean = false,
     val isCameraAllowed: Boolean = false,
     val isServiceRunning: Boolean = false,
+    val isWatchPreviewEnabled: Boolean = true,
     val fileTransferStatus: String = "",
     val uiLogDebug: Boolean = false,
     val uiWearLogDebug: Boolean = false,
@@ -91,6 +92,7 @@ data class PhoneSyncUIActions(
     val onCameraForceStop: () -> Unit = {},
     val onPhoneLogToggle: (Boolean) -> Unit = {},
     val onWearLogToggle: (Boolean) -> Unit = {},
+    val onWatchPreviewToggle: (Boolean) -> Unit = {},
     val onFloatingLogClick: () -> Unit = {},
     val onNotificationPermissionClick: () -> Unit = {},
     val onCameraPermissionClick: () -> Unit = {},
@@ -454,6 +456,18 @@ fun PhoneSyncMainScreen(
                                     onClick = actions.onCameraForceStop
                                 ) { Text("强制关闭相机", color = Color.White, fontSize = 12.sp) }
                             }
+                            HorizontalDivider(color = dividerColor, modifier = Modifier.padding(horizontal = 14.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(14.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("拍照后发送预览到手表", color = textColor, fontSize = 14.sp)
+                                    Text("开启后将自动压缩并发送缩略图，关闭可节省电量与带宽", color = subTextColor, fontSize = 11.sp)
+                                }
+                                Switch(checked = state.isWatchPreviewEnabled, onCheckedChange = actions.onWatchPreviewToggle)
+                            }
                         }
                     }
 
@@ -674,6 +688,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
     private val watchWearState = mutableStateOf("未知 (等待手表上报...)")
     private val uiLogDebugSwitch = mutableStateOf(false)
     private val uiWearLogDebugSwitch = mutableStateOf(false)
+    private val isWatchPreviewEnabledState = mutableStateOf(true)
     private val fileTransferStatus = mutableStateOf("等待选择文件...")
 
     private val alarmPickerLauncher =
@@ -817,6 +832,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
         val sp = requireContext().getSharedPreferences("dndsync_prefs", Context.MODE_PRIVATE)
         uiLogDebugSwitch.value = sp.getBoolean("phone_log_debug_visible", false)
         uiWearLogDebugSwitch.value = sp.getBoolean("wear_log_debug_visible", false)
+        isWatchPreviewEnabledState.value = sp.getBoolean("camera_watch_preview_enabled", true)
 
         return ComposeView(requireContext()).apply {
             setContent {
@@ -827,6 +843,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                 val fileTransferStatusVal by fileTransferStatus
                 val uiLogDebugVal by uiLogDebugSwitch
                 val uiWearLogDebugVal by uiWearLogDebugSwitch
+                val isWatchPreviewEnabledVal by isWatchPreviewEnabledState
                 val isServiceRunningVal by AppState.isServiceRunning.collectAsState()
                 
                 var mask by remember { mutableIntStateOf(sp.getInt("KEY_MASK", 15)) }
@@ -854,6 +871,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                         isNotificationAllowed = isNotificationAllowedVal,
                         isCameraAllowed = isCameraAllowedVal,
                         isServiceRunning = isServiceRunningVal,
+                        isWatchPreviewEnabled = isWatchPreviewEnabledVal,
                         fileTransferStatus = fileTransferStatusVal,
                         uiLogDebug = uiLogDebugVal,
                         uiWearLogDebug = uiWearLogDebugVal,
@@ -991,6 +1009,10 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                                     } catch (_: Exception) { }
                                 }
                             }
+                        },
+                        onWatchPreviewToggle = { isEnabled ->
+                            isWatchPreviewEnabledState.value = isEnabled
+                            sp.edit { putBoolean("camera_watch_preview_enabled", isEnabled) }
                         },
                         onFloatingLogClick = { handleFloatingLogClick() },
                         onNotificationPermissionClick = {

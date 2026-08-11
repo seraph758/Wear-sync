@@ -8,10 +8,14 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
 import android.graphics.ImageFormat;
 import android.graphics.SurfaceTexture;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Matrix;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraCharacteristics;
@@ -582,14 +586,38 @@ public class PhoneSyncCameraService extends Service {
                 fos.write(data);
                 PhoneLog.d(TAG, "✅ 高清照片已保存至: " + photoFile.getAbsolutePath() + " (" + data.length + " bytes)");
                 
-                // 🚀 传输照片到手表预览
-                if (mCachedNodeId != null) {
-                    Uri uri = Uri.fromFile(photoFile);
-                    PhoneSyncFileTransferManager.sendFileToWear(this, mCachedNodeId, uri, photoFile.getName(), null);
+                // 🚀 传输预览图到手表 (如果开启了预览功能)
+                SharedPreferences sp = getSharedPreferences("dndsync_prefs", Context.MODE_PRIVATE);
+                boolean previewEnabled = sp.getBoolean("camera_watch_preview_enabled", true);
+
+                if (previewEnabled && mCachedNodeId != null) {
+                    // 🎯 缩放并旋转预览图 (蓝牙传输优化)
+                    File thumbFile = new File(getCacheDir(), "thumb_preview.jpg");
+                    BitmapFactory.Options options = new BitmapFactory.Options();
+                    options.inSampleSize = 4; // 初步缩小
+                    Bitmap bitmap = BitmapFactory.decodeByteArray(data, 0, data.length, options);
+                    
+                    if (bitmap != null) {
+                        // 强制旋转 90 度以匹配预览习惯 (如果 JPEG_ORIENTATION 没生效)
+                        Matrix matrix = new Matrix();
+                        matrix.postRotate(90);
+                        Bitmap rotatedBitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
+                        
+                        try (FileOutputStream thumbFos = new FileOutputStream(thumbFile)) {
+                            rotatedBitmap.compress(Bitmap.CompressFormat.JPEG, 70, thumbFos);
+                        }
+                        
+                        PhoneLog.d(TAG, "📤 发送缩略图预览 (" + thumbFile.length() + " bytes)");
+                        Uri uri = Uri.fromFile(thumbFile);
+                        PhoneSyncFileTransferManager.sendFileToWear(this, mCachedNodeId, uri, "preview.jpg", null);
+                        
+                        if (rotatedBitmap != bitmap) rotatedBitmap.recycle();
+                        bitmap.recycle();
+                    }
                 }
             }
         } catch (Exception e) {
-            PhoneLog.e(TAG, "❌ 保存照片失败", e);
+            PhoneLog.e(TAG, "❌ 保存或处理预览照片失败", e);
         }
     }
 
