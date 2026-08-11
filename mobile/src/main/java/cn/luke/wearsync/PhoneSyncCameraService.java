@@ -574,7 +574,7 @@ public class PhoneSyncCameraService extends Service {
             byte[] data = new byte[buffer.remaining()];
             buffer.get(data);
             
-            // 🎯 将照片保存到 DCIM/WearSync 目录
+            // 🎯 將照片保存到 DCIM/WearSync 目錄
             File dcimDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM);
             File wearSyncDir = new File(dcimDir, "WearSync");
             if (!wearSyncDir.exists()) wearSyncDir.mkdirs();
@@ -586,19 +586,27 @@ public class PhoneSyncCameraService extends Service {
                 fos.write(data);
                 PhoneLog.d(TAG, "✅ 高清照片已保存至: " + photoFile.getAbsolutePath() + " (" + data.length + " bytes)");
                 
-                // 🚀 传输预览图到手表 (如果开启了预览功能)
+                // 💡 關鍵修復：通知 Android 系統相冊掃描新照片，這樣相冊 App 才能立刻看到它！
+                android.media.MediaScannerConnection.scanFile(
+                    this,
+                    new String[]{photoFile.getAbsolutePath()},
+                    new String[]{"image/jpeg"},
+                    (path, uri) -> PhoneLog.d(TAG, "🔄 系統相冊掃描完成, Uri: " + uri)
+                );
+                
+                // 🚀 傳輸預覽圖到手錶 (如果開啟了預覽功能)
                 SharedPreferences sp = getSharedPreferences("dndsync_prefs", Context.MODE_PRIVATE);
                 boolean previewEnabled = sp.getBoolean("camera_watch_preview_enabled", true);
 
                 if (previewEnabled && mCachedNodeId != null) {
-                    // 🎯 缩放并旋转预览图 (蓝牙传输优化)
+                    // 🎯 縮放並旋轉預覽圖 (藍牙傳輸優化)
                     File thumbFile = new File(getCacheDir(), "thumb_preview.jpg");
                     BitmapFactory.Options options = new BitmapFactory.Options();
-                    options.inSampleSize = 4; // 初步缩小
+                    options.inSampleSize = 4; // 初步縮小
                     Bitmap bitmap = BitmapFactory.decodeByteArray(data, 0, data.length, options);
                     
                     if (bitmap != null) {
-                        // 强制旋转 90 度以匹配预览习惯 (如果 JPEG_ORIENTATION 没生效)
+                        // 強制旋轉 90 度以匹配預覽習慣
                         Matrix matrix = new Matrix();
                         matrix.postRotate(90);
                         Bitmap rotatedBitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
@@ -607,7 +615,7 @@ public class PhoneSyncCameraService extends Service {
                             rotatedBitmap.compress(Bitmap.CompressFormat.JPEG, 70, thumbFos);
                         }
                         
-                        PhoneLog.d(TAG, "📤 发送缩略图预览 (" + thumbFile.length() + " bytes)");
+                        PhoneLog.d(TAG, "📤 發送縮略圖預覽 (" + thumbFile.length() + " bytes)");
                         Uri uri = Uri.fromFile(thumbFile);
                         PhoneSyncFileTransferManager.sendFileToWear(this, mCachedNodeId, uri, "preview.jpg", null);
                         
@@ -617,9 +625,10 @@ public class PhoneSyncCameraService extends Service {
                 }
             }
         } catch (Exception e) {
-            PhoneLog.e(TAG, "❌ 保存或处理预览照片失败", e);
+            PhoneLog.e(TAG, "❌ 保存或處理預覽照片失敗", e);
         }
     }
+
 
       // ==================== 资源清理与辅助函数 ====================
     private void startBackgroundThread() {
