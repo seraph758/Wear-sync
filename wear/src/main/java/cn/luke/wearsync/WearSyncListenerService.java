@@ -284,11 +284,16 @@ public class WearSyncListenerService extends WearableListenerService {
         ContentValues values = new ContentValues();
         values.put(MediaStore.Downloads.DISPLAY_NAME, fileName);
         
-        // 🎯 修复：根据扩展名动态设置 MIME，不再强制 APK
+        // 🎯 修复：根据扩展名动态设置 MIME，支持 HEIC 和 WebP
         String mimeType = "application/octet-stream";
-        if (fileName.endsWith(".jpg") || fileName.endsWith(".jpeg")) {
+        String lowerName = fileName.toLowerCase();
+        if (lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg")) {
             mimeType = "image/jpeg";
-        } else if (fileName.endsWith(".apk")) {
+        } else if (lowerName.endsWith(".heic") || lowerName.endsWith(".heif")) {
+            mimeType = "image/heif";
+        } else if (lowerName.endsWith(".webp")) {
+            mimeType = "image/webp";
+        } else if (lowerName.endsWith(".apk")) {
             mimeType = "application/vnd.android.package-archive";
         }
         values.put(MediaStore.Downloads.MIME_TYPE, mimeType);

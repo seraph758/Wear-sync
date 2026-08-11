@@ -21,19 +21,11 @@
             android:order="2"
             app:iconSpaceReserved="false" />
 
-        <SwitchPreferenceCompat
-            android:key="body_detect_key"
-            android:title="离腕自动检测"
-            android:summary="离腕时自动通知手机（需传感器权限）"
-            android:defaultValue="false"
-            android:order="3"
-            app:iconSpaceReserved="false" />
-
         <Preference
             android:key="camera_control_key"
             android:title="远端相机控制"
             android:summary="点击尝试唤醒手机相机"
-            android:order="4"
+            android:order="3"
             app:iconSpaceReserved="false" />
 
     </PreferenceCategory>

@@ -72,11 +72,6 @@ public class PhoneSyncListenerService extends WearableListenerService {
                 byte[] data = messageEvent.getData();
                 String dataStr = new String(data, StandardCharsets.UTF_8);
 
-                if ("/wearsync-body-status".equals(messageEvent.getPath())) {
-                    handleBodyStatus(dataStr);
-                    return;
-                }
-
                 JSONObject json = new JSONObject(dataStr);
 
                 // 4. 忽略来自手机自身的消息
@@ -122,17 +117,9 @@ public class PhoneSyncListenerService extends WearableListenerService {
             case "camera_action": 
                 handleCamera(action);
                 break;
-            case "body_status":
-                handleBodyStatus(action);
-                break;
             default:
                 PhoneLog.w(TAG, "unknown type: " + type);
         }
-    }
-
-    private void handleBodyStatus(String action) {
-        PhoneLog.i(TAG, "🧘 [佩戴状态] 手表端目前状态: " + action);
-        // 如果是离腕，可以在此处执行额外逻辑，如锁定某些功能
     }
 
     // ============================================================

@@ -99,12 +99,6 @@
         </service>
 
         <service
-            android:name="cn.luke.wearsync.WearSyncBodyDetectService"
-            android:enabled="true"
-            android:exported="false">
-        </service>
-
-        <service
             android:name="cn.luke.wearsync.WearSyncListenerService"
             android:enabled="true"
             android:exported="true">

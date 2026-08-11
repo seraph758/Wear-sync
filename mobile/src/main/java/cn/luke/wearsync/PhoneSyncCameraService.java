@@ -30,7 +30,9 @@ import android.media.ImageReader;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaFormat;
+import android.media.MediaScannerConnection;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -574,58 +576,90 @@ public class PhoneSyncCameraService extends Service {
             byte[] data = new byte[buffer.remaining()];
             buffer.get(data);
             
-            // 🎯 將照片保存到 DCIM/WearSync 目錄
+            // 1. 解码原始数据
+            Bitmap originalBitmap = BitmapFactory.decodeByteArray(data, 0, data.length);
+            if (originalBitmap == null) return;
+
+            // 🎯 纠正旋转：由于传感器原始数据通常是横向的，此处进行物理像素旋转
+            Matrix matrix = new Matrix();
+            matrix.postRotate(90); 
+            Bitmap rotatedBitmap = Bitmap.createBitmap(originalBitmap, 0, 0, originalBitmap.getWidth(), originalBitmap.getHeight(), matrix, true);
+            if (rotatedBitmap != originalBitmap) originalBitmap.recycle();
+
+            // 2. 🎯 [手机端] 动态优先尝试保存为 HEIC 格式
             File dcimDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM);
             File wearSyncDir = new File(dcimDir, "WearSync");
             if (!wearSyncDir.exists()) wearSyncDir.mkdirs();
             
             String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(new Date());
-            File photoFile = new File(wearSyncDir, "IMG_" + timeStamp + ".jpg");
-            
-            try (FileOutputStream fos = new FileOutputStream(photoFile)) {
-                fos.write(data);
-                PhoneLog.d(TAG, "✅ 高清照片已保存至: " + photoFile.getAbsolutePath() + " (" + data.length + " bytes)");
-                
-                // 💡 關鍵修復：通知 Android 系統相冊掃描新照片，這樣相冊 App 才能立刻看到它！
-                android.media.MediaScannerConnection.scanFile(
-                    this,
-                    new String[]{photoFile.getAbsolutePath()},
-                    new String[]{"image/jpeg"},
-                    (path, uri) -> PhoneLog.d(TAG, "🔄 系統相冊掃描完成, Uri: " + uri)
-                );
-                
-                // 🚀 傳輸預覽圖到手錶 (如果開啟了預覽功能)
-                SharedPreferences sp = getSharedPreferences("dndsync_prefs", Context.MODE_PRIVATE);
-                boolean previewEnabled = sp.getBoolean("camera_watch_preview_enabled", true);
+            File photoFile = null;
+            boolean isHeicSaved = false;
 
-                if (previewEnabled && mCachedNodeId != null) {
-                    // 🎯 縮放並旋轉預覽圖 (藍牙傳輸優化)
-                    File thumbFile = new File(getCacheDir(), "thumb_preview.jpg");
-                    BitmapFactory.Options options = new BitmapFactory.Options();
-                    options.inSampleSize = 4; // 初步縮小
-                    Bitmap bitmap = BitmapFactory.decodeByteArray(data, 0, data.length, options);
-                    
-                    if (bitmap != null) {
-                        // 強制旋轉 90 度以匹配預覽習慣
-                        Matrix matrix = new Matrix();
-                        matrix.postRotate(90);
-                        Bitmap rotatedBitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
-                        
-                        try (FileOutputStream thumbFos = new FileOutputStream(thumbFile)) {
-                            rotatedBitmap.compress(Bitmap.CompressFormat.JPEG, 70, thumbFos);
+            // 尝试 HEIF 格式 (Android 10+)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                try {
+                    photoFile = new File(wearSyncDir, "IMG_" + timeStamp + ".heic");
+                    try (FileOutputStream fos = new FileOutputStream(photoFile)) {
+                        // HEIF 常量在某些旧 SDK 编译环境下可能不可直接点选，使用反射/valueOf 兼容
+                        Bitmap.CompressFormat heif = Bitmap.CompressFormat.valueOf("HEIF");
+                        if (rotatedBitmap.compress(heif, 80, fos)) {
+                            isHeicSaved = true;
+                            PhoneLog.d(TAG, "✅ 物理像素旋转并保存为 HEIC: " + photoFile.getAbsolutePath());
                         }
-                        
-                        PhoneLog.d(TAG, "📤 發送縮略圖預覽 (" + thumbFile.length() + " bytes)");
-                        Uri uri = Uri.fromFile(thumbFile);
-                        PhoneSyncFileTransferManager.sendFileToWear(this, mCachedNodeId, uri, "preview.jpg", null);
-                        
-                        if (rotatedBitmap != bitmap) rotatedBitmap.recycle();
-                        bitmap.recycle();
                     }
+                } catch (Exception e) {
+                    PhoneLog.w(TAG, "⚠️ 环境不支持 HEIC，准备降级为 JPEG");
                 }
             }
+
+            // 降级 JPEG
+            if (!isHeicSaved) {
+                photoFile = new File(wearSyncDir, "IMG_" + timeStamp + ".jpg");
+                try (FileOutputStream fos = new FileOutputStream(photoFile)) {
+                    rotatedBitmap.compress(Bitmap.CompressFormat.JPEG, 95, fos);
+                    PhoneLog.d(TAG, "✅ 物理像素旋转并保存为 JPEG: " + photoFile.getAbsolutePath());
+                }
+            }
+
+            // 3. 通知系统扫描
+            final String finalMime = isHeicSaved ? "image/heif" : "image/jpeg";
+            MediaScannerConnection.scanFile(this, new String[]{photoFile.getAbsolutePath()}, new String[]{finalMime}, null);
+
+            // 4. 🎯 [预览图优化] 直接分辨率压缩为 480px 宽度 + WebP 格式
+            SharedPreferences sp = getSharedPreferences("dndsync_prefs", Context.MODE_PRIVATE);
+            boolean previewEnabled = sp.getBoolean("camera_watch_preview_enabled", true);
+
+            if (previewEnabled && mCachedNodeId != null) {
+                int targetWidth = 480;
+                float ratio = (float) rotatedBitmap.getHeight() / (float) rotatedBitmap.getWidth();
+                int targetHeight = (int) (targetWidth * ratio);
+                
+                // 🚀 直接压缩分辨率，不再依赖 inSampleSize
+                Bitmap thumbBitmap = Bitmap.createScaledBitmap(rotatedBitmap, targetWidth, targetHeight, true);
+                
+                File thumbFile = new File(getCacheDir(), "thumb_preview.webp");
+                try (FileOutputStream thumbFos = new FileOutputStream(thumbFile)) {
+                    // 使用 WEBP 格式替代 JPEG
+                    Bitmap.CompressFormat webpFormat;
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        webpFormat = Bitmap.CompressFormat.WEBP_LOSSY;
+                    } else {
+                        webpFormat = Bitmap.CompressFormat.WEBP;
+                    }
+                    thumbBitmap.compress(webpFormat, 75, thumbFos);
+                }
+                
+                PhoneLog.d(TAG, "📤 发送 480px WebP 预览图 (" + thumbFile.length() + " bytes)");
+                Uri thumbUri = Uri.fromFile(thumbFile);
+                PhoneSyncFileTransferManager.sendFileToWear(this, mCachedNodeId, thumbUri, "preview.webp", null);
+                
+                thumbBitmap.recycle();
+            }
+
+            rotatedBitmap.recycle();
+
         } catch (Exception e) {
-            PhoneLog.e(TAG, "❌ 保存或處理預覽照片失敗", e);
+            PhoneLog.e(TAG, "❌ 保存或处理照片异常", e);
         }
     }
 

@@ -60,7 +60,6 @@ object AppState {
  * 将状态和回调分层包装，解决 Compose 编译器在参数过多（>30个）时可能导致的预览索引失效问题
  */
 data class PhoneSyncUIState(
-    val watchWearState: String = "",
     val isConnected: Boolean = false,
     val isNotificationAllowed: Boolean = false,
     val isCameraAllowed: Boolean = false,
@@ -104,7 +103,6 @@ data class PhoneSyncUIActions(
 fun PhoneSyncMainScreenPreview() {
     PhoneSyncMainScreen(
         state = PhoneSyncUIState(
-            watchWearState = "🟢 已佩戴 (On-Body)",
             isConnected = true,
             isNotificationAllowed = true,
             isCameraAllowed = true,
@@ -169,38 +167,6 @@ fun PhoneSyncMainScreen(
                     color = textColor,
                     modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)
                 )
-
-                // Wear Status Card
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (isDark) Color(0xFF251818) else Color(0xFFFFF0F0)
-                    )
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            "🧪 离腕检测沙盒中心",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFFE53935)
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("当前手表佩戴状态:", fontSize = 13.sp, color = textColor)
-                            Text(
-                                text = state.watchWearState,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (state.watchWearState.contains("🟢")) Color(0xFF4CAF50) else Color(0xFFE53935)
-                            )
-                        }
-                    }
-                }
 
                 // DND and Alarm Rows
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -685,7 +651,6 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
     private var capabilityChangedListener: CapabilityClient.OnCapabilityChangedListener? = null
     private val UNIVERSAL_SYNC_PATH = "/wear-universal-sync"
 
-    private val watchWearState = mutableStateOf("未知 (等待手表上报...)")
     private val uiLogDebugSwitch = mutableStateOf(false)
     private val uiWearLogDebugSwitch = mutableStateOf(false)
     private val isWatchPreviewEnabledState = mutableStateOf(true)
@@ -797,32 +762,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
     }
 
     override fun onMessageReceived(messageEvent: MessageEvent) {
-        if (messageEvent.path == "/wearsync-body-status" || messageEvent.path == "/wear-universal-sync") {
-            try {
-                val dataStr = String(messageEvent.data, StandardCharsets.UTF_8)
-                if (messageEvent.path == "/wear-universal-sync") {
-                    val json = JSONObject(dataStr)
-                    if (json.optString("type") == "body_status") {
-                        val action = json.optString("action").lowercase()
-                        updateBodyStatus(action)
-                    }
-                } else {
-                    updateBodyStatus(dataStr.lowercase())
-                }
-            } catch (_: Exception) {
-                // Ignore if not a valid body status message
-            }
-        }
-    }
-
-    private fun updateBodyStatus(status: String) {
-        activity?.runOnUiThread {
-            if (status.contains("off")) {
-                watchWearState.value = "🚫 已摘下 (Off-Body)"
-            } else if (status.contains("on")) {
-                watchWearState.value = "🟢 已佩戴 (On-Body)"
-            }
-        }
+        // Body status logic removed
     }
 
     override fun onCreateView(
@@ -836,7 +776,6 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
 
         return ComposeView(requireContext()).apply {
             setContent {
-                val watchWearStateVal by watchWearState
                 val isConnectedVal by isConnectedState
                 val isNotificationAllowedVal by isNotificationAllowedState
                 val isCameraAllowedVal by isCameraAllowedState
@@ -866,7 +805,6 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
 
                 PhoneSyncMainScreen(
                     state = PhoneSyncUIState(
-                        watchWearState = watchWearStateVal,
                         isConnected = isConnectedVal,
                         isNotificationAllowed = isNotificationAllowedVal,
                         isCameraAllowed = isCameraAllowedVal,
