@@ -28,6 +28,7 @@ import android.hardware.camera2.params.MeteringRectangle;
 import android.hardware.camera2.params.OutputConfiguration;
 import android.hardware.camera2.params.SessionConfiguration;
 import android.hardware.camera2.params.StreamConfigurationMap;
+import android.media.ExifInterface;
 import android.media.Image;
 import android.media.ImageReader;
 import android.media.MediaCodec;
@@ -51,6 +52,7 @@ import com.google.android.gms.wearable.ChannelClient;
 import com.google.android.gms.wearable.MessageClient;
 import com.google.android.gms.wearable.Wearable;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.File;
@@ -616,6 +618,23 @@ public class PhoneSyncCameraService extends Service {
             byte[] encodedData = new byte[buffer.remaining()];
             buffer.get(encodedData);
             
+            // 🎯 [核心修复] 使用 ExifInterface 获取原始旋转角度
+            int rotationDegrees = 0;
+            try {
+                ExifInterface exif = new ExifInterface(new ByteArrayInputStream(encodedData));
+                int orientation = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
+                switch (orientation) {
+                    case ExifInterface.ORIENTATION_ROTATE_90: rotationDegrees = 90; break;
+                    case ExifInterface.ORIENTATION_ROTATE_180: rotationDegrees = 180; break;
+                    case ExifInterface.ORIENTATION_ROTATE_270: rotationDegrees = 270; break;
+                }
+            } catch (IOException e) {
+                PhoneLog.w(TAG, "⚠️ 无法读取图片 EXIF 信息: " + e.getMessage());
+            }
+            
+            // 如果 EXIF 没有旋转，默认根据我们的设置补正 90 度 (适配大多数手机传感器)
+            if (rotationDegrees == 0) rotationDegrees = 90;
+
             // 1. 🎯 [手机端保存]
             File dcimDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM);
             File wearSyncDir = new File(dcimDir, "WearSync");
@@ -637,13 +656,27 @@ public class PhoneSyncCameraService extends Service {
                 // 假如不是 HEIC，转换成 WebP 格式文件保存 (用户要求)
                 extension = ".webp";
                 mimeType = "image/webp";
-                Bitmap bmp = BitmapFactory.decodeByteArray(encodedData, 0, encodedData.length);
-                ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                // ✅ minSdk 35，直接使用非废弃的 WEBP_LOSSY
-                bmp.compress(Bitmap.CompressFormat.WEBP_LOSSY, 95, baos);
-                finalData = baos.toByteArray();
-                bmp.recycle();
-                PhoneLog.d(TAG, "✅ 高清照片已转换 WebP 保存 (降级自 JPEG): IMG_" + timeStamp + extension);
+                
+                Bitmap rawBmp = BitmapFactory.decodeByteArray(encodedData, 0, encodedData.length);
+                if (rawBmp != null) {
+                    // 🚀 物理旋转补正：确保保存的文件和预览角度一致
+                    Matrix matrix = new Matrix();
+                    matrix.postRotate(rotationDegrees);
+                    Bitmap bmp = Bitmap.createBitmap(rawBmp, 0, 0, rawBmp.getWidth(), rawBmp.getHeight(), matrix, true);
+                    
+                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                    // ✅ minSdk 35，直接使用 WEBP_LOSSY
+                    bmp.compress(Bitmap.CompressFormat.WEBP_LOSSY, 95, baos);
+                    finalData = baos.toByteArray();
+                    
+                    bmp.recycle();
+                    if (bmp != rawBmp) rawBmp.recycle();
+                    PhoneLog.d(TAG, "✅ 高清照片已补正角度并转换 WebP 保存: IMG_" + timeStamp + extension);
+                } else {
+                    finalData = encodedData;
+                    extension = ".jpg";
+                    mimeType = "image/jpeg";
+                }
             }
             
             File photoFile = new File(wearSyncDir, "IMG_" + timeStamp + extension);
@@ -652,39 +685,38 @@ public class PhoneSyncCameraService extends Service {
             }
 
             // 通知系统扫描
-            MediaScannerConnection.scanFile(this, new String[]{photoFile.getAbsolutePath()}, new String[]{mimeType}, null);
+            MediaScannerConnection.scanFile(getApplicationContext(), new String[]{photoFile.getAbsolutePath()}, new String[]{mimeType}, null);
 
             // 2. 🎯 [预览图优化] 为手表生成 320px WebP 缩略图
             SharedPreferences sp = getSharedPreferences("dndsync_prefs", Context.MODE_PRIVATE);
             boolean previewEnabled = sp.getBoolean("camera_watch_preview_enabled", true);
 
-            if (previewEnabled && mCachedNodeId != null) {
+            // 🛡️ [防崩溃] 检查 nodeId 和 streaming 状态
+            String nodeId = mCachedNodeId;
+            if (previewEnabled && nodeId != null && mIsStreaming.get()) {
                 Bitmap originalBitmap = BitmapFactory.decodeByteArray(finalData, 0, finalData.length);
                 
                 if (originalBitmap != null) {
-                    Matrix matrix = new Matrix();
-                    // 前置摄像头可能需要镜像翻转，这里简化处理，如有需要可根据 mCameraFacing 调整
-                    matrix.postRotate(90);
-                    Bitmap rotatedBitmap = Bitmap.createBitmap(originalBitmap, 0, 0, originalBitmap.getWidth(), originalBitmap.getHeight(), matrix, true);
-                    
+                    // 🚀 注意：finalData 已经是旋转补正过的了，不需要再次旋转 90 度
                     int targetWidth = 320;
-                    float ratio = (float) rotatedBitmap.getHeight() / (float) rotatedBitmap.getWidth();
+                    float ratio = (float) originalBitmap.getHeight() / (float) originalBitmap.getWidth();
                     int targetHeight = (int) (targetWidth * ratio);
-                    Bitmap finalBitmap = Bitmap.createScaledBitmap(rotatedBitmap, targetWidth, targetHeight, true);
+                    Bitmap finalBitmap = Bitmap.createScaledBitmap(originalBitmap, targetWidth, targetHeight, true);
                     
-                    // 🚀 名字和实际名字一样 (IMG_yyyyMMdd_HHmmss.webp)
                     String thumbName = "THUMB_" + timeStamp + ".webp";
                     File thumbFile = new File(getCacheDir(), thumbName);
                     try (FileOutputStream thumbFos = new FileOutputStream(thumbFile)) {
                         finalBitmap.compress(Bitmap.CompressFormat.WEBP_LOSSY, 75, thumbFos);
                     }
                     
-                    PhoneLog.d(TAG, "📤 发送预览图: " + thumbName + " (" + thumbFile.length() + " bytes)");
-                    Uri thumbUri = Uri.fromFile(thumbFile);
-                    PhoneSyncFileTransferManager.sendFileToWear(this, mCachedNodeId, thumbUri, thumbName, null);
+                    // 🛡️ [防崩溃] 再次确认状态，防止在压缩期间通道被关闭
+                    if (mIsStreaming.get()) {
+                        PhoneLog.d(TAG, "📤 发送预览图: " + thumbName + " (" + thumbFile.length() + " bytes)");
+                        Uri thumbUri = Uri.fromFile(thumbFile);
+                        PhoneSyncFileTransferManager.sendFileToWear(getApplicationContext(), nodeId, thumbUri, thumbName, null);
+                    }
                     
                     finalBitmap.recycle();
-                    if (rotatedBitmap != originalBitmap) rotatedBitmap.recycle();
                     originalBitmap.recycle();
                 }
             }

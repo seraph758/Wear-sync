@@ -656,6 +656,12 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
     private val isWatchPreviewEnabledState = mutableStateOf(true)
     private val fileTransferStatus = mutableStateOf("等待选择文件...")
 
+    private val overlayPermissionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        if (Settings.canDrawOverlays(requireContext())) {
+            handleFloatingLogClick()
+        }
+    }
+
     private val alarmPickerLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
             val pkg = it.data?.getStringExtra("selected_alarm_package")
@@ -983,7 +989,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                 Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                 Uri.parse("package:${context.packageName}")
             )
-            startActivityForResult(intent, 1001)
+            overlayPermissionLauncher.launch(intent)
         } else {
             val intent = Intent(context, PhoneLogFloatingService::class.java)
             if (AppState.isServiceRunning.value) {
