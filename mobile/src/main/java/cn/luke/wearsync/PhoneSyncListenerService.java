@@ -42,7 +42,7 @@ public class PhoneSyncListenerService extends WearableListenerService {
     private static final ExecutorService MESSAGE_EXECUTOR = Executors.newSingleThreadExecutor();
 
     // ============================================================
-    // 📩 主入口（100% 还原，未动任一字句）
+    // 📩 主入口
     // ============================================================
     @Override
     public void onMessageReceived(@NonNull MessageEvent messageEvent) {
@@ -60,7 +60,6 @@ public class PhoneSyncListenerService extends WearableListenerService {
         }
 
         // 2. 路径校验
-        PhoneLog.d(TAG, "🔍 收到消息，路径为: [" + path + "]，期望路径: [" + UNIVERSAL_SYNC_PATH + "]");
         if (!UNIVERSAL_SYNC_PATH.equals(messageEvent.getPath())) {
             super.onMessageReceived(messageEvent);
             return;
@@ -86,9 +85,8 @@ public class PhoneSyncListenerService extends WearableListenerService {
                 // 🚀 新增：监听手表的“准备就绪”信号
                 if ("READY_TO_RECEIVE".equalsIgnoreCase(action)) {
                     PhoneLog.d(TAG, "✅ 收到手表 ACK，触发文件传输");
-                    // 调用文件传输管理器的静态方法，开始真正的文件发送
                     PhoneSyncFileTransferManager.onWearReadyToReceive();
-                    return; // 处理完毕，直接返回
+                    return; 
                 }
 
                 // 6. 其他消息按原有逻辑分发
@@ -100,9 +98,6 @@ public class PhoneSyncListenerService extends WearableListenerService {
         });
     }
 
-    // ============================================================
-    // 📡 路由分发（100% 还原，未动任一字句）
-    // ============================================================
     private void routeMessage(JSONObject json, String type, String action) {
         switch (type.toLowerCase()) {
             case "dnd":
@@ -115,19 +110,16 @@ public class PhoneSyncListenerService extends WearableListenerService {
             case "camera":
             case "camera_control":
             case "camera_action": 
-                handleCamera(action);
+                handleCamera(json, action);
                 break;
             default:
                 PhoneLog.w(TAG, "unknown type: " + type);
         }
     }
 
-    // ============================================================
-    // 🌓 DND（100% 还原，未动任一字句）
-    // ============================================================
     private void handleDnd(JSONObject json) {
         int targetValue = json.has("interruption_filter") ? json.optInt("interruption_filter", -1)
-                : json.optInt("dnd_state", -1); // 优先读 interruption_filter
+                : json.optInt("dnd_state", -1); 
 
         if (targetValue == -1) {
             PhoneLog.w(TAG, "⚠️ 未找到有效DND字段");
@@ -136,22 +128,14 @@ public class PhoneSyncListenerService extends WearableListenerService {
         PhoneDndManager.handleIncomingAction(this, targetValue);
     }
 
-    // ============================================================
-    // ⏰ Alarm（100% 还原，未动任一字句）
-    // ============================================================
     private void handleAlarm(String action) {
         PhoneLog.d(TAG, "⏰ ALARM " + action);
         PhoneAlarmManager.executeAlarmAction(this, action);
     }
 
-    // ============================================================
-    // 📩 Camera Handler (已清理无用分支)
-    // ============================================================
-    private void handleCamera(String action) {
+    private void handleCamera(JSONObject json, String action) {
         PhoneLog.d(TAG, "P-080 handleCamera action=" + action);
         String nodeId = WearSyncState.getNodeId(this);
-
-        // --- 已移除无用的 CAMERA_READY 和 STREAM_START 分支 ---
 
         if ("START_CAMERA".equalsIgnoreCase(action) || "START_CAMERA_UI".equalsIgnoreCase(action) || "open_phone_camera".equalsIgnoreCase(action)) {
             if (nodeId == null || nodeId.isEmpty()) {
@@ -161,7 +145,7 @@ public class PhoneSyncListenerService extends WearableListenerService {
                         if (nodes == null || nodes.isEmpty()) {
                             return;
                         }
-                        String id = nodes.getFirst().getId();
+                        String id = nodes.get(0).getId();
                         WearSyncState.setNodeId(this, id);
                         executeRemoteActivityLaunch(id);
                     } catch (Exception e) {
@@ -198,19 +182,30 @@ public class PhoneSyncListenerService extends WearableListenerService {
             return;
         }
 
+        if ("SWITCH_CAMERA".equalsIgnoreCase(action)) {
+            Intent intent = new Intent(this, PhoneSyncCameraService.class);
+            intent.setAction(PhoneSyncCameraService.ACTION_SWITCH_CAMERA);
+            startService(intent);
+            return;
+        }
+
+        if ("FOCUS_CAMERA".equalsIgnoreCase(action)) {
+            Intent intent = new Intent(this, PhoneSyncCameraService.class);
+            intent.setAction(PhoneSyncCameraService.ACTION_FOCUS_CAMERA);
+            intent.putExtra("x", json.optDouble("x", 0.5));
+            intent.putExtra("y", json.optDouble("y", 0.5));
+            startService(intent);
+            return;
+        }
+
         if ("LOG_CHANNEL_HANDSHAKE".equalsIgnoreCase(action)) {
             PhoneLog.d(TAG, "🤝 收到手表日志通道握手，数据通道已准备就绪！");
-            // 这里不需要做任何事，onChannelOpened 会处理流的读取
-            // 打印这条日志就证明“数据路”也通了
             return;
         }
 
         PhoneLog.w(TAG, "unknown camera action: " + action);
     }
 
-    // ============================================================
-    // 🚀 Remote Activity（100% 还原，未动任一字句）
-    // ============================================================
     private void executeRemoteActivityLaunch(String nodeId) {
         try {
             PhoneLog.d(TAG, "🚀 REMOTE -> " + nodeId);
@@ -238,7 +233,6 @@ public class PhoneSyncListenerService extends WearableListenerService {
         String path = channel.getPath();
         PhoneLog.d(TAG, "🛰️ [手機雷達] 偵測到 Channel 管道握手! Path: " + path);
 
-        // 1. 处理日志通道 (原有逻辑)
         if (WEAR_LOG_CHANNEL_PATH.equals(path)) {
             PhoneLog.d(TAG, "🎯 [暗號吻合] 正在建立手錶日誌接收流...");
             Wearable.getChannelClient(this)
@@ -251,15 +245,11 @@ public class PhoneSyncListenerService extends WearableListenerService {
         }
     }
 
-    /**
-     * 📥 统一的无线日志与大包测试流读取器（带线程同步保护）
-     */
     private void readLogStream(InputStream inputStream) {
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault());
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
             String line;
             while ((line = reader.readLine()) != null) {
-                // 补充时间戳
                 if (line.startsWith("[WEAR]") && !line.contains("] [20")) {
                     String timeStr = sdf.format(new Date());
                     line = "[WEAR] [" + timeStr + "]" + line.substring(6);

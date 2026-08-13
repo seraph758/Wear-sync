@@ -8,6 +8,8 @@ import android.media.MediaCodec;
 import android.media.MediaFormat;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.view.MotionEvent;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
@@ -48,6 +50,11 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
     private ChannelClient.ChannelCallback mChannelListener;
     private BroadcastReceiver mFileReceiver;
 
+    private TextView tvCountdown;
+    private View focusMarker;
+    private Button btnSwitchCamera;
+    private Handler mHandler = new Handler();
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -67,24 +74,44 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
         surfaceView = findViewById(R.id.surfaceView);
         imgPreview = findViewById(R.id.img_preview);
         tvStatusHint = findViewById(R.id.tv_status_hint);
+        tvCountdown = findViewById(R.id.tv_countdown);
+        focusMarker = findViewById(R.id.focus_marker);
+        btnSwitchCamera = findViewById(R.id.btn_switch_camera);
 
         // 🎯 预览图点击即可关闭
         if (imgPreview != null) {
-            imgPreview.setOnClickListener(v -> hidePhotoPreview());
+            imgPreview.setOnClickListener(_ -> hidePhotoPreview());
         }
 
         if (surfaceView != null) {
             surfaceView.getHolder().addCallback(this);
-            // 🔄 移除手表端旋转，由手机端推流时完成旋转
+            // 🎯 手动对焦功能
+            surfaceView.setOnTouchListener((v, event) -> {
+                if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                    float x = event.getX() / v.getWidth();
+                    float y = event.getY() / v.getHeight();
+                    showFocusMarker(event.getX(), event.getY());
+                    WearLog.d(TAG, "🎯 手动对焦: " + x + ", " + y);
+                    WearSyncCommManager.getInstance(getApplicationContext()).sendBusinessCommand("camera_action", "FOCUS_CAMERA", "x", (double)x, "y", (double)y);
+                    v.performClick();
+                    return true;
+                }
+                return false;
+            });
         }
 
-        // 🎯 拍照快门按钮：向手机发送触发高清拍照指令
+        // 🎯 拍照快门按钮：倒计时 3 秒拍照
         Button btnShutter = findViewById(R.id.btn_shutter);
         if (btnShutter != null) {
-            btnShutter.setOnClickListener(_ -> {
-                WearLog.d(TAG, "📸 用户点击 [快门按钮]，发送最高画质拍照请求");
-                WearSyncCommManager.getInstance(getApplicationContext()).sendBusinessCommand("camera_action", "TAKE_PHOTO");
-                showCaptureHint("📸 正在拍照...");
+            btnShutter.setOnClickListener(_ -> startCountdownAndCapture());
+        }
+
+        // 🎯 切换摄像头按钮
+        if (btnSwitchCamera != null) {
+            btnSwitchCamera.setOnClickListener(_ -> {
+                WearLog.d(TAG, "🔄 用户点击 [切换摄像头]");
+                WearSyncCommManager.getInstance(getApplicationContext()).sendBusinessCommand("camera_control", "SWITCH_CAMERA");
+                showCaptureHint("🔄 正在切换摄像头...");
             });
         }
         
@@ -143,6 +170,39 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
         WearSyncCommManager.getInstance(getApplicationContext()).sendBusinessCommand("camera_control", "open_phone_camera");
     }
 
+    private void startCountdownAndCapture() {
+        if (tvCountdown == null) return;
+        tvCountdown.setVisibility(View.VISIBLE);
+        new Thread(() -> {
+            for (int i = 3; i > 0; i--) {
+                final int count = i;
+                runOnUiThread(() -> tvCountdown.setText(String.valueOf(count)));
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    break;
+                }
+            }
+            runOnUiThread(() -> {
+                tvCountdown.setVisibility(View.GONE);
+                WearLog.d(TAG, "📸 倒计时结束，发送最高画质拍照请求");
+                WearSyncCommManager.getInstance(getApplicationContext()).sendBusinessCommand("camera_action", "TAKE_PHOTO");
+                showCaptureHint("📸 正在拍照...");
+            });
+        }).start();
+    }
+
+    private void showFocusMarker(float x, float y) {
+        if (focusMarker == null) return;
+        runOnUiThread(() -> {
+            focusMarker.setX(x - focusMarker.getWidth() / 2f);
+            focusMarker.setY(y - focusMarker.getHeight() / 2f);
+            focusMarker.setVisibility(View.VISIBLE);
+            focusMarker.setAlpha(1.0f);
+            focusMarker.animate().alpha(0.0f).setDuration(1000).withEndAction(() -> focusMarker.setVisibility(View.GONE)).start();
+        });
+    }
+
     private void readStreamFromChannel(ChannelClient.Channel channel) {
         new Thread(() -> {
             WearLog.d(TAG, "🚀 启动 Channel-Reader 线程准备读取 H.264 视频流");
@@ -181,9 +241,7 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
             tvStatusHint.setText(text);
             tvStatusHint.setVisibility(View.VISIBLE);
             tvStatusHint.setAlpha(1.0f);
-            tvStatusHint.animate().alpha(0.0f).setDuration(1500).withEndAction(() -> {
-                tvStatusHint.setVisibility(View.GONE);
-            }).start();
+            tvStatusHint.animate().alpha(0.0f).setDuration(1500).withEndAction(() -> tvStatusHint.setVisibility(View.GONE)).start();
         });
     }
 
@@ -205,11 +263,7 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
 
     private void hidePhotoPreview() {
         if (imgPreview == null || imgPreview.getVisibility() != View.VISIBLE) return;
-        runOnUiThread(() -> {
-            imgPreview.animate().alpha(0.0f).setDuration(500).withEndAction(() -> {
-                imgPreview.setVisibility(View.GONE);
-            }).start();
-        });
+        runOnUiThread(() -> imgPreview.animate().alpha(0.0f).setDuration(500).withEndAction(() -> imgPreview.setVisibility(View.GONE)).start());
     }
 
     public void feedH264Data(byte[] h264Data) {

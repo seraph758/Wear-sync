@@ -67,6 +67,24 @@ public class WearSyncCommManager {
     }
 
     /**
+     * 带额外参数的业务指令发送
+     */
+    public void sendBusinessCommand(@NonNull String type, @NonNull String action, Object... extras) {
+        try {
+            JSONObject extraJson = null;
+            if (extras != null && extras.length > 0) {
+                extraJson = new JSONObject();
+                for (int i = 0; i < extras.length; i += 2) {
+                    extraJson.put((String) extras[i], extras[i + 1]);
+                }
+            }
+            sendCommand(type, action, extraJson);
+        } catch (Exception e) {
+            WearLog.e(TAG, "❌ sendBusinessCommand 异常", e);
+        }
+    }
+
+    /**
      * 保留静态方法 sendDndReverseSync
      */
     public static void sendDndReverseSync(@NonNull Context context, int interruptionFilter) {

@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/layout_camera_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -20,39 +22,84 @@
         android:visibility="gone"
         android:contentDescription="Preview" />
 
-    <!-- ⚡ 文字提示层 (替代闪烁) -->
+    <!-- ⚡ 文字提示层 -->
     <TextView
         android:id="@+id/tv_status_hint"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_centerInParent="true"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
         android:background="#80000000"
         android:padding="12dp"
         android:text="正在拍照..."
         android:textColor="#FFFFFF"
-        android:textSize="18sp"
+        android:textSize="14sp"
         android:visibility="gone" />
 
-    <TextView
-        android:id="@+id/activity_wear_camera"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_centerInParent="true"
-        android:textColor="#FF0000"
-        android:textSize="42sp"
-        android:textStyle="bold"
-        android:visibility="gone" />
+    <!-- 🎯 聚焦框 -->
+    <View
+        android:id="@+id/focus_marker"
+        android:layout_width="60dp"
+        android:layout_height="60dp"
+        android:background="@drawable/focus_marker"
+        android:visibility="gone"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- 🚀 环形布局核心：以中心为基准 -->
+    <View
+        android:id="@+id/center_anchor"
+        android:layout_width="1dp"
+        android:layout_height="1dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
 
     <Button
         android:id="@+id/btn_shutter"
-        android:layout_width="56dp"
-        android:layout_height="56dp"
-        android:layout_alignParentBottom="true"
-        android:layout_centerHorizontal="true"
-        android:layout_marginBottom="24dp"
-        android:background="?android:attr/selectableItemBackgroundBorderless"
-        android:drawableTop="@android:drawable/ic_menu_camera"
-        android:paddingTop="12dp"
-        android:contentDescription="@string/btn_capture_description" />
+        android:layout_width="54dp"
+        android:layout_height="54dp"
+        android:background="@drawable/bg_shutter"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        android:layout_marginBottom="12dp"
+        android:contentDescription="Take Photo" />
 
-</RelativeLayout>
+    <Button
+        android:id="@+id/btn_switch_camera"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:background="@drawable/bg_action_btn"
+        android:text="🔄"
+        android:textColor="#FFFFFF"
+        android:textSize="16sp"
+        app:layout_constraintCircle="@id/btn_shutter"
+        app:layout_constraintCircleAngle="45"
+        app:layout_constraintCircleRadius="65dp"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        tools:layout_editor_absoluteX="150dp"
+        tools:layout_editor_absoluteY="150dp" />
+
+    <TextView
+        android:id="@+id/tv_countdown"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        android:textColor="#FFFFFF"
+        android:textSize="60sp"
+        android:textStyle="bold"
+        android:visibility="gone"
+        android:shadowColor="#000000"
+        android:shadowDx="2"
+        android:shadowDy="2"
+        android:shadowRadius="4" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

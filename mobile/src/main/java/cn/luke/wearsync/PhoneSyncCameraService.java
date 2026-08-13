@@ -15,13 +15,16 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.ImageFormat;
 import android.graphics.Matrix;
+import android.graphics.Rect;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
+import android.hardware.camera2.CameraMetadata;
 import android.hardware.camera2.CaptureRequest;
+import android.hardware.camera2.params.MeteringRectangle;
 import android.hardware.camera2.params.OutputConfiguration;
 import android.hardware.camera2.params.SessionConfiguration;
 import android.hardware.camera2.params.StreamConfigurationMap;
@@ -32,6 +35,7 @@ import android.media.MediaCodecInfo;
 import android.media.MediaFormat;
 import android.media.MediaScannerConnection;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -48,6 +52,7 @@ import com.google.android.gms.wearable.ChannelClient;
 import com.google.android.gms.wearable.MessageClient;
 import com.google.android.gms.wearable.Wearable;
 
+import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -72,6 +77,8 @@ public class PhoneSyncCameraService extends Service {
     public static final String ACTION_START_CAMERA = "cn.luke.wearsync.action.START_CAMERA";
     public static final String ACTION_STOP_CAMERA = "cn.luke.wearsync.action.STOP_CAMERA";
     public static final String ACTION_TAKE_PHOTO = "cn.luke.wearsync.action.TAKE_PHOTO";
+    public static final String ACTION_SWITCH_CAMERA = "cn.luke.wearsync.action.SWITCH_CAMERA";
+    public static final String ACTION_FOCUS_CAMERA = "cn.luke.wearsync.action.FOCUS_CAMERA";
     public static final String WEAR_MSG_PATH_TAKE_PHOTO = "/camera/take_photo";
     public static final String WEAR_CHANNEL_PATH = "/wear_data_channel/camera";
 
@@ -104,6 +111,7 @@ public class PhoneSyncCameraService extends Service {
     
     private final AtomicBoolean mIsStreaming = new AtomicBoolean(false);
     private final AtomicBoolean mIsCameraOpened = new AtomicBoolean(false);
+    private int mCameraFacing = CameraCharacteristics.LENS_FACING_BACK;
     
     private String mCachedNodeId;
     private ChannelClient mChannelClient;
@@ -112,10 +120,6 @@ public class PhoneSyncCameraService extends Service {
     
     private int mConfigFailRetryCount = 0;
     private static final int MAX_CONFIG_RETRY = 2;
-
-    // 用于保存最终选定的尺寸
-    private Size mPreviewSize;
-    private Size mPhotoSize;
 
 
     // ==================== 监听器 ====================
@@ -201,6 +205,14 @@ public class PhoneSyncCameraService extends Service {
         } else if (ACTION_TAKE_PHOTO.equals(action)) {
             PhoneLog.d(TAG, "📸 收到 Intent 拍照指令");
             captureHighResPhoto();
+        } else if (ACTION_SWITCH_CAMERA.equals(action)) {
+            PhoneLog.d(TAG, "🔄 收到切换摄像头指令");
+            switchCamera();
+        } else if (ACTION_FOCUS_CAMERA.equals(action)) {
+            double x = intent.getDoubleExtra("x", 0.5);
+            double y = intent.getDoubleExtra("y", 0.5);
+            PhoneLog.d(TAG, "🎯 收到对焦指令: " + x + ", " + y);
+            manualFocus(x, y);
         }
 
         return START_NOT_STICKY;
@@ -288,6 +300,9 @@ public class PhoneSyncCameraService extends Service {
 
     private void chooseOptimalSizes() {
         CameraManager manager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
+        // 用于保存最终选定的尺寸
+        Size mPreviewSize;
+        Size mPhotoSize;
         try {
             // 1. 获取后置摄像头 ID
             String cameraId = null;
@@ -432,8 +447,18 @@ public class PhoneSyncCameraService extends Service {
         }
 
         try {
-            String cameraId = manager.getCameraIdList()[0];
-            PhoneLog.d(TAG, "📷 [3/4] 正在強制開啟相機硬體, ID: " + cameraId);
+            String cameraId = null;
+            for (String id : manager.getCameraIdList()) {
+                CameraCharacteristics characteristics = manager.getCameraCharacteristics(id);
+                Integer facing = characteristics.get(CameraCharacteristics.LENS_FACING);
+                if (facing != null && facing == mCameraFacing) {
+                    cameraId = id;
+                    break;
+                }
+            }
+            if (cameraId == null) cameraId = manager.getCameraIdList()[0];
+            
+            PhoneLog.d(TAG, "📷 [3/4] 正在强制开启相机硬件, ID: " + cameraId + " (Facing: " + mCameraFacing + ")");
 
             // 💡 核心保險：如果之前有殘留的相機實例，強制關閉它，避免佔用死鎖
             if (mCameraDevice != null) {
@@ -592,63 +617,76 @@ public class PhoneSyncCameraService extends Service {
             byte[] encodedData = new byte[buffer.remaining()];
             buffer.get(encodedData);
             
-            // 1. 🎯 [手机端保存] 直接保存相机输出的编码数据 (HEIC 或 JPEG)
+            // 1. 🎯 [手机端保存]
             File dcimDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM);
             File wearSyncDir = new File(dcimDir, "WearSync");
             if (!wearSyncDir.exists()) wearSyncDir.mkdirs();
             
             String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(new Date());
-            String extension = (mCaptureFormat == ImageFormat.HEIC) ? ".heic" : ".jpg";
-            String mimeType = (mCaptureFormat == ImageFormat.HEIC) ? "image/heif" : "image/jpeg";
+            boolean isHeic = (mCaptureFormat == ImageFormat.HEIC);
+            
+            String extension;
+            String mimeType;
+            byte[] finalData;
+
+            if (isHeic) {
+                extension = ".heic";
+                mimeType = "image/heif";
+                finalData = encodedData;
+                PhoneLog.d(TAG, "✅ 高清照片已直存 (HEIC): IMG_" + timeStamp + extension);
+            } else {
+                // 假如不是 HEIC，转换成 WebP 格式文件保存 (用户要求)
+                extension = ".webp";
+                mimeType = "image/webp";
+                Bitmap bmp = BitmapFactory.decodeByteArray(encodedData, 0, encodedData.length);
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    bmp.compress(Bitmap.CompressFormat.WEBP_LOSSY, 95, baos);
+                } else {
+                    bmp.compress(Bitmap.CompressFormat.WEBP, 95, baos);
+                }
+                finalData = baos.toByteArray();
+                bmp.recycle();
+                PhoneLog.d(TAG, "✅ 高清照片已转换 WebP 保存 (降级自 JPEG): IMG_" + timeStamp + extension);
+            }
             
             File photoFile = new File(wearSyncDir, "IMG_" + timeStamp + extension);
             try (FileOutputStream fos = new FileOutputStream(photoFile)) {
-                fos.write(encodedData);
-                PhoneLog.d(TAG, "✅ 高清照片已直存 (" + (mCaptureFormat == ImageFormat.HEIC ? "HEIC" : "JPEG") + "): " + photoFile.getAbsolutePath());
+                fos.write(finalData);
             }
 
             // 通知系统扫描
             MediaScannerConnection.scanFile(this, new String[]{photoFile.getAbsolutePath()}, new String[]{mimeType}, null);
 
-            // 2. 🎯 [预览图优化] 为手表生成 320px 宽度的 WebP 缩略图
+            // 2. 🎯 [预览图优化] 为手表生成 320px WebP 缩略图
             SharedPreferences sp = getSharedPreferences("dndsync_prefs", Context.MODE_PRIVATE);
             boolean previewEnabled = sp.getBoolean("camera_watch_preview_enabled", true);
 
             if (previewEnabled && mCachedNodeId != null) {
-                // 解码原始数据用于缩放
-                BitmapFactory.Options options = new BitmapFactory.Options();
-                // 内存安全初步降采样 (针对超大像素相机)
-                options.inJustDecodeBounds = true;
-                BitmapFactory.decodeByteArray(encodedData, 0, encodedData.length, options);
-                options.inSampleSize = 1;
-                if (options.outWidth > 2000) options.inSampleSize = 2;
-                options.inJustDecodeBounds = false;
-                
-                Bitmap originalBitmap = BitmapFactory.decodeByteArray(encodedData, 0, encodedData.length, options);
+                Bitmap originalBitmap = BitmapFactory.decodeByteArray(finalData, 0, finalData.length);
                 
                 if (originalBitmap != null) {
-                    // 🚀 1. 处理物理像素旋转 90 度 (确保方向正确)
                     Matrix matrix = new Matrix();
+                    // 前置摄像头可能需要镜像翻转，这里简化处理，如有需要可根据 mCameraFacing 调整
                     matrix.postRotate(90);
                     Bitmap rotatedBitmap = Bitmap.createBitmap(originalBitmap, 0, 0, originalBitmap.getWidth(), originalBitmap.getHeight(), matrix, true);
                     
-                    // 🚀 2. 压缩分辨率：宽度固定 320px，高度动态
                     int targetWidth = 320;
                     float ratio = (float) rotatedBitmap.getHeight() / (float) rotatedBitmap.getWidth();
                     int targetHeight = (int) (targetWidth * ratio);
                     Bitmap finalBitmap = Bitmap.createScaledBitmap(rotatedBitmap, targetWidth, targetHeight, true);
                     
-                    // 🚀 3. 转换 WebP 格式并传输
-                    File thumbFile = new File(getCacheDir(), "thumb_preview.webp");
+                    // 🚀 名字和实际名字一样 (IMG_yyyyMMdd_HHmmss.webp)
+                    String thumbName = "THUMB_" + timeStamp + ".webp";
+                    File thumbFile = new File(getCacheDir(), thumbName);
                     try (FileOutputStream thumbFos = new FileOutputStream(thumbFile)) {
                         finalBitmap.compress(Bitmap.CompressFormat.WEBP_LOSSY, 75, thumbFos);
                     }
                     
-                    PhoneLog.d(TAG, "📤 发送 320px WebP 预览图 (" + thumbFile.length() + " bytes)");
+                    PhoneLog.d(TAG, "📤 发送预览图: " + thumbName + " (" + thumbFile.length() + " bytes)");
                     Uri thumbUri = Uri.fromFile(thumbFile);
-                    PhoneSyncFileTransferManager.sendFileToWear(this, mCachedNodeId, thumbUri, "preview.webp", null);
+                    PhoneSyncFileTransferManager.sendFileToWear(this, mCachedNodeId, thumbUri, thumbName, null);
                     
-                    // 回收资源
                     finalBitmap.recycle();
                     if (rotatedBitmap != originalBitmap) rotatedBitmap.recycle();
                     originalBitmap.recycle();
@@ -657,6 +695,82 @@ public class PhoneSyncCameraService extends Service {
 
         } catch (Exception e) {
             PhoneLog.e(TAG, "❌ 保存照片或生成预览异常", e);
+        }
+    }
+
+    private void switchCamera() {
+        mCameraFacing = (mCameraFacing == CameraCharacteristics.LENS_FACING_BACK) ? 
+                        CameraCharacteristics.LENS_FACING_FRONT : CameraCharacteristics.LENS_FACING_BACK;
+        
+        PhoneLog.d(TAG, "🔄 正在切换到: " + (mCameraFacing == CameraCharacteristics.LENS_FACING_BACK ? "后置" : "前置"));
+        
+        // 重启推流流程
+        stopStreamingAndRelease();
+        mIsStreaming.set(true);
+        startBackgroundThread();
+        
+        // 重新初始化并开启新摄像头
+        try {
+            chooseOptimalSizes();
+            
+            MediaFormat format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, mPreviewWidth, mPreviewHeight);
+            format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
+            format.setInteger(MediaFormat.KEY_BIT_RATE, BIT_RATE);
+            format.setInteger(MediaFormat.KEY_FRAME_RATE, FRAME_RATE);
+            format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, I_FRAME_INTERVAL);
+            
+            mEncoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);
+            mEncoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+            
+            mPhotoReader = ImageReader.newInstance(photoWidth, photoHeight, mCaptureFormat, 2);
+            mPhotoReader.setOnImageAvailableListener(reader -> {
+                Image image = reader.acquireLatestImage();
+                if (image != null) {
+                    savePhoto(image);
+                    image.close();
+                }
+            }, mBgHandler);
+
+            openChannelStream(); // 内部会触发 startCameraHardware
+        } catch (Exception e) {
+            PhoneLog.e(TAG, "❌ 切换摄像头失败", e);
+        }
+    }
+
+    private void manualFocus(double x, double y) {
+        if (mCaptureSession == null || mCameraDevice == null) return;
+        
+        try {
+            CameraManager manager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
+            String cameraId = mCameraDevice.getId();
+            CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
+            Rect sensorArraySize = characteristics.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE);
+            
+            if (sensorArraySize != null) {
+                int centerX = (int) (x * sensorArraySize.width());
+                int centerY = (int) (y * sensorArraySize.height());
+                int halfSide = 100; // 聚焦区域半边长
+                
+                MeteringRectangle focusArea = new MeteringRectangle(
+                    Math.max(0, centerX - halfSide),
+                    Math.max(0, centerY - halfSide),
+                    Math.min(sensorArraySize.width(), 2 * halfSide),
+                    Math.min(sensorArraySize.height(), 2 * halfSide),
+                    MeteringRectangle.METERING_WEIGHT_MAX
+                );
+                
+                CaptureRequest.Builder builder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
+                builder.addTarget(mEncoderSurface);
+                builder.set(CaptureRequest.CONTROL_AF_REGIONS, new MeteringRectangle[]{focusArea});
+                builder.set(CaptureRequest.CONTROL_AE_REGIONS, new MeteringRectangle[]{focusArea});
+                builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO);
+                builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_START);
+                builder.set(CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER, CameraMetadata.CONTROL_AE_PRECAPTURE_TRIGGER_START);
+                
+                mCaptureSession.setRepeatingRequest(builder.build(), null, mBgHandler);
+            }
+        } catch (Exception e) {
+            PhoneLog.e(TAG, "❌ 手动对焦失败", e);
         }
     }
 

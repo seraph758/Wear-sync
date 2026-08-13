@@ -9,19 +9,15 @@ import android.view.View;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
-import androidx.core.content.ContextCompat;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
 
 import com.google.android.gms.wearable.CapabilityClient;
 import com.google.android.gms.wearable.Wearable;
 
-import android.provider.Settings;
-import android.content.pm.PackageManager;
-
 /**
  * 🎬 WearOS 手表端主控制与权限状态 Fragment (ADB授权引导版)
- * 
+ * <p>
  * 权限模型说明：
  * - 无障碍服务：可通过系统设置 UI 授权 → 点击跳转 ACTION_ACCESSIBILITY_SETTINGS
  * - 通知使用权：WearOS 不支持 UI 授权 → 点击弹窗展示 ADB 命令
