@@ -64,9 +64,9 @@ android {
     }
 
     compileOptions {
-        // ✅ 目标平台设为 22
-        sourceCompatibility JavaVersion.VERSION_22
-        targetCompatibility JavaVersion.VERSION_22
+        // ✅ 目标平台设为 17
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
         
         // ✅ 核心开启：允许将高版本语法脱糖翻译给低版本 Wear OS 运行
         coreLibraryDesugaringEnabled = true
@@ -77,10 +77,10 @@ android {
     }
 }
 
-// ✅ 显式开启 Java 22 特性，支持下划线（_）等新语法
+// ✅ 锁定为 Java 17 特性
 tasks.withType(JavaCompile).configureEach {
     options.compilerArgs += [
-        '--release', '22',           // 👈 锁定 release 级别为 22
+        '--release', '17',           // 👈 锁定 release 级别为 17
         '-Xlint:deprecation', 
         '-Xlint:unchecked',
     ]

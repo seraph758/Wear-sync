@@ -148,7 +148,7 @@ public class WearSyncCommManager {
                 Task<Integer> task = Wearable.getMessageClient(appContext)
                         .sendMessage(connectedNode.getId(), UNIVERSAL_SYNC_PATH, data);
                 // ✅ Statement lambda → Expression lambda
-                task.addOnSuccessListener(_ ->
+                task.addOnSuccessListener(taskResult ->
                         WearLog.d(TAG, "✅ 信令已发送 [" + type + "/" + action + "]"));
                 task.addOnFailureListener(e ->
                         WearLog.e(TAG, "❌ 信令发送失败 [" + type + "/" + action + "]: " + e.getMessage(), e));
@@ -197,7 +197,7 @@ public class WearSyncCommManager {
 
         channelClient.openChannel(connectedNode.getId(), channelPath)
                 // ✅ Statement lambda → Expression lambda
-                .addOnSuccessListener(_ ->
+                .addOnSuccessListener(channel ->
                         WearLog.d(TAG, "✅ 通道已打开: " + channelPath))
                 .addOnFailureListener(e ->
                         WearLog.e(TAG, "❌ 打开通道失败 [" + channelPath + "]: " + e.getMessage(), e));

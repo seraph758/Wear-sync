@@ -48,16 +48,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <!-- 🚀 环形布局核心：以中心为基准 -->
-    <View
-        android:id="@+id/center_anchor"
-        android:layout_width="1dp"
-        android:layout_height="1dp"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
-
     <Button
         android:id="@+id/btn_shutter"
         android:layout_width="54dp"
@@ -81,9 +71,7 @@
         app:layout_constraintCircleAngle="45"
         app:layout_constraintCircleRadius="65dp"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        tools:layout_editor_absoluteX="150dp"
-        tools:layout_editor_absoluteY="150dp" />
+        app:layout_constraintTop_toTopOf="parent" />
 
     <TextView
         android:id="@+id/tv_countdown"

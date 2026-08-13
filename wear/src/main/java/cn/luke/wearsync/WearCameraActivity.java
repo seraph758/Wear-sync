@@ -9,6 +9,7 @@ import android.media.MediaFormat;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.Looper;
 import android.view.MotionEvent;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
@@ -53,7 +54,7 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
     private TextView tvCountdown;
     private View focusMarker;
     private Button btnSwitchCamera;
-    private Handler mHandler = new Handler();
+    private final Handler mHandler = new Handler(Looper.getMainLooper());
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -80,7 +81,7 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
 
         // 🎯 预览图点击即可关闭
         if (imgPreview != null) {
-            imgPreview.setOnClickListener(_ -> hidePhotoPreview());
+            imgPreview.setOnClickListener(v -> hidePhotoPreview());
         }
 
         if (surfaceView != null) {
@@ -103,12 +104,12 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
         // 🎯 拍照快门按钮：倒计时 3 秒拍照
         Button btnShutter = findViewById(R.id.btn_shutter);
         if (btnShutter != null) {
-            btnShutter.setOnClickListener(_ -> startCountdownAndCapture());
+            btnShutter.setOnClickListener(v -> startCountdownAndCapture());
         }
 
         // 🎯 切换摄像头按钮
         if (btnSwitchCamera != null) {
-            btnSwitchCamera.setOnClickListener(_ -> {
+            btnSwitchCamera.setOnClickListener(v -> {
                 WearLog.d(TAG, "🔄 用户点击 [切换摄像头]");
                 WearSyncCommManager.getInstance(getApplicationContext()).sendBusinessCommand("camera_control", "SWITCH_CAMERA");
                 showCaptureHint("🔄 正在切换摄像头...");
