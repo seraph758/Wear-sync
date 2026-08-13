@@ -35,7 +35,6 @@ import android.media.MediaCodecInfo;
 import android.media.MediaFormat;
 import android.media.MediaScannerConnection;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -640,11 +639,8 @@ public class PhoneSyncCameraService extends Service {
                 mimeType = "image/webp";
                 Bitmap bmp = BitmapFactory.decodeByteArray(encodedData, 0, encodedData.length);
                 ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    bmp.compress(Bitmap.CompressFormat.WEBP_LOSSY, 95, baos);
-                } else {
-                    bmp.compress(Bitmap.CompressFormat.WEBP, 95, baos);
-                }
+                // ✅ minSdk 35，直接使用非废弃的 WEBP_LOSSY
+                bmp.compress(Bitmap.CompressFormat.WEBP_LOSSY, 95, baos);
                 finalData = baos.toByteArray();
                 bmp.recycle();
                 PhoneLog.d(TAG, "✅ 高清照片已转换 WebP 保存 (降级自 JPEG): IMG_" + timeStamp + extension);
