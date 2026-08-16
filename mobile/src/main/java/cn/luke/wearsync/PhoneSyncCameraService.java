@@ -42,6 +42,7 @@ import android.os.HandlerThread;
 import android.os.IBinder;
 import android.util.Size;
 import android.view.Surface;
+import android.view.OrientationEventListener;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -93,6 +94,9 @@ public class PhoneSyncCameraService extends Service {
     // 🎯 高清拍照参数 (动态查询最高分辨率)
     private int photoWidth = 1920;
     private int photoHeight = 1080;
+    private OrientationEventListener mOrientationEventListener;
+    private int mDeviceOrientation = OrientationEventListener.ORIENTATION_UNKNOWN;
+    private int mSensorOrientation = 0;
 
     // 通知相关
     private static final String CHANNEL_ID = "camera_service_channel";
@@ -234,6 +238,11 @@ public class PhoneSyncCameraService extends Service {
         if (mMainHandler != null) {
             mMainHandler.removeCallbacksAndMessages(null);
         }
+        
+        if (mOrientationEventListener != null) {
+        mOrientationEventListener.disable();
+        mOrientationEventListener = null;
+    }
 
         stopStreamingAndRelease();
         stopForeground(STOP_FOREGROUND_REMOVE);
@@ -258,6 +267,7 @@ public class PhoneSyncCameraService extends Service {
     
         mIsStreaming.set(true);
         startBackgroundThread();
+        startOrientationListener();
     
         try {
             // 步骤 1: 选择硬件支持的最佳分辨率 (解决 320x320 可能导致的配置失败)
@@ -278,7 +288,17 @@ public class PhoneSyncCameraService extends Service {
             PhoneLog.d(TAG, "⏸️ [1/4] 编码器已配置 (" + mPreviewWidth + "x" + mPreviewHeight + ")，等待通道连接");
     
             // 步骤 3: 配置拍照模块 (动态选择 HEIC 或 JPEG)
-            mPhotoReader = ImageReader.newInstance(photoWidth, photoHeight, mCaptureFormat, 2);
+            mPhotoReader = ImageReader.newInstance(
+                    photoWidth,
+                    photoHeight,
+                    mCaptureFormat,
+                    2
+            );
+            
+            PhoneLog.d(TAG, "📷 [PhotoReader] 创建成功: " +
+                    photoWidth + "x" + photoHeight +
+                    ", format=" +
+                    (mCaptureFormat == ImageFormat.HEIC ? "HEIC" : "JPEG"));
             mPhotoReader.setOnImageAvailableListener(reader -> {
                 Image image = reader.acquireLatestImage();
                 if (image != null) {
@@ -298,86 +318,397 @@ public class PhoneSyncCameraService extends Service {
         // 步骤 4: 连接手表通道 (成功后会触发 startCameraHardware)
         openChannelStream();
     }
-
-    private void chooseOptimalSizes() {
+    
+    private void startOrientationListener() {
+        if (mOrientationEventListener != null) {
+            mOrientationEventListener.disable();
+        }
+    
+        mOrientationEventListener = new OrientationEventListener(this) {
+            @Override
+            public void onOrientationChanged(int orientation) {
+                if (orientation == ORIENTATION_UNKNOWN) {
+                    return;
+                }
+    
+                mDeviceOrientation = orientation;
+            }
+        };
+    
+        if (mOrientationEventListener.canDetectOrientation()) {
+            mOrientationEventListener.enable();
+            PhoneLog.d(TAG, "📱 [方向] OrientationEventListener 已启动");
+        } else {
+            PhoneLog.w(TAG, "⚠️ [方向] 当前设备不支持方向检测");
+            mOrientationEventListener = null;
+        }
+    }
+    private void logCameraHeicCapabilities(CameraCharacteristics characteristics, StreamConfigurationMap map, String cameraId) {
+        PhoneLog.d(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        PhoneLog.d(TAG, "📷 [HEIC诊断] Camera ID: " + cameraId);
+    
+        Integer facing = characteristics.get(CameraCharacteristics.LENS_FACING);
+        PhoneLog.d(TAG, "📷 [HEIC诊断] Facing: " + facing);
+    
+        Integer hardwareLevel = characteristics.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL);
+        PhoneLog.d(TAG, "📷 [HEIC诊断] Hardware Level: " + hardwareLevel);
+    
+        int[] capabilities = characteristics.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES);
+        if (capabilities != null) {
+            StringBuilder capabilityText = new StringBuilder();
+            for (int capability : capabilities) {
+                capabilityText.append(capability).append(" ");
+            }
+            PhoneLog.d(TAG, "📷 [HEIC诊断] Available Capabilities: " + capabilityText);
+        }
+    
+        int[] formats = map.getOutputFormats();
+        if (formats != null) {
+            PhoneLog.d(TAG, "📷 [HEIC诊断] Output Formats:");
+    
+            for (int format : formats) {
+                String name;
+    
+                switch (format) {
+                    case ImageFormat.JPEG:
+                        name = "JPEG";
+                        break;
+                    case ImageFormat.HEIC:
+                        name = "HEIC";
+                        break;
+                    case ImageFormat.YUV_420_888:
+                        name = "YUV_420_888";
+                        break;
+                    case ImageFormat.RAW_SENSOR:
+                        name = "RAW_SENSOR";
+                        break;
+                    case ImageFormat.RAW10:
+                        name = "RAW10";
+                        break;
+                    case ImageFormat.RAW12:
+                        name = "RAW12";
+                        break;
+                    case ImageFormat.DEPTH16:
+                        name = "DEPTH16";
+                        break;
+                    case ImageFormat.DEPTH_JPEG:
+                        name = "DEPTH_JPEG";
+                        break;
+                    default:
+                        name = "UNKNOWN";
+                        break;
+                }
+    
+                PhoneLog.d(TAG, "📷 [HEIC诊断]   format=" + format + " -> " + name);
+    
+                Size[] sizes = map.getOutputSizes(format);
+                if (sizes != null) {
+                    PhoneLog.d(TAG, "📷 [HEIC诊断]   sizes=" + sizes.length);
+    
+                    if (format == ImageFormat.HEIC) {
+                        for (Size size : sizes) {
+                            PhoneLog.d(TAG, "📷 [HEIC诊断]   HEIC size: " +
+                                    size.getWidth() + "x" + size.getHeight());
+                        }
+                    }
+                }
+            }
+        }
+    
+        Size[] heicSizes = map.getOutputSizes(ImageFormat.HEIC);
+        if (heicSizes != null && heicSizes.length > 0) {
+            PhoneLog.d(TAG, "✅ [HEIC诊断] getOutputSizes(HEIC) 成功");
+            PhoneLog.d(TAG, "📷 [HEIC诊断] HEIC 普通尺寸数量: " + heicSizes.length);
+    
+            for (Size size : heicSizes) {
+                PhoneLog.d(TAG, "📷 [HEIC诊断] HEIC: " +
+                        size.getWidth() + "x" + size.getHeight());
+            }
+        } else {
+            PhoneLog.w(TAG, "⚠️ [HEIC诊断] getOutputSizes(HEIC) 返回为空");
+        }
+    
+        Size[] heicHighResSizes = map.getHighResolutionOutputSizes(ImageFormat.HEIC);
+        if (heicHighResSizes != null && heicHighResSizes.length > 0) {
+            PhoneLog.d(TAG, "✅ [HEIC诊断] 找到 HEIC 高分辨率输出");
+    
+            for (Size size : heicHighResSizes) {
+                PhoneLog.d(TAG, "📷 [HEIC诊断] HEIC HighRes: " +
+                        size.getWidth() + "x" + size.getHeight());
+            }
+        } else {
+            PhoneLog.d(TAG, "ℹ️ [HEIC诊断] 没有 HEIC HighRes 输出");
+        }
+    
+        PhoneLog.d(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    }
+    
+     private void chooseOptimalSizes() {
         CameraManager manager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
-        // 用于保存最终选定的尺寸
+    
         Size mPreviewSize;
         Size mPhotoSize;
+    
         try {
-            // 1. 获取后置摄像头 ID
             String cameraId = null;
+    
+            // ============================================================
+            // 1. 找到当前要使用的摄像头
+            // ============================================================
             for (String id : manager.getCameraIdList()) {
-                CameraCharacteristics characteristics = manager.getCameraCharacteristics(id);
-                Integer facing = characteristics.get(CameraCharacteristics.LENS_FACING);
-                if (facing != null && facing == CameraCharacteristics.LENS_FACING_BACK) {
+                CameraCharacteristics characteristics =
+                        manager.getCameraCharacteristics(id);
+    
+                Integer facing =
+                        characteristics.get(CameraCharacteristics.LENS_FACING);
+    
+                if (facing != null && facing == mCameraFacing) {
                     cameraId = id;
                     break;
                 }
             }
-            if (cameraId == null) cameraId = manager.getCameraIdList()[0];
-
-            // 2. 获取硬件能力
-            CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
-            StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
-            if (map == null) throw new RuntimeException("无法获取 StreamConfigurationMap");
-
-            // 3. 获取支持的尺寸
-            Size[] allPreviewSizes = map.getOutputSizes(SurfaceTexture.class);
-            Size[] allPhotoSizes = map.getOutputSizes(ImageFormat.JPEG);
-
-            if (allPreviewSizes == null || allPhotoSizes == null) {
-                 throw new RuntimeException("相机不支持所需格式");
+    
+            if (cameraId == null) {
+                String[] cameraIds = manager.getCameraIdList();
+    
+                if (cameraIds.length == 0) {
+                    throw new RuntimeException("没有找到任何摄像头");
+                }
+    
+                cameraId = cameraIds[0];
+    
+                PhoneLog.w(TAG,
+                        "⚠️ 未找到指定摄像头 Facing=" + mCameraFacing +
+                        "，使用第一个 Camera ID=" + cameraId);
             }
-
-            // 4. 选择最接近 320x320 的支持预览分辨率 (解决 320x320 不支持导致的配置失败)
+    
+            // ============================================================
+            // 2. 获取最终选中摄像头的 Characteristics
+            // ============================================================
+            CameraCharacteristics characteristics =
+                    manager.getCameraCharacteristics(cameraId);
+    
+            // ============================================================
+            // 3. 获取最终摄像头的 Sensor Orientation
+            // ============================================================
+            Integer sensorOrientation =
+                    characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION);
+    
+            if (sensorOrientation != null) {
+                mSensorOrientation = sensorOrientation;
+            } else {
+                mSensorOrientation = 0;
+                PhoneLog.w(TAG,
+                        "⚠️ [方向] 无法获取 Camera Sensor Orientation，使用 0°");
+            }
+    
+            PhoneLog.d(TAG,
+                    "📷 [方向] Camera ID=" + cameraId +
+                    ", Sensor Orientation=" + mSensorOrientation + "°");
+    
+            // ============================================================
+            // 4. 获取 StreamConfigurationMap
+            // ============================================================
+            StreamConfigurationMap map =
+                    characteristics.get(
+                            CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP
+                    );
+    
+            if (map == null) {
+                throw new RuntimeException("无法获取 StreamConfigurationMap");
+            }
+    
+            PhoneLog.d(TAG,
+                    "📷 [相机能力] Camera ID=" + cameraId +
+                    ", Facing=" + mCameraFacing);
+    
+            // ============================================================
+            // 5. 打印完整 HEIC 能力
+            // ============================================================
+            logCameraHeicCapabilities(
+                    characteristics,
+                    map,
+                    cameraId
+            );
+    
+            // ============================================================
+            // 6. 获取预览尺寸
+            // ============================================================
+            Size[] allPreviewSizes =
+                    map.getOutputSizes(SurfaceTexture.class);
+    
+            if (allPreviewSizes == null ||
+                    allPreviewSizes.length == 0) {
+                throw new RuntimeException(
+                        "相机不支持 SurfaceTexture 输出"
+                );
+            }
+    
             mPreviewSize = allPreviewSizes[0];
+    
             int minDiff = Integer.MAX_VALUE;
+    
             for (Size size : allPreviewSizes) {
-                // 寻找最接近 320x320 的，但优先保持 4:3 或 16:9
-                int diff = Math.abs(size.getWidth() - 320) + Math.abs(size.getHeight() - 320);
+                int diff =
+                        Math.abs(size.getWidth() - 320) +
+                        Math.abs(size.getHeight() - 320);
+    
                 if (diff < minDiff) {
                     minDiff = diff;
                     mPreviewSize = size;
                 }
             }
+    
             mPreviewWidth = mPreviewSize.getWidth();
             mPreviewHeight = mPreviewSize.getHeight();
-            
-            // 5. 选择最大的拍照尺寸，并检测是否支持 HEIC
-            int[] formats = map.getOutputFormats();
-            boolean heicSupported = false;
-            for (int f : formats) {
-                if (f == ImageFormat.HEIC) {
-                    heicSupported = true;
-                    break;
+    
+            PhoneLog.d(TAG,
+                    "📺 [预览] 选择尺寸=" +
+                    mPreviewWidth + "x" + mPreviewHeight);
+    
+            // ============================================================
+            // 7. 检查 HEIC
+            // ============================================================
+            Size[] heicSizes =
+                    map.getOutputSizes(ImageFormat.HEIC);
+    
+            boolean heicSupported =
+                    heicSizes != null &&
+                    heicSizes.length > 0;
+    
+            if (heicSupported) {
+                PhoneLog.d(TAG,
+                        "✅ [HEIC] Camera2 明确支持 HEIC");
+    
+                PhoneLog.d(TAG,
+                        "📷 [HEIC] 普通 HEIC 尺寸数量=" +
+                        heicSizes.length);
+    
+                for (Size size : heicSizes) {
+                    PhoneLog.d(TAG,
+                            "📷 [HEIC] 支持尺寸=" +
+                            size.getWidth() + "x" +
+                            size.getHeight());
                 }
+    
+                // ========================================================
+                // 额外检查 HEIC 高分辨率输出
+                // ========================================================
+                Size[] heicHighResSizes =
+                        map.getHighResolutionOutputSizes(
+                                ImageFormat.HEIC
+                        );
+    
+                if (heicHighResSizes != null &&
+                        heicHighResSizes.length > 0) {
+    
+                    PhoneLog.d(TAG,
+                            "📷 [HEIC] 高分辨率尺寸数量=" +
+                            heicHighResSizes.length);
+    
+                    for (Size size : heicHighResSizes) {
+                        PhoneLog.d(TAG,
+                                "📷 [HEIC] HighRes=" +
+                                size.getWidth() + "x" +
+                                size.getHeight());
+                    }
+                } else {
+                    PhoneLog.d(TAG,
+                            "📷 [HEIC] 没有额外的 HighRes HEIC 输出");
+                }
+    
+            } else {
+                PhoneLog.w(TAG,
+                        "⚠️ [HEIC] getOutputSizes(HEIC) 没有返回可用尺寸");
             }
-            mCaptureFormat = heicSupported ? ImageFormat.HEIC : ImageFormat.JPEG;
-
-            Size[] photoSizes = map.getOutputSizes(mCaptureFormat);
-            if (photoSizes == null || photoSizes.length == 0) {
-                 mCaptureFormat = ImageFormat.JPEG;
-                 photoSizes = map.getOutputSizes(ImageFormat.JPEG);
+    
+            // ============================================================
+            // 8. 如果 HEIC 支持，则优先使用 HEIC
+            // ============================================================
+            if (heicSupported) {
+                mCaptureFormat = ImageFormat.HEIC;
+    
+                mPhotoSize = Collections.max(
+                        Arrays.asList(heicSizes),
+                        new CompareSizesByArea()
+                );
+    
+                photoWidth = mPhotoSize.getWidth();
+                photoHeight = mPhotoSize.getHeight();
+    
+                PhoneLog.d(TAG,
+                        "🎯 [拍照格式] 使用 HEIC");
+    
+                PhoneLog.d(TAG,
+                        "🎯 [拍照尺寸]=" +
+                        photoWidth + "x" +
+                        photoHeight);
+    
+            } else {
+                // ========================================================
+                // 9. HEIC 不可用，降级 JPEG
+                // ========================================================
+                mCaptureFormat = ImageFormat.JPEG;
+    
+                Size[] jpegSizes =
+                        map.getOutputSizes(ImageFormat.JPEG);
+    
+                if (jpegSizes == null ||
+                        jpegSizes.length == 0) {
+                    throw new RuntimeException(
+                            "JPEG 和 HEIC 均无可用输出"
+                    );
+                }
+    
+                mPhotoSize = Collections.max(
+                        Arrays.asList(jpegSizes),
+                        new CompareSizesByArea()
+                );
+    
+                photoWidth = mPhotoSize.getWidth();
+                photoHeight = mPhotoSize.getHeight();
+    
+                PhoneLog.w(TAG,
+                        "⚠️ [拍照格式] HEIC 不可用，降级 JPEG");
+    
+                PhoneLog.d(TAG,
+                        "📷 [JPEG] 最大尺寸=" +
+                        photoWidth + "x" +
+                        photoHeight);
             }
-
-            mPhotoSize = Collections.max(Arrays.asList(photoSizes), new CompareSizesByArea());
-            photoWidth = mPhotoSize.getWidth();
-            photoHeight = mPhotoSize.getHeight();
-
-            PhoneLog.d(TAG, "✅ 自动选择最佳分辨率 -> 预览: " + mPreviewWidth + "x" + mPreviewHeight + ", 拍照: " + photoWidth + "x" + photoHeight + " (" + (mCaptureFormat == ImageFormat.HEIC ? "HEIC" : "JPEG") + ")");
-
+    
+            // ============================================================
+            // 10. 最终结果
+            // ============================================================
+            PhoneLog.d(TAG,
+                    "✅ 自动选择完成 -> " +
+                    "预览=" + mPreviewWidth + "x" +
+                    mPreviewHeight +
+                    ", 拍照=" + photoWidth + "x" +
+                    photoHeight +
+                    ", 格式=" +
+                    (mCaptureFormat == ImageFormat.HEIC
+                            ? "HEIC"
+                            : "JPEG") +
+                    ", SensorOrientation=" +
+                    mSensorOrientation + "°");
+    
         } catch (Exception e) {
-            PhoneLog.e(TAG, "❌ 选择最佳分辨率失败，降级使用 640x480", e);
+            PhoneLog.e(TAG,
+                    "❌ 选择相机输出能力失败",
+                    e);
+    
             mPreviewWidth = 640;
             mPreviewHeight = 480;
+    
+            mCaptureFormat = ImageFormat.JPEG;
+    
             photoWidth = 1920;
             photoHeight = 1080;
-            mPreviewSize = new Size(mPreviewWidth, mPreviewHeight);
-            mPhotoSize = new Size(photoWidth, photoHeight);
+    
+            mSensorOrientation = 0;
         }
     }
-
     /**
      * 比较器：用于比较 Size 对象的面积大小
      */
@@ -591,28 +922,85 @@ public class PhoneSyncCameraService extends Service {
             stopSelf();
         }
     }
-
+    private int getJpegOrientation() {
+        if (mDeviceOrientation == OrientationEventListener.ORIENTATION_UNKNOWN) {
+            PhoneLog.w(TAG, "⚠️ [方向] 当前设备方向未知，使用 0°");
+            return 0;
+        }
+    
+        int deviceOrientation =
+                (mDeviceOrientation + 45) / 90 * 90;
+    
+        deviceOrientation %= 360;
+    
+        int jpegOrientation =
+                (mSensorOrientation + deviceOrientation + 360) % 360;
+    
+        PhoneLog.d(TAG,
+                "📐 [方向计算] device=" + deviceOrientation +
+                "°, sensor=" + mSensorOrientation +
+                "°, jpeg=" + jpegOrientation + "°");
+    
+        return jpegOrientation;
+    }
     private void captureHighResPhoto() {
         if (mCameraDevice == null || mCaptureSession == null || mPhotoReader == null) {
             PhoneLog.w(TAG, "⚠️ 相机未就绪，无法执行拍照");
             return;
         }
+    
         try {
-            CaptureRequest.Builder builder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
+            CaptureRequest.Builder builder =
+                    mCameraDevice.createCaptureRequest(
+                            CameraDevice.TEMPLATE_STILL_CAPTURE
+                    );
+    
             builder.addTarget(mPhotoReader.getSurface());
-            builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
-            builder.set(CaptureRequest.JPEG_QUALITY, (byte) 95);
-            // 🔄 设置拍照时的图片旋转角度（顺时针 90 度）
-            builder.set(CaptureRequest.JPEG_ORIENTATION, 90);
-
-            mCaptureSession.capture(builder.build(), null, mBgHandler);
-            PhoneLog.d(TAG, "📸 最高画质拍照请求已提交给 Session (" + photoWidth + "x" + photoHeight + ")");
+    
+            builder.set(
+                    CaptureRequest.CONTROL_AF_MODE,
+                    CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE
+            );
+    
+            int jpegOrientation = getJpegOrientation();
+    
+            builder.set(
+                    CaptureRequest.JPEG_ORIENTATION,
+                    jpegOrientation
+            );
+    
+            builder.set(
+                    CaptureRequest.JPEG_QUALITY,
+                    (byte) 95
+            );
+    
+            PhoneLog.d(TAG,
+                    "📸 [拍照] " +
+                    (mCaptureFormat == ImageFormat.HEIC ? "HEIC" : "JPEG") +
+                    ", orientation=" + jpegOrientation + "°");
+    
+            mCaptureSession.capture(
+                    builder.build(),
+                    null,
+                    mBgHandler
+            );
+    
+            PhoneLog.d(TAG,
+                    "📸 拍照请求已提交: " +
+                    photoWidth + "x" + photoHeight +
+                    ", format=" +
+                    (mCaptureFormat == ImageFormat.HEIC ? "HEIC" : "JPEG"));
+    
         } catch (Exception e) {
             PhoneLog.e(TAG, "❌ 提交拍照请求失败", e);
         }
     }
 
     private void savePhoto(Image image) {
+        PhoneLog.d(TAG, "📸 [Photo] Image received: format=" +
+        image.getFormat() +
+        ", width=" + image.getWidth() +
+        ", height=" + image.getHeight());
         try {
             ByteBuffer buffer = image.getPlanes()[0].getBuffer();
             byte[] encodedData = new byte[buffer.remaining()];
@@ -632,9 +1020,8 @@ public class PhoneSyncCameraService extends Service {
                 PhoneLog.w(TAG, "⚠️ 无法读取图片 EXIF 信息: " + e.getMessage());
             }
             
-            // 如果 EXIF 没有旋转，默认根据我们的设置补正 90 度 (适配大多数手机传感器)
-            if (rotationDegrees == 0) rotationDegrees = 90;
-
+            
+            
             // 1. 🎯 [手机端保存]
             File dcimDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM);
             File wearSyncDir = new File(dcimDir, "WearSync");
@@ -751,19 +1138,25 @@ public class PhoneSyncCameraService extends Service {
             mEncoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
             
             mPhotoReader = ImageReader.newInstance(photoWidth, photoHeight, mCaptureFormat, 2);
-            mPhotoReader.setOnImageAvailableListener(reader -> {
-                Image image = reader.acquireLatestImage();
-                if (image != null) {
-                    savePhoto(image);
-                    image.close();
-                }
-            }, mBgHandler);
-
-            openChannelStream(); // 内部会触发 startCameraHardware
-        } catch (Exception e) {
-            PhoneLog.e(TAG, "❌ 切换摄像头失败", e);
+            PhoneLog.d(TAG, "📷 [PhotoReader] format=" +
+            mCaptureFormat +
+            ", width=" + photoWidth +
+            ", height=" + photoHeight +
+            ", imageFormat=" +
+            (mCaptureFormat == ImageFormat.HEIC ? "HEIC" : "JPEG"));
+                mPhotoReader.setOnImageAvailableListener(reader -> {
+                    Image image = reader.acquireLatestImage();
+                    if (image != null) {
+                        savePhoto(image);
+                        image.close();
+                    }
+                }, mBgHandler);
+    
+                openChannelStream(); // 内部会触发 startCameraHardware
+            } catch (Exception e) {
+                PhoneLog.e(TAG, "❌ 切换摄像头失败", e);
+            }
         }
-    }
 
     private void manualFocus(double x, double y) {
         if (mCaptureSession == null || mCameraDevice == null) return;
