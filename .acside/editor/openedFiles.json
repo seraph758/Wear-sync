@@ -1,20 +1,50 @@
 {
   "allFiles": [
     {
-      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncMainFragment.kt",
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneLogActivity.kt",
       "selection": {
         "end": {
-          "column": 1,
-          "index": 4156,
-          "line": 102
+          "column": 68,
+          "index": 4631,
+          "line": 98
         },
         "start": {
-          "column": 3,
-          "index": 2228,
-          "line": 60
+          "column": 68,
+          "index": 4631,
+          "line": 98
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneLogFloatingService.kt",
+      "selection": {
+        "end": {
+          "column": 49,
+          "index": 14703,
+          "line": 288
+        },
+        "start": {
+          "column": 49,
+          "index": 14703,
+          "line": 288
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/WearSyncApplication.kt",
+      "selection": {
+        "end": {
+          "column": 38,
+          "index": 648,
+          "line": 20
+        },
+        "start": {
+          "column": 38,
+          "index": 648,
+          "line": 20
         }
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncMainFragment.kt"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/WearSyncApplication.kt"
 }

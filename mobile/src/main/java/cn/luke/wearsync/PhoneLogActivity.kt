@@ -96,7 +96,7 @@ class PhoneLogActivity : ComponentActivity() {
                                 }
                                 Button(
                                     onClick = {
-                                        val backup = PhoneLog.exportBackupFile()
+                                        val backup = PhoneLog.exportBackupFile(this)
                                         if (backup != null) {
                                             Toast.makeText(context, "备份成功！", Toast.LENGTH_LONG).show()
                                         }

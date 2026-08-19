@@ -18,7 +18,7 @@ class WearSyncApplication : Application() {
                 Timber.e(throwable, "💥 FATAL CRASH on thread [%s]", thread.name)
 
                 // 2. 强制刷新并备份到 Downloads
-                PhoneLog.exportBackupFile()
+                PhoneLog.exportBackupFile(this)
             } catch (e: Exception) {
                 // 备份本身不能再崩溃，静默忽略
             }

@@ -286,7 +286,7 @@ class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
                                 }
                                 Button(
                                     onClick = {
-                                        val file = PhoneLog.exportBackupFile()
+                                        val file = PhoneLog.exportBackupFile(this@PhoneLogFloatingService)
                                         if (file != null && file.exists()) Toast.makeText(this@PhoneLogFloatingService, "已保存", Toast.LENGTH_SHORT).show()
                                     },
                                     contentPadding = PaddingValues(horizontal = 10.dp),
