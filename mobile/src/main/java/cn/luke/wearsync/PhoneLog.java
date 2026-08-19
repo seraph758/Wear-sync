@@ -19,6 +19,7 @@ import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import timber.log.Timber;
+import android.media.MediaScannerConnection;
 
 public class PhoneLog {
     private static final String TAG = "PhoneLog_Core";
@@ -104,25 +105,40 @@ public class PhoneLog {
     }
 
     /**
-     * ✅ 【修复1】备份文件名改为可读系统时间格式
+     * 备份文件并通知系统媒体库刷新
      */
-    public static synchronized File exportBackupFile() {
+    public static synchronized File exportBackupFile(Context context) {
         try {
             if (!backupDir.exists()) backupDir.mkdirs();
             String timeStr = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
                     .format(new Date());
             File phoneBackup = new File(backupDir, "Phone_Backup_" + timeStr + ".txt");
             File wearBackup = new File(backupDir, "Wear_Backup_" + timeStr + ".txt");
+            
             copyFile(phoneLogFile, phoneBackup);
             copyFile(wearLogFile, wearBackup);
             Timber.i("备份成功: %s, %s", phoneBackup.getName(), wearBackup.getName());
+    
+            // 核心修复：手动通知系统媒体库刷新这两个新文件
+            if (context != null) {
+                String[] paths = new String[]{
+                        phoneBackup.getAbsolutePath(), 
+                        wearBackup.getAbsolutePath()
+                };
+                MediaScannerConnection.scanFile(
+                        context.getApplicationContext(),
+                        paths,
+                        null, // 默认为 null，系统会自动根据扩展名判定 mimeType
+                        (path, uri) -> Log.d(TAG, "系统媒体库已刷新: " + path + " -> " + uri)
+                );
+            }
+    
             return phoneBackup;
         } catch (Exception e) {
             Log.e(TAG, "备份失败", e);
             return null;
         }
     }
-
 
     public static List<String> getLatestTenMinutesLogs() {
         List<String> result = new ArrayList<>();

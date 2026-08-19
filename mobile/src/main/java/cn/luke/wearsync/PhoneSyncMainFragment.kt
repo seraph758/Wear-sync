@@ -59,12 +59,13 @@ object AppState {
 /**
  * 将状态和回调分层包装，解决 Compose 编译器在参数过多（>30个）时可能导致的预览索引失效问题
  */
-data class PhoneSyncUIState(
+ data class PhoneSyncUIState(
     val isConnected: Boolean = false,
     val isNotificationAllowed: Boolean = false,
     val isCameraAllowed: Boolean = false,
     val isServiceRunning: Boolean = false,
-    val isWatchPreviewEnabled: Boolean = true,
+    val isWatchPreviewEnabled: Boolean = true,       // ← 只保留一处，默认开启
+    val isHeifFallbackEnabled: Boolean = true,        // ← 新增：HEIF 降级开关
     val fileTransferStatus: String = "",
     val uiLogDebug: Boolean = false,
     val uiWearLogDebug: Boolean = false,
@@ -91,12 +92,14 @@ data class PhoneSyncUIActions(
     val onCameraForceStop: () -> Unit = {},
     val onPhoneLogToggle: (Boolean) -> Unit = {},
     val onWearLogToggle: (Boolean) -> Unit = {},
-    val onWatchPreviewToggle: (Boolean) -> Unit = {},
+    val onWatchPreviewToggle: (Boolean) -> Unit = {},      // ← 统一为 lambda 语法
+    val onHeifFallbackToggle: (Boolean) -> Unit = {},       // ← 新增：统一为 lambda 语法
     val onFloatingLogClick: () -> Unit = {},
     val onNotificationPermissionClick: () -> Unit = {},
     val onCameraPermissionClick: () -> Unit = {},
     val onFileTransferClick: () -> Unit = {}
 )
+
 
 @Preview(showBackground = true)
 @Composable
@@ -135,7 +138,7 @@ fun PhoneSyncMainScreen(
         var isLogExpanded by remember { mutableStateOf(false) }
         var isConnectionExpanded by remember { mutableStateOf(false) }
         var isPermissionExpanded by remember { mutableStateOf(false) }
-        var isFileTransferExpanded by remember { mutableStateOf(false) }
+        var isFileTransferExpanded by remember {; mutableStateOf(false) }
 
         // Local vibration pattern states
         var patternOnDuration by remember { mutableIntStateOf(500) }
@@ -165,7 +168,7 @@ fun PhoneSyncMainScreen(
                     fontSize = 33.sp,
                     fontWeight = FontWeight.Bold,
                     color = textColor,
-                    modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)
+                    modifier = Modifier.padding(top = 16.dp, bottom = 16.dp)
                 )
 
                 // DND and Alarm Rows
@@ -422,7 +425,10 @@ fun PhoneSyncMainScreen(
                                     onClick = actions.onCameraForceStop
                                 ) { Text("强制关闭相机", color = Color.White, fontSize = 12.sp) }
                             }
+                            
                             HorizontalDivider(color = dividerColor, modifier = Modifier.padding(horizontal = 14.dp))
+                            
+                            // --- 开关 1：手表预览 ---
                             Row(
                                 modifier = Modifier.fillMaxWidth().padding(14.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -434,8 +440,27 @@ fun PhoneSyncMainScreen(
                                 }
                                 Switch(checked = state.isWatchPreviewEnabled, onCheckedChange = actions.onWatchPreviewToggle)
                             }
+                            
+                            HorizontalDivider(color = dividerColor, modifier = Modifier.padding(horizontal = 14.dp))
+                            
+                            // --- 开关 2：HEIF 高质量转码 (新增) ---
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(14.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("启用 HEIF 高质量压缩", color = textColor, fontSize = 14.sp)
+                                    Text("不支持直出时自动转码，画质更高且体积更小", color = subTextColor, fontSize = 11.sp)
+                                }
+                                Switch(
+                                    checked = state.isHeifFallbackEnabled, 
+                                    onCheckedChange = actions.onHeifFallbackToggle
+                                )
+                            }
                         }
                     }
+                    
 
                     // Log Expandable
                     AnimatedVisibility(visible = isLogExpanded) {
