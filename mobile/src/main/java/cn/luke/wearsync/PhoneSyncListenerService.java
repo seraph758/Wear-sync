@@ -206,27 +206,30 @@ public class PhoneSyncListenerService extends WearableListenerService {
         PhoneLog.w(TAG, "unknown camera action: " + action);
     }
 
-    private void executeRemoteActivityLaunch(String nodeId) {
-        try {
-            PhoneLog.d(TAG, "🚀 REMOTE -> " + nodeId);
-            RemoteActivityHelper helper = new RemoteActivityHelper(
-                    this, REMOTE_EXECUTOR);
-            Intent intent = new Intent(Intent.ACTION_VIEW);
-            intent.setData(Uri.parse("wearsync://camera"));
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            ListenableFuture<Void> future = helper.startRemoteActivity(intent, nodeId);
-            future.addListener(() -> {
-                try {
-                    future.get();
-                    PhoneLog.d(TAG, "REMOTE OK");
-                } catch (Exception e) {
-                    PhoneLog.e(TAG, "remote failed", e);
-                }
-            }, REMOTE_EXECUTOR);
-        } catch (Exception e) {
-            PhoneLog.e(TAG, "remote helper failed", e);
-        }
+  private void executeRemoteActivityLaunch(String nodeId) {
+    try {
+        PhoneLog.d(TAG, "🚀 REMOTE -> " + nodeId);
+        RemoteActivityHelper helper = new RemoteActivityHelper(
+                this, REMOTE_EXECUTOR);
+        Intent intent = new Intent(Intent.ACTION_VIEW);
+        intent.setData(Uri.parse("wearsync://camera"));
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        // 👇 修复：添加 BROWSABLE category，匹配手表端 Activity 的 intent-filter 要求
+        intent.addCategory(Intent.CATEGORY_BROWSABLE);
+        ListenableFuture<Void> future = helper.startRemoteActivity(intent, nodeId);
+        future.addListener(() -> {
+            try {
+                future.get();
+                PhoneLog.d(TAG, "REMOTE OK");
+            } catch (Exception e) {
+                PhoneLog.w(TAG, "remote failed", e);
+            }
+        }, REMOTE_EXECUTOR);
+    } catch (Exception e) {
+        PhoneLog.e(TAG, "remote helper failed", e);
     }
+}
+
 
     @Override
     public void onChannelOpened(@NonNull ChannelClient.Channel channel) {
