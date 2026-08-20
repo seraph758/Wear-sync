@@ -14,9 +14,9 @@ import android.widget.Toast
 import android.view.ViewGroup
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -190,6 +190,14 @@ fun PhoneSyncMainScreen(
                     )
                     Spacer(modifier = Modifier.weight(1f))
                     Column(horizontalAlignment = Alignment.End) {
+                        // 文字在上
+                        Text(
+                            text = "状态权限检查",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        // 圆点在下
                         Row {
                             // 连接状态
                             Text(
@@ -218,11 +226,6 @@ fun PhoneSyncMainScreen(
                                 }
                             )
                         }
-                        Text(
-                            text = "状态权限检查",
-                            fontSize = 11.sp,
-                            color = subTextColor
-                        )
                     }
                 }
 
@@ -547,85 +550,84 @@ fun PhoneSyncMainScreen(
                     }
                 }
 
-                // === 文件传输 + 震动反馈 并排放（折叠面板） ===
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    // 文件传输卡片
-                    Card(
-                        onClick = { isFileTransferExpanded = !isFileTransferExpanded },
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = cardBgColor)
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column {
-                                    Text("文件传输", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = textColor)
-                                    Text("双向传输照片、音频及配置文件", fontSize = 11.sp, color = subTextColor)
-                                }
-                                Text(text = "📤", fontSize = 14.sp, color = textColor)
+                // === 文件传输（全宽折叠面板） ===
+                Card(
+                    onClick = { isFileTransferExpanded = !isFileTransferExpanded },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = cardBgColor)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text("文件传输", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = textColor)
+                                Text("双向传输照片、音频及配置文件", fontSize = 11.sp, color = subTextColor)
                             }
-                            AnimatedVisibility(visible = isFileTransferExpanded) {
-                                Column(modifier = Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    HorizontalDivider(color = dividerColor)
-                                    Button(onClick = actions.onFileTransferClick, modifier = Modifier.fillMaxWidth()) { Text("选择并发送文件") }
-                                    Text(
-                                        text = state.fileTransferStatus,
-                                        fontSize = 12.sp,
-                                        color = if (state.fileTransferStatus.contains("成功")) Color(0xFF4CAF50) else if (state.fileTransferStatus.contains("失败") || state.fileTransferStatus.contains("错误")) Color(0xFFF44336) else subTextColor,
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                }
+                            Text(text = "📤", fontSize = 14.sp, color = textColor)
+                        }
+                        AnimatedVisibility(visible = isFileTransferExpanded) {
+                            Column(modifier = Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                HorizontalDivider(color = dividerColor)
+                                Button(onClick = actions.onFileTransferClick, modifier = Modifier.fillMaxWidth()) { Text("选择并发送文件") }
+                                Text(
+                                    text = state.fileTransferStatus,
+                                    fontSize = 12.sp,
+                                    color = if (state.fileTransferStatus.contains("成功")) Color(0xFF4CAF50) else if (state.fileTransferStatus.contains("失败") || state.fileTransferStatus.contains("错误")) Color(0xFFF44336) else subTextColor,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
                             }
                         }
                     }
+                }
 
-                    // 震动反馈卡片
-                    Card(
-                        onClick = { isVibrationExpanded = !isVibrationExpanded },
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = cardBgColor)
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column {
-                                    Text("震动反馈", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = textColor)
-                                    Text("自定义震动波形与频率", fontSize = 11.sp, color = subTextColor)
-                                }
-                                Text(text = if (isVibrationExpanded) "▲" else "▼", fontSize = 14.sp, color = subTextColor)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // === 震动反馈（全宽折叠面板） ===
+                Card(
+                    onClick = { isVibrationExpanded = !isVibrationExpanded },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = cardBgColor)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text("震动反馈", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = textColor)
+                                Text("自定义震动波形与频率", fontSize = 11.sp, color = subTextColor)
                             }
-                            AnimatedVisibility(visible = isVibrationExpanded) {
-                                Column(modifier = Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    HorizontalDivider(color = dividerColor)
-                                    Text("震动时长: ${patternOnDuration}ms", fontSize = 13.sp, color = textColor)
-                                    Slider(value = patternOnDuration.toFloat(), onValueChange = { patternOnDuration = it.toInt() }, valueRange = 100f..2000f, steps = 19, modifier = Modifier.fillMaxWidth())
-                                    Text("间隔时长: ${patternOffDuration}ms", fontSize = 13.sp, color = textColor)
-                                    Slider(value = patternOffDuration.toFloat(), onValueChange = { patternOffDuration = it.toInt() }, valueRange = 100f..1000f, steps = 8, modifier = Modifier.fillMaxWidth())
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text("循环震动", fontSize = 13.sp, color = textColor)
-                                        Spacer(Modifier.weight(1f))
-                                        Switch(checked = repeatIndex == 0, onCheckedChange = { repeatIndex = if (it) 0 else -1 })
-                                    }
-                                    HorizontalDivider(color = dividerColor)
-                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        OutlinedButton(
-                                            onClick = { actions.onVibrationCommand("preview", patternOnDuration, patternOffDuration, repeatIndex) },
-                                            modifier = Modifier.weight(1f)
-                                        ) { Text("📳 预览") }
-                                        Button(
-                                            modifier = Modifier.weight(1f),
-                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
-                                            onClick = { actions.onVibrationSave(patternOnDuration, patternOffDuration, repeatIndex) }
-                                        ) { Text("💾 保存") }
-                                    }
+                            Text(text = if (isVibrationExpanded) "▲" else "▼", fontSize = 14.sp, color = subTextColor)
+                        }
+                        AnimatedVisibility(visible = isVibrationExpanded) {
+                            Column(modifier = Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                HorizontalDivider(color = dividerColor)
+                                Text("震动时长: ${patternOnDuration}ms", fontSize = 13.sp, color = textColor)
+                                Slider(value = patternOnDuration.toFloat(), onValueChange = { patternOnDuration = it.toInt() }, valueRange = 100f..2000f, steps = 19, modifier = Modifier.fillMaxWidth())
+                                Text("间隔时长: ${patternOffDuration}ms", fontSize = 13.sp, color = textColor)
+                                Slider(value = patternOffDuration.toFloat(), onValueChange = { patternOffDuration = it.toInt() }, valueRange = 100f..1000f, steps = 8, modifier = Modifier.fillMaxWidth())
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("循环震动", fontSize = 13.sp, color = textColor)
+                                    Spacer(Modifier.weight(1f))
+                                    Switch(checked = repeatIndex == 0, onCheckedChange = { repeatIndex = if (it) 0 else -1 })
+                                }
+                                HorizontalDivider(color = dividerColor)
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedButton(
+                                        onClick = { actions.onVibrationCommand("preview", patternOnDuration, patternOffDuration, repeatIndex) },
+                                        modifier = Modifier.weight(1f)
+                                    ) { Text("📳 预览") }
+                                    Button(
+                                        modifier = Modifier.weight(1f),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
+                                        onClick = { actions.onVibrationSave(patternOnDuration, patternOffDuration, repeatIndex) }
+                                    ) { Text("💾 保存") }
                                 }
                             }
                         }
