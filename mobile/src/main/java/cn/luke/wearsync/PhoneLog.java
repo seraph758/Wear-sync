@@ -12,12 +12,13 @@ import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import timber.log.Timber;
 import android.media.MediaScannerConnection;
 
@@ -34,7 +35,11 @@ public class PhoneLog {
         logDir = new File(context.getCacheDir(), "WearSync/Log");
         backupDir = new File(Environment.getExternalStoragePublicDirectory(
                 Environment.DIRECTORY_DOWNLOADS), "WearSync/Log");
-        if (!logDir.exists()) logDir.mkdirs();
+        if (!logDir.exists()) {
+            if (!logDir.mkdirs()) {
+                Timber.tag(TAG).e("无法创建日志目录: %s", logDir.getAbsolutePath());
+            }
+        }
         phoneLogFile = new File(logDir, "phone_log.txt");
         wearLogFile = new File(logDir, "wear_log.txt");
 
@@ -47,7 +52,7 @@ public class PhoneLog {
             Timber.plant(new Timber.DebugTree());
         }
 
-        Timber.i("PhoneLog 初始化完成 | DEBUG=%b | logDir=%s", isDebug, logDir.getAbsolutePath());
+        Timber.tag(TAG).i("PhoneLog 初始化完成 | DEBUG=%b | logDir=%s", isDebug, logDir.getAbsolutePath());
     }
 
     // ==================== 对外 API ====================
@@ -56,7 +61,7 @@ public class PhoneLog {
         Timber.tag(tag).d(msg);
     }
     public static void w(String tag, String msg, Throwable tr) {
-        Log.w(tag, msg, tr);
+        Timber.tag(tag).w(tr, msg);
     }
     public static void i(String tag, String msg) {
         if (!DEBUG) return;
@@ -91,25 +96,36 @@ public class PhoneLog {
     public static synchronized void clear() {
         try {
             if (phoneLogFile != null && phoneLogFile.exists()) {
-                phoneLogFile.delete();
-                phoneLogFile.createNewFile();
+                if (phoneLogFile.delete()) {
+                    if (!phoneLogFile.createNewFile()) {
+                        Timber.tag(TAG).w("创建 phoneLogFile 失败");
+                    }
+                } else {
+                    Timber.tag(TAG).w("删除 phoneLogFile 失败");
+                }
             }
             if (wearLogFile != null && wearLogFile.exists()) {
-                wearLogFile.delete();
-                wearLogFile.createNewFile();
+                if (wearLogFile.delete()) {
+                    if (!wearLogFile.createNewFile()) {
+                        Timber.tag(TAG).w("创建 wearLogFile 失败");
+                    }
+                } else {
+                    Timber.tag(TAG).w("删除 wearLogFile 失败");
+                }
             }
-            Timber.i("日志已清空");
+            Timber.tag(TAG).i("日志已清空");
         } catch (IOException e) {
-            Log.e(TAG, "清空日志失败", e);
+            Timber.tag(TAG).e(e, "清空日志失败");
         }
     }
 
-    /**
-     * 备份文件并通知系统媒体库刷新
-     */
     public static synchronized File exportBackupFile(Context context) {
         try {
-            if (!backupDir.exists()) backupDir.mkdirs();
+            if (!backupDir.exists()) {
+                if (!backupDir.mkdirs()) {
+                    Timber.tag(TAG).e("无法创建备份目录: %s", backupDir.getAbsolutePath());
+                }
+            }
             String timeStr = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
                     .format(new Date());
             File phoneBackup = new File(backupDir, "Phone_Backup_" + timeStr + ".txt");
@@ -117,7 +133,7 @@ public class PhoneLog {
             
             copyFile(phoneLogFile, phoneBackup);
             copyFile(wearLogFile, wearBackup);
-            Timber.i("备份成功: %s, %s", phoneBackup.getName(), wearBackup.getName());
+            Timber.tag(TAG).i("备份成功: %s, %s", phoneBackup.getName(), wearBackup.getName());
     
             // 核心修复：手动通知系统媒体库刷新这两个新文件
             if (context != null) {
@@ -129,13 +145,13 @@ public class PhoneLog {
                         context.getApplicationContext(),
                         paths,
                         null, // 默认为 null，系统会自动根据扩展名判定 mimeType
-                        (path, uri) -> Log.d(TAG, "系统媒体库已刷新: " + path + " -> " + uri)
+                        (path, uri) -> Timber.tag(TAG).d("系统媒体库已刷新: %s -> %s", path, uri)
                 );
             }
     
             return phoneBackup;
         } catch (Exception e) {
-            Log.e(TAG, "备份失败", e);
+            Timber.tag(TAG).e(e, "备份失败");
             return null;
         }
     }
@@ -149,10 +165,9 @@ public class PhoneLog {
         readLogsFromFile(wearLogFile, tenMinAgo, sdf, result);
     
         // ✅ 修正：改为正序排列，最新的日志在最后面
-        Collections.sort(result, (a, b) -> {
+        result.sort((a, b) -> {
             String timeA = a.length() > 19 ? a.substring(0, 19) : a;
             String timeB = b.length() > 19 ? b.substring(0, 19) : b;
-            // 改为 a 在前，b 在后，实现正序排列
             return timeA.compareTo(timeB); 
         });
         return result;
@@ -166,8 +181,13 @@ public class PhoneLog {
             while ((line = reader.readLine()) != null) {
                 try {
                     String timeStr = line.substring(0, 19);
-                    long logTime = sdf.parse(timeStr).getTime();
-                    if (logTime >= tenMinAgo) {
+                    Date parsedDate = sdf.parse(timeStr);
+                    if (parsedDate != null) {
+                        long logTime = parsedDate.getTime();
+                        if (logTime >= tenMinAgo) {
+                            result.add(line);
+                        }
+                    } else {
                         result.add(line);
                     }
                 } catch (Exception e) {
@@ -175,14 +195,14 @@ public class PhoneLog {
                 }
             }
         } catch (IOException e) {
-            Log.e(TAG, "读取日志文件失败: " + file.getName(), e);
+            Timber.tag(TAG).e(e, "读取日志文件失败: %s", file.getName());
         }
     }
 
     // ==================== 日志格式化 ====================
     private static String formatWearLogLine(String rawLine) {
         String line = rawLine.trim();
-        Pattern pattern = Pattern.compile("(\\[WEAR\\]\\s*)?(\\[\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3}\\])\\s*");
+        Pattern pattern = Pattern.compile("(\\[WEAR]\\s*)?(\\[\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3}])\\s*");
         Matcher matcher = pattern.matcher(line);
 
         if (matcher.find()) {
@@ -196,7 +216,11 @@ public class PhoneLog {
     // ==================== 内部实现 ====================
     private static void copyFile(File src, File dst) throws IOException {
         if (src == null || !src.exists()) {
-            if (dst != null && !dst.exists()) dst.createNewFile();
+            if (dst != null && !dst.exists()) {
+                if (!dst.createNewFile()) {
+                    Timber.tag(TAG).w("创建目标文件失败: %s", dst.getAbsolutePath());
+                }
+            }
             return;
         }
         try (FileInputStream fis = new FileInputStream(src);
@@ -213,7 +237,7 @@ public class PhoneLog {
         PhoneFileTree(File file) { this.file = file; }
 
         @Override
-        protected void log(int priority, String tag, String message, Throwable t) {
+        protected void log(int priority, @Nullable String tag, @NonNull String message, @Nullable Throwable t) {
             if ("WEAR_LOG".equals(tag)) return;
             String level = getLevelChar(priority);
             String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault()).format(new Date());
@@ -227,7 +251,7 @@ public class PhoneLog {
         WearFileTree(File file) { this.file = file; }
 
         @Override
-        protected void log(int priority, String tag, String message, Throwable t) {
+        protected void log(int priority, @Nullable String tag, @NonNull String message, @Nullable Throwable t) {
             if (!"WEAR_LOG".equals(tag)) return;
             String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault()).format(new Date());
             String line = String.format("%s %s", timestamp, message);
@@ -237,7 +261,12 @@ public class PhoneLog {
 
     private static synchronized void writeToFile(File file, String line, Throwable t) {
         try {
-            if (!file.exists()) file.createNewFile();
+            if (!file.exists()) {
+                if (!file.createNewFile()) {
+                    Timber.tag("PhoneLog_FileIO").w("无法创建日志文件: %s", file.getName());
+                    return;
+                }
+            }
             try (FileOutputStream fos = new FileOutputStream(file, true)) {
                 fos.write((line + "\n").getBytes());
                 if (t != null) {
@@ -245,19 +274,19 @@ public class PhoneLog {
                 }
             }
         } catch (IOException e) {
-            Log.e("PhoneLog_FileIO", "写入日志文件失败: " + file.getName(), e);
+            Timber.tag("PhoneLog_FileIO").e(e, "写入日志文件失败: %s", file.getName());
         }
     }
 
     private static String getLevelChar(int priority) {
-        switch (priority) {
-            case Log.VERBOSE: return "V";
-            case Log.DEBUG:   return "D";
-            case Log.INFO:    return "I";
-            case Log.WARN:    return "W";
-            case Log.ERROR:   return "E";
-            default:          return "?";
-        }
+        return switch (priority) {
+            case Log.VERBOSE -> "V";
+            case Log.DEBUG -> "D";
+            case Log.INFO -> "I";
+            case Log.WARN -> "W";
+            case Log.ERROR -> "E";
+            default -> "?";
+        };
     }
 }
 

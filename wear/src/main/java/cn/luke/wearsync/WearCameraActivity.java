@@ -16,9 +16,10 @@ import android.view.SurfaceView;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
-import android.widget.ImageView;
+import android.view.ScaleGestureDetector;
+import android.view.GestureDetector;
+import android.widget.FrameLayout;
 import android.widget.TextView;
-
 import androidx.activity.ComponentActivity;
 import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
@@ -39,14 +40,22 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
     public static WeakReference<WearCameraActivity> sActivityRef = new WeakReference<>(null);
 
     private SurfaceView surfaceView;
-    private ImageView imgPreview;
+    private FrameLayout surfaceContainer;
     private TextView tvStatusHint;
     private MediaCodec mDecoder;
     private volatile boolean isDecoderRunning = false;
     private volatile boolean isUserExiting = false;
+    private volatile boolean isFrozen = false; // 🎯 冻结预览标志位
     private boolean isSurfaceReady = false;
     private final LinkedBlockingQueue<byte[]> frameQueue = new LinkedBlockingQueue<>(15);
     private Thread renderThread;
+
+    // 🎯 缩放和平移相关
+    private float mScaleFactor = 1.0f;
+    private float mPosX = 0;
+    private float mPosY = 0;
+    private ScaleGestureDetector mScaleDetector;
+    private GestureDetector mGestureDetector;
 
     private ChannelClient.ChannelCallback mChannelListener;
     private BroadcastReceiver mFileReceiver;
@@ -73,26 +82,36 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
         
         setContentView(R.layout.activity_wear_camera);
         surfaceView = findViewById(R.id.surfaceView);
-        imgPreview = findViewById(R.id.img_preview);
+        surfaceContainer = findViewById(R.id.surface_container); // 🎯 需要在布局中增加容器
         tvStatusHint = findViewById(R.id.tv_status_hint);
         tvCountdown = findViewById(R.id.tv_countdown);
         focusMarker = findViewById(R.id.focus_marker);
         btnSwitchCamera = findViewById(R.id.btn_switch_camera);
 
-        // 🎯 预览图点击即可关闭
-        if (imgPreview != null) {
-            imgPreview.setOnClickListener(v -> hidePhotoPreview());
+        setupGestures();
+
+        if (surfaceContainer != null) {
+            surfaceContainer.setOnTouchListener((v, event) -> {
+                if (isFrozen) {
+                    mScaleDetector.onTouchEvent(event);
+                    mGestureDetector.onTouchEvent(event);
+                    if (event.getAction() == MotionEvent.ACTION_UP) v.performClick();
+                    return true;
+                }
+                return false;
+            });
         }
 
         if (surfaceView != null) {
             surfaceView.getHolder().addCallback(this);
-            // 🎯 手动对焦功能
+            // 🎯 仅在非冻结状态下处理对焦
             surfaceView.setOnTouchListener((v, event) -> {
+                if (isFrozen) return false;
+                
                 if (event.getAction() == MotionEvent.ACTION_DOWN) {
                     float x = event.getX() / v.getWidth();
                     float y = event.getY() / v.getHeight();
                     showFocusMarker(event.getX(), event.getY());
-                    WearLog.d(TAG, "🎯 手动对焦: " + x + ", " + y);
                     WearSyncCommManager.getInstance(getApplicationContext()).sendBusinessCommand("camera_action", "FOCUS_CAMERA", "x", (double)x, "y", (double)y);
                     v.performClick();
                     return true;
@@ -134,9 +153,9 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
             public void handleOnBackPressed() {
-                // 🎯 如果预览图可见，先关闭预览
-                if (imgPreview != null && imgPreview.getVisibility() == View.VISIBLE) {
-                    hidePhotoPreview();
+                // 🎯 如果处于冻结状态，先退出冻结
+                if (isFrozen) {
+                    unfreezePreview();
                     return;
                 }
                 WearLog.d(TAG, "🔙 用户按下返回键，准备关闭远端相机");
@@ -171,6 +190,61 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
         WearSyncCommManager.getInstance(getApplicationContext()).sendBusinessCommand("camera_control", "open_phone_camera");
     }
 
+    private void setupGestures() {
+        mScaleDetector = new ScaleGestureDetector(this, new ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            @Override
+            public boolean onScale(@NonNull ScaleGestureDetector detector) {
+                mScaleFactor *= detector.getScaleFactor();
+                mScaleFactor = Math.max(1.0f, Math.min(mScaleFactor, 5.0f));
+                applyTransform();
+                return true;
+            }
+        });
+
+        mGestureDetector = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
+            @Override
+            public boolean onScroll(MotionEvent e1, @NonNull MotionEvent e2, float distanceX, float distanceY) {
+                if (mScaleFactor > 1.0f) {
+                    mPosX -= distanceX;
+                    mPosY -= distanceY;
+                    applyTransform();
+                    return true;
+                }
+                return false;
+            }
+
+            @Override
+            public boolean onDoubleTap(@NonNull MotionEvent e) {
+                if (mScaleFactor > 1.0f) {
+                    resetTransform();
+                } else {
+                    mScaleFactor = 2.0f;
+                    applyTransform();
+                }
+                return true;
+            }
+        });
+    }
+
+    private void applyTransform() {
+        if (surfaceView != null) {
+            surfaceView.setScaleX(mScaleFactor);
+            surfaceView.setScaleY(mScaleFactor);
+            surfaceView.setTranslationX(mPosX);
+            surfaceView.setTranslationY(mPosY);
+            
+            // 🎯 通知容器失效以刷新绘制
+            if (surfaceContainer != null) surfaceContainer.invalidate();
+        }
+    }
+
+    private void resetTransform() {
+        mScaleFactor = 1.0f;
+        mPosX = 0;
+        mPosY = 0;
+        applyTransform();
+    }
+
     private void startCountdownAndCapture() {
         if (tvCountdown == null) return;
         tvCountdown.setVisibility(View.VISIBLE);
@@ -186,11 +260,30 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
             }
             runOnUiThread(() -> {
                 tvCountdown.setVisibility(View.GONE);
-                WearLog.d(TAG, "📸 倒计时结束，发送最高画质拍照请求");
+                WearLog.d(TAG, "📸 倒计时结束：冻结预览并请求手机拍照");
+                
+                // 🎯 1. 立即冻结预览
+                freezePreview();
+                
+                // 🎯 2. 发送拍照指令
                 WearSyncCommManager.getInstance(getApplicationContext()).sendBusinessCommand("camera_action", "TAKE_PHOTO");
-                showCaptureHint("📸 正在拍照...");
+                showCaptureHint("📸 拍摄中...");
             });
         }).start();
+    }
+
+    private void freezePreview() {
+        isFrozen = true;
+        WearLog.d(TAG, "❄️ 预览已冻结，支持缩放查看");
+        showCaptureHint("❄️ 已冻结（双击或缩放）");
+    }
+
+    private void unfreezePreview() {
+        if (!isFrozen) return;
+        isFrozen = false;
+        resetTransform();
+        frameQueue.clear(); // 清空积压的帧
+        WearLog.d(TAG, "🔥 预览已恢复实时流");
     }
 
     private void showFocusMarker(float x, float y) {
@@ -247,27 +340,12 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
     }
 
     private void showPhotoPreview(Uri uri) {
-        if (imgPreview == null) return;
-        runOnUiThread(() -> {
-            try {
-                showCaptureHint("✨ 照片已保存并同步");
-                imgPreview.setImageURI(uri);
-                imgPreview.setVisibility(View.VISIBLE);
-                imgPreview.setAlpha(0.0f);
-                imgPreview.animate().alpha(1.0f).setDuration(500).start();
-                // 🚀 已移除 3 秒自动隐藏逻辑，现在支持手动关闭
-            } catch (Exception e) {
-                WearLog.e(TAG, "❌ 显示照片预览失败", e);
-            }
-        });
-    }
-
-    private void hidePhotoPreview() {
-        if (imgPreview == null || imgPreview.getVisibility() != View.VISIBLE) return;
-        runOnUiThread(() -> imgPreview.animate().alpha(0.0f).setDuration(500).withEndAction(() -> imgPreview.setVisibility(View.GONE)).start());
+        // 🎯 手表端逻辑已改为实时预览冻结，不再接收 WebP 缩略图文件
+        WearLog.d(TAG, "ℹ️ 收到同步文件(忽略): " + uri);
     }
 
     public void feedH264Data(byte[] h264Data) {
+        if (isFrozen) return; // 🎯 冻结时不接收新帧
         if (h264Data != null && h264Data.length > 0) {
             if (!frameQueue.offer(h264Data)) {
                 frameQueue.poll();
@@ -310,8 +388,8 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
 
     private void initDecoder() {
         try {
-            // 🎯 对齐手机端的 320x320 画面尺寸
-            MediaFormat format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, 320, 320);
+            // 🎯 对齐手机端的 256 宽度画面尺寸
+            MediaFormat format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, 256, 256);
             // 🔄 关键：告诉硬件解码器将流旋转 90 度以匹配手机传感器方向
             format.setInteger(MediaFormat.KEY_ROTATION, 90);
             
@@ -319,7 +397,7 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
             mDecoder.configure(format, surfaceView.getHolder().getSurface(), null, 0);
             mDecoder.start();
             isDecoderRunning = true;
-            WearLog.d(TAG, "🎉 H.264 解码器初始化成功 (320x320)");
+            WearLog.d(TAG, "🎉 H.264 解码器初始化成功 (256 width target)");
         } catch (Exception e) {
             WearLog.e(TAG, "❌ 初始化解码器失败: " + e.getMessage(), e);
         }
