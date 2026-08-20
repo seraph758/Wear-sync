@@ -1,8 +1,13 @@
 package cn.luke.wearsync;
 
 import android.content.Context;
+import android.media.MediaScannerConnection;
 import android.os.Environment;
 import android.util.Log;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
@@ -17,22 +22,19 @@ import java.util.List;
 import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+
 import timber.log.Timber;
-import android.media.MediaScannerConnection;
 
 public class PhoneLog {
     private static final String TAG = "PhoneLog_Core";
     public static boolean DEBUG = true;
-    private static File logDir;
     private static File phoneLogFile;
     private static File wearLogFile;
     private static File backupDir;
 
     public static void init(boolean isDebug, Context context) {
         DEBUG = isDebug;
-        logDir = new File(context.getCacheDir(), "WearSync/Log");
+        File logDir = new File(context.getCacheDir(), "WearSync/Log");
         backupDir = new File(Environment.getExternalStoragePublicDirectory(
                 Environment.DIRECTORY_DOWNLOADS), "WearSync/Log");
         if (!logDir.exists()) {
@@ -49,7 +51,15 @@ public class PhoneLog {
 
         // Debug 模式下额外注册控制台树，方便 Logcat 查看
         if (isDebug) {
-            Timber.plant(new Timber.DebugTree());
+            Timber.plant(new Timber.Tree() {
+                @Override
+                protected void log(int priority, @Nullable String tag, @NonNull String message, @Nullable Throwable t) {
+                    Log.println(priority, tag, message);
+                    if (t != null) {
+                        Log.println(priority, tag, Log.getStackTraceString(t));
+                    }
+                }
+            });
         }
 
         Timber.tag(TAG).i("PhoneLog 初始化完成 | DEBUG=%b | logDir=%s", isDebug, logDir.getAbsolutePath());
@@ -289,4 +299,3 @@ public class PhoneLog {
         };
     }
 }
-

@@ -10,13 +10,14 @@ import android.widget.TextView;
 import androidx.annotation.Nullable;
 import androidx.activity.ComponentActivity;
 import org.json.JSONObject;
+import java.lang.ref.WeakReference;
 
 public class WearAlarmActivity extends ComponentActivity {
 
     private static final String TAG = "WearSync_WearAlarmUI";
 
-    // ✅ P0: 新增静态实例，用于外部服务获取当前 Activity
-    private static WearAlarmActivity instance;
+    // ✅ 使用弱引用防止内存泄漏
+    private static WeakReference<WearAlarmActivity> instanceRef;
 
     private TextView tvAlarmDay;
     private TextView tvAlarmTime;
@@ -32,8 +33,8 @@ public class WearAlarmActivity extends ComponentActivity {
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // ✅ P0: 注册当前实例
-        instance = this;
+        // ✅ 注册当前实例（弱引用）
+        instanceRef = new WeakReference<>(this);
 
         // ✅ 最先检查 FORCE_STOP，避免任何不必要的初始化
         if (getIntent() != null && "FORCE_STOP".equals(getIntent().getStringExtra("alarm_action"))) {
@@ -75,9 +76,9 @@ public class WearAlarmActivity extends ComponentActivity {
         });
     }
 
-    // ✅ P0: 新增公共静态方法，供外部安全获取实例
+    // ✅ 安全获取实例
     public static WearAlarmActivity getInstance() {
-        return instance;
+        return instanceRef != null ? instanceRef.get() : null;
     }
 
     private void handleIncomingTime(Intent intent) {
@@ -86,17 +87,18 @@ public class WearAlarmActivity extends ComponentActivity {
         if (rawJson != null) {
             try {
                 JSONObject json = new JSONObject(rawJson);
-                String time = json.optString("time", "00:00");
+                String timeRaw = json.optString("time", "00:00");
                 String monthDay = json.optString("month_day", "");
                 String week = json.optString("day_tips", "");
 
                 // ✅ P2: 增加空值防御
-                if (time.trim().isEmpty()) time = "00:00";
+                String time = timeRaw.trim().isEmpty() ? "00:00" : timeRaw;
 
                 if (tvAlarmTime != null) tvAlarmTime.setText(time);
                 if (tvAlarmDay != null) {
                     if (!monthDay.isEmpty()) {
-                        tvAlarmDay.setText(monthDay + " " + week);
+                        // ✅ 使用字符串资源占位符，避免硬编码拼接
+                        tvAlarmDay.setText(getString(R.string.alarm_date_format, monthDay, week));
                     } else {
                         tvAlarmDay.setText(week);
                     }
@@ -111,15 +113,12 @@ public class WearAlarmActivity extends ComponentActivity {
     private void startWatchVibration() {
         // 从本地 SharedPreferences 读取震动参数
         WearVibratorHelper.initFromPhone(this);
-        int rawOnDuration = WearVibratorHelper.getOnDuration();
-        int rawOffDuration = WearVibratorHelper.getOffDuration();
+        final int onDuration = WearVibratorHelper.getOnDuration();
+        final int offDurationRead = WearVibratorHelper.getOffDuration();
 
         // 防御性检查
-        if (rawOnDuration <= 0) return;
-        if (rawOffDuration < 0) rawOffDuration = 200;
-
-        final int onDuration = rawOnDuration;
-        final int offDuration = rawOffDuration;
+        if (onDuration <= 0) return;
+        final int offDuration = (offDurationRead < 0) ? 200 : offDurationRead;
 
         vibrationHandler = new Handler(Looper.getMainLooper());
         nextVibrateTime = SystemClock.elapsedRealtime();
@@ -200,8 +199,11 @@ public class WearAlarmActivity extends ComponentActivity {
 
     @Override
     protected void onDestroy() {
-        // ✅ P0: 销毁时清空实例，防止内存泄漏
-        instance = null;
+        // ✅ 销毁时清空引用
+        if (instanceRef != null) {
+            instanceRef.clear();
+            instanceRef = null;
+        }
         // 最终兜底：确保震动停止
         stopWatchVibration();
         super.onDestroy();

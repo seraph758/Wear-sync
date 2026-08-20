@@ -42,20 +42,8 @@ public class WearSyncAccessService extends AccessibilityService {
         performGlobalAction(GLOBAL_ACTION_QUICK_SETTINGS);
     }
 
-    public void goHome() {
-        performGlobalAction(GLOBAL_ACTION_HOME);
-    }
-
-    public void openNotification() {
-        performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS);
-    }
-
     public void goBack() {
         performGlobalAction(GLOBAL_ACTION_BACK);
-    }
-
-    public void click(float x, float y) {
-       dispatchGesture(createClick(x, y), null, null);
     }
 
     public void clickIcon1_1() {
@@ -76,10 +64,7 @@ public class WearSyncAccessService extends AccessibilityService {
         GestureDescription.Builder gestureBuilder = new GestureDescription.Builder();
         Path path = new Path();
 
-        final int height = displayMetrics.heightPixels;
-        final int top = (int)(height * .25);
-        final int mid = (int)(height * .5);
-        final int bottom = (int)(height * .75);
+        final int mid = displayMetrics.heightPixels / 2;
         final int midX = displayMetrics.widthPixels / 2;
 
         path.moveTo(midX, 0);
@@ -87,20 +72,4 @@ public class WearSyncAccessService extends AccessibilityService {
         gestureBuilder.addStroke(new GestureDescription.StrokeDescription(path, 100, 50));
         dispatchGesture(gestureBuilder.build(), null, null);
     }
-
-
-    // (x, y) in screen coordinates
-    private static GestureDescription createClick(float x, float y) {
-        // for a single tap a duration of 1 ms is enough
-        final int DURATION = 1;
-
-        Path clickPath = new Path();
-        clickPath.moveTo(x, y);
-        GestureDescription.StrokeDescription clickStroke =
-                new GestureDescription.StrokeDescription(clickPath, 0, DURATION);
-        GestureDescription.Builder clickBuilder = new GestureDescription.Builder();
-        clickBuilder.addStroke(clickStroke);
-        return clickBuilder.build();
-    }
-
 }

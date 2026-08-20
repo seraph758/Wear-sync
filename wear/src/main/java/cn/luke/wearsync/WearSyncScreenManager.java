@@ -3,7 +3,6 @@ package cn.luke.wearsync;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.os.PowerManager;
-import android.util.Log;
 import android.view.WindowManager;
 import androidx.annotation.NonNull;
 import androidx.activity.ComponentActivity; // 💡 确保导入此包

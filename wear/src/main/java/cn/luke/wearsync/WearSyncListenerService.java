@@ -14,6 +14,7 @@ import com.google.android.gms.wearable.MessageEvent;
 import com.google.android.gms.wearable.Wearable;
 import com.google.android.gms.wearable.WearableListenerService;
 import org.json.JSONObject;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
@@ -74,11 +75,11 @@ public class WearSyncListenerService extends WearableListenerService {
                 return;
             }
             if ("alarm".equalsIgnoreCase(type)) {
-                handleAlarmCommand(json, messageEvent.getSourceNodeId());
+                handleAlarmCommand(json);
                 return;
             }
             if ("camera_control".equalsIgnoreCase(type)) {
-                handleCameraCommand(json, messageEvent.getSourceNodeId());
+                handleCameraCommand(json);
                 return;
             }
             if ("wearlog".equalsIgnoreCase(type)) {
@@ -154,7 +155,7 @@ public class WearSyncListenerService extends WearableListenerService {
         WearSyncDndManager.executeDndSync(this, dndStatePhone, pullDownDelayMs);
     }
 
-    private void handleAlarmCommand(JSONObject json, String sourceNodeId) {
+    private void handleAlarmCommand(JSONObject json) {
         WearLog.d(TAG, "【ALM-001】开始处理闹钟指令");
         String action = json.optString("action", "");
 
@@ -172,14 +173,15 @@ public class WearSyncListenerService extends WearableListenerService {
         } else {
             WearLog.d(TAG, "【ALM-005】准备启动闹钟界面. Action: " + action);
             Intent alarmIntent = new Intent(this, WearAlarmActivity.class);
-            alarmIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            // 🎯 从 Service 启动 Activity 必须使用 NEW_TASK。
+            alarmIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             alarmIntent.putExtra("raw_alarm_json", json.toString());
             alarmIntent.putExtra("alarm_action", action);
             startActivity(alarmIntent);
         }
     }
 
-    private void handleCameraCommand(JSONObject json, String sourceNodeId) {
+    private void handleCameraCommand(JSONObject json) {
         WearLog.d(TAG, "【CAM-001】开始处理相机指令");
         String action = json.optString("action", "");
 
@@ -192,9 +194,9 @@ public class WearSyncListenerService extends WearableListenerService {
         }
         if ("open_phone_camera".equalsIgnoreCase(action)) {
             Intent cameraIntent = new Intent(this, WearCameraActivity.class);
+            // 🎯 在 Service 环境下启动 Activity 必须使用 NEW_TASK。
             cameraIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivity(cameraIntent);
-            return;
         }
     }
 
@@ -247,23 +249,27 @@ public class WearSyncListenerService extends WearableListenerService {
         if (path.startsWith(FILE_TRANSFER_CHANNEL_PATH)) {
             WearLog.i(TAG, "【CHN-003】匹配到文件传输通道，准备接收");
             String pathData = path.substring(FILE_TRANSFER_CHANNEL_PATH.length() + 1);
-            long expectedSize = -1L;
-            String fileName;
+            
             int slashIndex = pathData.indexOf('/');
+            final long finalExpectedSize;
+            final String finalFileName;
+            
             if (slashIndex != -1) {
+                long size;
                 try {
-                    expectedSize = Long.parseLong(pathData.substring(0, slashIndex));
+                    size = Long.parseLong(pathData.substring(0, slashIndex));
                 } catch (NumberFormatException e) {
                     WearLog.w(TAG, "【CHN-WARN】无法解析文件大小");
+                    size = -1L;
                 }
-                fileName = Uri.decode(pathData.substring(slashIndex + 1));
+                finalExpectedSize = size;
+                finalFileName = Uri.decode(pathData.substring(slashIndex + 1));
             } else {
-                fileName = Uri.decode(pathData);
+                finalExpectedSize = -1L;
+                finalFileName = Uri.decode(pathData);
             }
-            final String finalFileName = fileName;
-            final long finalExpectedSize = expectedSize;
-            final String nodeId = channel.getNodeId();
             
+            final String nodeId = channel.getNodeId();
             // 启动独立线程接收
             new Thread(() -> receiveFileFromChannel(channel, finalFileName, nodeId, finalExpectedSize)).start();
         } else {
@@ -276,15 +282,115 @@ public class WearSyncListenerService extends WearableListenerService {
         WearLog.d(TAG, "【CHN-005】通道已关闭. Path: " + channel.getPath() + " | Reason: " + closeReason + " | AppErrorCode: " + appSpecificErrorCode);
     }
 
-    // --- 文件接收核心方法（已增强日志） ---
     private void receiveFileFromChannel(ChannelClient.Channel channel, String fileName, String nodeId, long expectedSize) {
         WearLog.i(TAG, "【FIL-001】开始接收文件: " + fileName + " (期望大小: " + expectedSize + "B)");
         
+        Uri fileUri = insertFileIntoMediaStore(fileName);
+        if (fileUri == null) {
+            WearLog.e(TAG, "【FIL-ERR】无法创建文件 Uri，返回值为空");
+            sendFileTransferStatus(nodeId, "error:" + fileName);
+            return;
+        }
+        
+        WearLog.d(TAG, "【FIL-001-1】成功创建文件 Uri: " + fileUri);
+
+        try (InputStream inputStream = Tasks.await(Wearable.getChannelClient(this).getInputStream(channel));
+             OutputStream outputStream = getContentResolver().openOutputStream(fileUri)) {
+            
+            if (outputStream == null) {
+                throw new Exception("无法打开输出流 OutputStream 为空");
+            }
+            
+            transferData(inputStream, outputStream, expectedSize);
+            
+            WearLog.i(TAG, "【FIL-002】文件接收成功! 大小: " + expectedSize + "B");
+            sendFileTransferStatus(nodeId, "success:" + fileName);
+
+            // 🚀 发送本地广播，通知 Activity 预览照片
+            notifyFileReceived(fileUri);
+
+        } catch (Exception e) {
+            handleReceiveError(fileUri, fileName, nodeId, e);
+        } finally {
+            closeChannel(channel);
+        }
+    }
+
+    private Uri insertFileIntoMediaStore(String fileName) {
         Uri collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
+        ContentValues values = createContentValuesForFile(fileName);
+        try {
+            return getContentResolver().insert(collection, values);
+        } catch (Exception e) {
+            WearLog.e(TAG, "【FIL-ERR】MediaStore 插入异常: " + e.getMessage(), e);
+            return null;
+        }
+    }
+
+    private void transferData(InputStream is, OutputStream os, long expectedSize) throws IOException {
+        WearLog.d(TAG, "【FIL-001-2】开始数据传输...");
+        byte[] buffer = new byte[32768];
+        long bytesReceived = 0L;
+        int bytesRead;
+        int packetCount = 0;
+
+        while ((bytesRead = is.read(buffer)) != -1) {
+            os.write(buffer, 0, bytesRead);
+            bytesReceived += bytesRead;
+            packetCount++;
+            if (packetCount % 16 == 0) {
+                WearLog.d(TAG, "【FIL-READ】已接收字节数: " + bytesReceived + " / " + expectedSize);
+            }
+        }
+        os.flush();
+        WearLog.d(TAG, "【FIL-001-3】传输结束，总共接收: " + bytesReceived + "B");
+
+        if (expectedSize != -1L && bytesReceived != expectedSize) {
+            throw new IOException("文件不完整: 期望 " + expectedSize + "B, 实际 " + bytesReceived + "B");
+        }
+    }
+
+    private void notifyFileReceived(Uri fileUri) {
+        Intent intent = new Intent("cn.luke.wearsync.ACTION_FILE_RECEIVED");
+        intent.putExtra("file_uri", fileUri.toString());
+        sendBroadcast(intent);
+    }
+
+    private void handleReceiveError(Uri fileUri, String fileName, String nodeId, Exception e) {
+        WearLog.e(TAG, "【FIL-ERR】文件接收过程中发生异常", e);
+        if (fileUri != null) {
+            try {
+                getContentResolver().delete(fileUri, null);
+                WearLog.d(TAG, "【FIL-CLEAN】已清理损坏的目标文件");
+            } catch (Exception ex) {
+                WearLog.w(TAG, "【FIL-WARN】清理文件失败: " + ex.getMessage());
+            }
+        }
+        sendFileTransferStatus(nodeId, "error:" + fileName);
+    }
+
+    private void closeChannel(ChannelClient.Channel channel) {
+        try {
+            Tasks.await(Wearable.getChannelClient(this).close(channel));
+            WearLog.d(TAG, "【FIL-003】文件传输通道已关闭");
+        } catch (Exception e) {
+            WearLog.w(TAG, "【FIL-WARN】关闭通道时出错: " + e.getMessage());
+        }
+    }
+
+    private void sendFileTransferStatus(String nodeId, String status) {
+        try {
+            Tasks.await(Wearable.getMessageClient(this).sendMessage(nodeId, FILE_TRANSFER_STATUS_PATH, status.getBytes(StandardCharsets.UTF_8)));
+            WearLog.d(TAG, "【FIL-004】状态回执已发送: " + status);
+        } catch (Exception e) {
+            WearLog.w(TAG, "【FIL-WARN】发送状态回执失败: " + e.getMessage());
+        }
+    }
+
+    private ContentValues createContentValuesForFile(String fileName) {
         ContentValues values = new ContentValues();
         values.put(MediaStore.Downloads.DISPLAY_NAME, fileName);
         
-        // 🎯 修复：根据扩展名动态设置 MIME，支持 HEIC 和 WebP
         String mimeType = "application/octet-stream";
         String lowerName = fileName.toLowerCase();
         if (lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg")) {
@@ -298,85 +404,7 @@ public class WearSyncListenerService extends WearableListenerService {
         }
         values.put(MediaStore.Downloads.MIME_TYPE, mimeType);
         values.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/Received");
-        
-        Uri fileUri = null;
-        try {
-            fileUri = getContentResolver().insert(collection, values);
-        } catch (Exception e) {
-            WearLog.e(TAG, "【FIL-ERR】MediaStore 插入异常: " + e.getMessage(), e);
-        }
-
-        if (fileUri == null) {
-            WearLog.e(TAG, "【FIL-ERR】无法创建文件 Uri，返回值为空");
-            sendFileTransferStatus(nodeId, "error:" + fileName);
-            return;
-        }
-        WearLog.d(TAG, "【FIL-001-1】成功创建文件 Uri: " + fileUri);
-
-        try (InputStream inputStream = Tasks.await(Wearable.getChannelClient(this).getInputStream(channel));
-             OutputStream outputStream = getContentResolver().openOutputStream(fileUri)) {
-            
-            if (outputStream == null) {
-                throw new Exception("无法打开输出流 OutputStream 为空");
-            }
-            WearLog.d(TAG, "【FIL-001-2】输入流与输出流已成功建立，开始循环读取...");
-
-            byte[] buffer = new byte[32768];
-            long bytesReceived = 0L;
-            int bytesRead;
-            int packetCount = 0;
-
-            while ((bytesRead = inputStream.read(buffer)) != -1) {
-                outputStream.write(buffer, 0, bytesRead);
-                bytesReceived += bytesRead;
-                packetCount++;
-                // 每接收约 500KB 打印一次进度日志，防止日志刷屏但能看清是否在推进
-                if (packetCount % 16 == 0) {
-                    WearLog.d(TAG, "【FIL-READ】已接收字节数: " + bytesReceived + " / " + expectedSize);
-                }
-            }
-            outputStream.flush();
-            WearLog.d(TAG, "【FIL-001-3】循环读取结束，总共接收: " + bytesReceived + "B");
-
-            if (expectedSize != -1L && bytesReceived != expectedSize) {
-                throw new Exception("文件不完整: 期望 " + expectedSize + "B, 实际 " + bytesReceived + "B");
-            }
-            WearLog.i(TAG, "【FIL-002】文件接收成功! 大小: " + bytesReceived + "B");
-            sendFileTransferStatus(nodeId, "success:" + fileName);
-
-            // 🚀 发送本地广播，通知 Activity 预览照片
-            Intent intent = new Intent("cn.luke.wearsync.ACTION_FILE_RECEIVED");
-            intent.putExtra("file_uri", fileUri.toString());
-            sendBroadcast(intent);
-
-        } catch (Exception e) {
-            WearLog.e(TAG, "【FIL-ERR】文件接收过程中发生异常", e);
-            if (fileUri != null) {
-                try {
-                    getContentResolver().delete(fileUri, null);
-                    WearLog.d(TAG, "【FIL-CLEAN】已清理损坏的目标文件");
-                } catch (Exception ex) {
-                    WearLog.w(TAG, "【FIL-WARN】清理文件失败: " + ex.getMessage());
-                }
-            }
-            sendFileTransferStatus(nodeId, "error:" + fileName);
-        } finally {
-            try {
-                Tasks.await(Wearable.getChannelClient(this).close(channel));
-                WearLog.d(TAG, "【FIL-003】文件传输通道已关闭");
-            } catch (Exception e) {
-                WearLog.w(TAG, "【FIL-WARN】关闭通道时出错: " + e.getMessage());
-            }
-        }
-    }
-
-    private void sendFileTransferStatus(String nodeId, String status) {
-        try {
-            Tasks.await(Wearable.getMessageClient(this).sendMessage(nodeId, FILE_TRANSFER_STATUS_PATH, status.getBytes(StandardCharsets.UTF_8)));
-            WearLog.d(TAG, "【FIL-004】状态回执已发送: " + status);
-        } catch (Exception e) {
-            WearLog.w(TAG, "【FIL-WARN】发送状态回执失败: " + e.getMessage());
-        }
+        return values;
     }
 
     private void openLogChannelToPhone(String phoneNodeId, String logPath) {

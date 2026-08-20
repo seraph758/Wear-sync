@@ -138,7 +138,7 @@ public final class WearVibratorHelper {
         }
     }
 
-        /** 預定義觸感震動 */
+    /** 預定義觸感震動 */
      /** 
      * 預定義觸感震動（Wear OS 6/7 专属版）
      * 目标环境: Android 16 (API 36) / Android 16 QPR2 (API 36.1)

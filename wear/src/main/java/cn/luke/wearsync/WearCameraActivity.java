@@ -1,5 +1,6 @@
 package cn.luke.wearsync;
 
+import android.annotation.SuppressLint;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -8,18 +9,17 @@ import android.media.MediaCodec;
 import android.media.MediaFormat;
 import android.net.Uri;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
+import android.view.GestureDetector;
 import android.view.MotionEvent;
+import android.view.ScaleGestureDetector;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
-import android.view.ScaleGestureDetector;
-import android.view.GestureDetector;
 import android.widget.FrameLayout;
 import android.widget.TextView;
+
 import androidx.activity.ComponentActivity;
 import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
@@ -62,9 +62,8 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
 
     private TextView tvCountdown;
     private View focusMarker;
-    private Button btnSwitchCamera;
-    private final Handler mHandler = new Handler(Looper.getMainLooper());
 
+    @SuppressLint("ClickableViewAccessibility")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -86,7 +85,7 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
         tvStatusHint = findViewById(R.id.tv_status_hint);
         tvCountdown = findViewById(R.id.tv_countdown);
         focusMarker = findViewById(R.id.focus_marker);
-        btnSwitchCamera = findViewById(R.id.btn_switch_camera);
+        Button btnSwitchCamera = findViewById(R.id.btn_switch_camera);
 
         setupGestures();
 
@@ -113,10 +112,12 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
                     float y = event.getY() / v.getHeight();
                     showFocusMarker(event.getX(), event.getY());
                     WearSyncCommManager.getInstance(getApplicationContext()).sendBusinessCommand("camera_action", "FOCUS_CAMERA", "x", (double)x, "y", (double)y);
-                    v.performClick();
-                    return true;
                 }
-                return false;
+                
+                if (event.getAction() == MotionEvent.ACTION_UP) {
+                    v.performClick();
+                }
+                return true;
             });
         }
 

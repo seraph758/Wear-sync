@@ -59,7 +59,7 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
                 WearLog.d(TAG, "🔘 [交互] 点击无障碍，跳转系统设置");
                 try {
                     Intent intent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    // 🎯 移除 FLAG_ACTIVITY_NEW_TASK，Fragment 会自动使用宿主 Activity 的 Context
                     startActivity(intent);
                 } catch (Exception e) {
                     WearLog.e(TAG, "❌ 无障碍设置跳转失败", e);
@@ -91,12 +91,11 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
         if (cameraPref != null) {
             cameraPref.setOnPreferenceClickListener(preference -> {
                 WearLog.w(TAG, "📸 [交互] 用户点击【远端相机控制】");
-                Context ctx = requireContext();
                 try {
-                    Intent localIntent = new Intent(ctx, WearCameraActivity.class);
-                    localIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    Intent localIntent = new Intent(requireContext(), WearCameraActivity.class);
+                    // 🎯 移除 FLAG_ACTIVITY_NEW_TASK
                     startActivity(localIntent);
-                    WearSyncCommManager.getInstance(ctx.getApplicationContext()).openPhoneCamera();
+                    WearSyncCommManager.getInstance(requireContext().getApplicationContext()).openPhoneCamera();
                 } catch (Exception e) {
                     WearLog.e(TAG, "❌ [远端相机] 启动异常: " + e.getMessage(), e);
                 }
@@ -152,8 +151,8 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
         Context ctx = getContext();
         if (ctx == null) return;
         Wearable.getCapabilityClient(ctx).getCapability(CAPABILITY_NAME, CapabilityClient.FILTER_REACHABLE)
-                .addOnSuccessListener(capabilityInfo -> updateConnectionUI(capabilityInfo.getNodes().size() > 0));
-        capabilityChangedListener = capabilityInfo -> updateConnectionUI(capabilityInfo.getNodes().size() > 0);
+                .addOnSuccessListener(capabilityInfo -> updateConnectionUI(!capabilityInfo.getNodes().isEmpty()));
+        capabilityChangedListener = capabilityInfo -> updateConnectionUI(!capabilityInfo.getNodes().isEmpty());
     }
 
     private void registerConnectivityListener() {
