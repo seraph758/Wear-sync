@@ -96,8 +96,6 @@ class PhoneLogActivity : ComponentActivity() {
                                 }
                                 Button(
                                     onClick = {
-                                     // 在 @Composable 函数内部
-                            val context = LocalContext.current
                             val backup = PhoneLog.exportBackupFile(context)
 
                                         if (backup != null) {
@@ -134,10 +132,9 @@ class PhoneLogActivity : ComponentActivity() {
                                 }
                             }
                         }
-                    }
-                )
+                    },
+                content = { innerPadding ->
 
-             { innerPadding ->
                 // ✅ 内容区域应用 Scaffold 提供的 padding，自动避开 bottomBar + 导航栏
                 Box(
                     modifier = Modifier
@@ -183,6 +180,7 @@ class PhoneLogActivity : ComponentActivity() {
                     }
                 }
             }
+                )
         }
     }
 }
