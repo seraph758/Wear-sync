@@ -1,6 +1,7 @@
 package cn.luke.wearsync
 
 import android.Manifest
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -10,19 +11,48 @@ import android.provider.OpenableColumns
 import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.View
-import android.widget.Toast
 import android.view.ViewGroup
+import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -36,7 +66,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.edit
 import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsControllerCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.google.android.gms.wearable.CapabilityClient
@@ -44,13 +73,13 @@ import com.google.android.gms.wearable.MessageClient
 import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.Wearable
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import org.json.JSONObject
 import java.nio.charset.StandardCharsets
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 
 
 object AppState {
@@ -69,8 +98,8 @@ object AppState {
     val isNotificationAllowed: Boolean = false,
     val isCameraAllowed: Boolean = false,
     val isServiceRunning: Boolean = false,
-    val isWatchPreviewEnabled: Boolean = true,       // ← 只保留一处，默认开启
-    val isHeifFallbackEnabled: Boolean = true,        // ← 新增：HEIF 降级开关
+    val isWatchPreviewEnabled: Boolean = true,
+    val isHeifFallbackEnabled: Boolean = true,
     val fileTransferStatus: String = "",
     val uiLogDebug: Boolean = false,
     val uiWearLogDebug: Boolean = false,
@@ -97,8 +126,8 @@ data class PhoneSyncUIActions(
     val onCameraForceStop: () -> Unit = {},
     val onPhoneLogToggle: (Boolean) -> Unit = {},
     val onWearLogToggle: (Boolean) -> Unit = {},
-    val onWatchPreviewToggle: (Boolean) -> Unit = {},      // ← 统一为 lambda 语法
-    val onHeifFallbackToggle: (Boolean) -> Unit = {},       // ← 新增：统一为 lambda 语法
+    val onWatchPreviewToggle: (Boolean) -> Unit = {},
+    val onHeifFallbackToggle: (Boolean) -> Unit = {},
     val onFloatingLogClick: () -> Unit = {},
     val onConnectionClick: () -> Unit = {},
     val onNotificationPermissionClick: () -> Unit = {},
@@ -131,12 +160,12 @@ fun PhoneSyncMainScreen(
     val context = LocalContext.current
     val isDark = isSystemInDarkTheme()
 
-    // 修复：亮色模式下状态栏文字改为黑色（深色图标），暗色模式下保持白色
+    // 修复：亮色模式下状态栏文字改为黑色（深色图标），暗色模式下改为白色
     SideEffect {
-        val window = (context as? android.app.Activity)?.window ?: return@SideEffect
+        val window = (context as? Activity)?.window ?: return@SideEffect
         WindowCompat.setDecorFitsSystemWindows(window, false)
         val controller = WindowCompat.getInsetsController(window, window.decorView)
-        controller.isAppearanceLightStatusBars = isDark
+        controller.isAppearanceLightStatusBars = !isDark
     }
 
     MaterialTheme {
@@ -177,108 +206,103 @@ fun PhoneSyncMainScreen(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // === 标题区：WearSync + 状态权限检查（右侧，不折叠，一直显示） ===
+                // === 标题区：WearSync + 状态权限检查（右侧） ===
                 Row(
-                    modifier = Modifier.padding(top = 16.dp, bottom = 16.dp),
+                    modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
                         text = "WearSync",
-                        fontSize = 33.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = textColor
+                        fontSize = 34.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = textColor,
+                        letterSpacing = (-1).sp
                     )
                     Spacer(modifier = Modifier.weight(1f))
-                    Column(horizontalAlignment = Alignment.End) {
-                        // 文字在上
-                        Text(
-                            text = "状态权限检查",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        // 圆点在下
-                        Row {
-                            // 连接状态
+                    
+                    // 美化：状态权限检查区域
+                    Card(
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isDark) Color(0xFF2C2C2E) else Color(0xFFE5E5EA)
+                        ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
                             Text(
-                                text = if (state.isConnected) "🟢" else "🔴",
-                                fontSize = 14.sp,
-                                modifier = Modifier.clickable(enabled = !state.isConnected) {
-                                    actions.onConnectionClick()
-                                }
+                                text = "状态与权限",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = subTextColor
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            // 通知权限
-                            Text(
-                                text = if (state.isNotificationAllowed) "🟢" else "🔴",
-                                fontSize = 14.sp,
-                                modifier = Modifier.clickable(enabled = !state.isNotificationAllowed) {
-                                    actions.onNotificationPermissionClick()
-                                }
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            // 相机权限
-                            Text(
-                                text = if (state.isCameraAllowed) "🟢" else "🔴",
-                                fontSize = 14.sp,
-                                modifier = Modifier.clickable(enabled = !state.isCameraAllowed) {
-                                    actions.onCameraPermissionClick()
-                                }
-                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                StatusDot(isActive = state.isConnected, onClick = actions.onConnectionClick)
+                                Spacer(modifier = Modifier.width(10.dp))
+                                StatusDot(isActive = state.isNotificationAllowed, onClick = actions.onNotificationPermissionClick)
+                                Spacer(modifier = Modifier.width(10.dp))
+                                StatusDot(isActive = state.isCameraAllowed, onClick = actions.onCameraPermissionClick)
+                            }
                         }
                     }
                 }
 
+                val featureCardHeight = 84.dp
+
                 // DND and Alarm Rows
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Card(
                             onClick = { isDndExpanded = !isDndExpanded; if (isDndExpanded) isAlarmExpanded = false },
-                            modifier = Modifier.weight(1f).height(72.dp),
-                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier.weight(1f).height(featureCardHeight),
+                            shape = RoundedCornerShape(20.dp),
                             colors = CardDefaults.cardColors(containerColor = cardBgColor)
                         ) {
                             Row(
-                                modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp),
+                                modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Column {
-                                    Text("勿扰同步", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = textColor)
-                                    Text("同步状态控制", fontSize = 11.sp, color = subTextColor)
+                                    Text("勿扰同步", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = textColor)
+                                    Text("状态控制器", fontSize = 12.sp, color = subTextColor)
                                 }
-                                Text(text = "🌙", fontSize = 16.sp)
+                                Text(text = "🌙", fontSize = 22.sp)
                             }
                         }
 
                         Card(
                             onClick = { isAlarmExpanded = !isAlarmExpanded; if (isAlarmExpanded) isDndExpanded = false },
-                            modifier = Modifier.weight(1f).height(72.dp),
-                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier.weight(1f).height(featureCardHeight),
+                            shape = RoundedCornerShape(20.dp),
                             colors = CardDefaults.cardColors(containerColor = cardBgColor)
                         ) {
                             Row(
-                                modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp),
+                                modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Column {
                                     Text(
-                                        "闹钟全域代点",
-                                        fontSize = 15.sp,
+                                        "闹钟代点",
+                                        fontSize = 16.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = if (state.isAlarmMasterEnabled) textColor else textColor.copy(alpha = 0.5f)
                                     )
                                     Text(
                                         state.selectedAlarmName,
-                                        fontSize = 11.sp,
-                                        color = if (state.isAlarmMasterEnabled) subTextColor else subTextColor.copy(alpha = 0.5f)
+                                        fontSize = 12.sp,
+                                        color = if (state.isAlarmMasterEnabled) subTextColor else subTextColor.copy(alpha = 0.5f),
+                                        maxLines = 1
                                     )
                                 }
-                                Text(text = "⏰", fontSize = 16.sp)
+                                Text(text = "⏰", fontSize = 22.sp)
                             }
                         }
                     }
@@ -287,10 +311,10 @@ fun PhoneSyncMainScreen(
                     AnimatedVisibility(visible = isDndExpanded) {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(16.dp),
                             colors = CardDefaults.cardColors(containerColor = cardBgColor)
                         ) {
-                            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -356,10 +380,10 @@ fun PhoneSyncMainScreen(
                     AnimatedVisibility(visible = isAlarmExpanded) {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(16.dp),
                             colors = CardDefaults.cardColors(containerColor = cardBgColor)
                         ) {
-                            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -368,7 +392,8 @@ fun PhoneSyncMainScreen(
                                     Button(
                                         enabled = state.isAlarmMasterEnabled,
                                         modifier = Modifier.weight(1f),
-                                        onClick = actions.onAlarmSourceSwitch
+                                        onClick = actions.onAlarmSourceSwitch,
+                                        shape = RoundedCornerShape(12.dp)
                                     ) { Text("切换时钟源", fontSize = 12.sp) }
 
                                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -386,7 +411,8 @@ fun PhoneSyncMainScreen(
                                         label = { Text("停止关键字") },
                                         singleLine = true,
                                         modifier = Modifier.weight(1f),
-                                        textStyle = TextStyle(fontSize = 13.sp)
+                                        textStyle = TextStyle(fontSize = 13.sp),
+                                        shape = RoundedCornerShape(12.dp)
                                     )
                                     OutlinedTextField(
                                         enabled = state.isAlarmMasterEnabled,
@@ -395,7 +421,8 @@ fun PhoneSyncMainScreen(
                                         label = { Text("延后关键字") },
                                         singleLine = true,
                                         modifier = Modifier.weight(1f),
-                                        textStyle = TextStyle(fontSize = 13.sp)
+                                        textStyle = TextStyle(fontSize = 13.sp),
+                                        shape = RoundedCornerShape(12.dp)
                                     )
                                 }
                                 HorizontalDivider(color = dividerColor)
@@ -405,13 +432,15 @@ fun PhoneSyncMainScreen(
                                         enabled = state.isAlarmMasterEnabled,
                                         modifier = Modifier.weight(1f),
                                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
-                                        onClick = { actions.onAlarmTest("DISMISS") }
+                                        onClick = { actions.onAlarmTest("DISMISS") },
+                                        shape = RoundedCornerShape(12.dp)
                                     ) { Text("模拟停止测试", color = Color.White, fontSize = 11.sp) }
                                     Button(
                                         enabled = state.isAlarmMasterEnabled,
                                         modifier = Modifier.weight(1f),
                                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE65100)),
-                                        onClick = { actions.onAlarmTest("SNOOZE") }
+                                        onClick = { actions.onAlarmTest("SNOOZE") },
+                                        shape = RoundedCornerShape(12.dp)
                                     ) { Text("模拟延后测试", color = Color.White, fontSize = 11.sp) }
                                 }
                             }
@@ -420,46 +449,46 @@ fun PhoneSyncMainScreen(
                 }
 
                 // Camera and Log Rows
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Card(
                             onClick = { isCameraExpanded = !isCameraExpanded; if (isCameraExpanded) isLogExpanded = false },
-                            modifier = Modifier.weight(1f).height(72.dp),
-                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier.weight(1f).height(featureCardHeight),
+                            shape = RoundedCornerShape(20.dp),
                             colors = CardDefaults.cardColors(containerColor = cardBgColor)
                         ) {
                             Row(
-                                modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp),
+                                modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Column {
-                                    Text("相机中心", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = textColor)
-                                    Text("同步手表取景屏", fontSize = 11.sp, color = subTextColor)
+                                    Text("相机中心", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = textColor)
+                                    Text("全远端取景", fontSize = 12.sp, color = subTextColor)
                                 }
-                                Text(text = "📷", fontSize = 16.sp)
+                                Text(text = "📷", fontSize = 22.sp)
                             }
                         }
 
                         Card(
                             onClick = { isLogExpanded = !isLogExpanded; if (isLogExpanded) isCameraExpanded = false },
-                            modifier = Modifier.weight(1f).height(72.dp),
-                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier.weight(1f).height(featureCardHeight),
+                            shape = RoundedCornerShape(20.dp),
                             colors = CardDefaults.cardColors(containerColor = cardBgColor)
                         ) {
                             Row(
-                                modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp),
+                                modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Column {
-                                    Text("终端调试", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = textColor)
-                                    Text("底层日志错误追踪", fontSize = 11.sp, color = subTextColor)
+                                    Text("调试终端", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = textColor)
+                                    Text("底层日志监控", fontSize = 12.sp, color = subTextColor)
                                 }
-                                Text(text = "📝", fontSize = 16.sp)
+                                Text(text = "📝", fontSize = 22.sp)
                             }
                         }
                     }
@@ -468,72 +497,73 @@ fun PhoneSyncMainScreen(
                     AnimatedVisibility(visible = isCameraExpanded) {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(16.dp),
                             colors = CardDefaults.cardColors(containerColor = cardBgColor)
                         ) {
-                            Row(modifier = Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Button(
-                                    modifier = Modifier.weight(1f),
-                                    colors = ButtonDefaults.buttonColors(containerColor = if (state.isCameraAllowed) Color(0xFF2E7D32) else Color(0xFF333333)),
-                                    onClick = actions.onCameraCall
-                                ) { Text("呼叫手表相机", color = Color.White, fontSize = 12.sp) }
-                                Button(
-                                    modifier = Modifier.weight(1f),
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7F1D1D)),
-                                    onClick = actions.onCameraForceStop
-                                ) { Text("强制关闭相机", color = Color.White, fontSize = 12.sp) }
-                            }
-
-                            HorizontalDivider(color = dividerColor, modifier = Modifier.padding(horizontal = 14.dp))
-
-                            // --- 开关 1：手表预览 ---
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(14.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text("拍照后发送预览到手表", color = textColor, fontSize = 14.sp)
-                                    Text("开启后将自动压缩并发送缩略图，关闭可节省电量与带宽", color = subTextColor, fontSize = 11.sp)
+                            Column {
+                                Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Button(
+                                        modifier = Modifier.weight(1f),
+                                        colors = ButtonDefaults.buttonColors(containerColor = if (state.isCameraAllowed) Color(0xFF2E7D32) else Color(0xFF333333)),
+                                        onClick = actions.onCameraCall,
+                                        shape = RoundedCornerShape(12.dp)
+                                    ) { Text("呼叫手表相机", color = Color.White, fontSize = 12.sp) }
+                                    Button(
+                                        modifier = Modifier.weight(1f),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7F1D1D)),
+                                        onClick = actions.onCameraForceStop,
+                                        shape = RoundedCornerShape(12.dp)
+                                    ) { Text("强制关闭相机", color = Color.White, fontSize = 12.sp) }
                                 }
-                                Switch(checked = state.isWatchPreviewEnabled, onCheckedChange = actions.onWatchPreviewToggle)
-                            }
 
-                            HorizontalDivider(color = dividerColor, modifier = Modifier.padding(horizontal = 14.dp))
+                                HorizontalDivider(color = dividerColor, modifier = Modifier.padding(horizontal = 16.dp))
 
-                            // --- 开关 2：HEIF 高质量转码 (新增) ---
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(14.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text("启用 HEIF 高质量压缩", color = textColor, fontSize = 14.sp)
-                                    Text("不支持直出时自动转码，画质更高且体积更小", color = subTextColor, fontSize = 11.sp)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text("拍照后发送预览到手表", color = textColor, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                                        Text("开启后将自动压缩并发送缩略图", color = subTextColor, fontSize = 11.sp)
+                                    }
+                                    Switch(checked = state.isWatchPreviewEnabled, onCheckedChange = actions.onWatchPreviewToggle)
                                 }
-                                Switch(
-                                    checked = state.isHeifFallbackEnabled,
-                                    onCheckedChange = actions.onHeifFallbackToggle
-                                )
+
+                                HorizontalDivider(color = dividerColor, modifier = Modifier.padding(horizontal = 16.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text("启用 HEIF 高质量压缩", color = textColor, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                                        Text("画质更高且体积更小", color = subTextColor, fontSize = 11.sp)
+                                    }
+                                    Switch(
+                                        checked = state.isHeifFallbackEnabled,
+                                        onCheckedChange = actions.onHeifFallbackToggle
+                                    )
+                                }
                             }
                         }
                     }
-
 
                     // Log Expandable
                     AnimatedVisibility(visible = isLogExpanded) {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(16.dp),
                             colors = CardDefaults.cardColors(containerColor = cardBgColor)
                         ) {
-                            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                    Text("开启手机端调试日志", color = textColor, fontSize = 14.sp)
+                                    Text("开启手机端调试日志", color = textColor, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                                     Switch(checked = state.uiLogDebug, onCheckedChange = actions.onPhoneLogToggle)
                                 }
                                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                    Text("同步监听手表端核心日志", color = textColor, fontSize = 14.sp)
+                                    Text("同步监听手表端核心日志", color = textColor, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                                     Switch(checked = state.uiWearLogDebug, onCheckedChange = actions.onWearLogToggle)
                                 }
 
@@ -541,7 +571,8 @@ fun PhoneSyncMainScreen(
 
                                 Button(
                                     modifier = Modifier.fillMaxWidth(),
-                                    onClick = { actions.onFloatingLogClick() }
+                                    onClick = { actions.onFloatingLogClick() },
+                                    shape = RoundedCornerShape(12.dp)
                                 ) {
                                     Text(text = if (state.isServiceRunning) "关闭实时悬浮监视器" else "开启实时悬浮监视器", fontSize = 13.sp)
                                 }
@@ -550,63 +581,93 @@ fun PhoneSyncMainScreen(
                     }
                 }
 
-                // === 文件传输（全宽折叠面板） ===
-                Card(
-                    onClick = { isFileTransferExpanded = !isFileTransferExpanded },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = cardBgColor)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                // === 文件传输与震动反馈（并列展示） ===
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Card(
+                            onClick = { 
+                                isFileTransferExpanded = !isFileTransferExpanded
+                                if (isFileTransferExpanded) isVibrationExpanded = false 
+                            },
+                            modifier = Modifier.weight(1f).height(featureCardHeight),
+                            shape = RoundedCornerShape(20.dp),
+                            colors = CardDefaults.cardColors(containerColor = cardBgColor)
                         ) {
-                            Column {
-                                Text("文件传输", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = textColor)
-                                Text("双向传输照片、音频及配置文件", fontSize = 11.sp, color = subTextColor)
+                            Row(
+                                modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text("文件传输", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = textColor)
+                                    Text("双向枢纽", fontSize = 12.sp, color = subTextColor)
+                                }
+                                Text(text = "📤", fontSize = 22.sp)
                             }
-                            Text(text = "📤", fontSize = 14.sp, color = textColor)
                         }
-                        AnimatedVisibility(visible = isFileTransferExpanded) {
-                            Column(modifier = Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+
+                        Card(
+                            onClick = { 
+                                isVibrationExpanded = !isVibrationExpanded
+                                if (isVibrationExpanded) isFileTransferExpanded = false
+                            },
+                            modifier = Modifier.weight(1f).height(featureCardHeight),
+                            shape = RoundedCornerShape(20.dp),
+                            colors = CardDefaults.cardColors(containerColor = cardBgColor)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text("震动反馈", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = textColor)
+                                    Text("波形定义", fontSize = 12.sp, color = subTextColor)
+                                }
+                                Text(text = "📳", fontSize = 22.sp)
+                            }
+                        }
+                    }
+
+                    // 文件传输展开面板
+                    AnimatedVisibility(visible = isFileTransferExpanded) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = cardBgColor)
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Text("文件传输中心", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = textColor)
+                                Text("支持传输照片、音频及自定义配置文件到手表端", fontSize = 12.sp, color = subTextColor)
                                 HorizontalDivider(color = dividerColor)
-                                Button(onClick = actions.onFileTransferClick, modifier = Modifier.fillMaxWidth()) { Text("选择并发送文件") }
+                                Button(
+                                    onClick = actions.onFileTransferClick, 
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) { Text("选择并发送文件") }
                                 Text(
                                     text = state.fileTransferStatus,
                                     fontSize = 12.sp,
                                     color = if (state.fileTransferStatus.contains("成功")) Color(0xFF4CAF50) else if (state.fileTransferStatus.contains("失败") || state.fileTransferStatus.contains("错误")) Color(0xFFF44336) else subTextColor,
-                                    modifier = Modifier.fillMaxWidth()
+                                    modifier = Modifier.fillMaxWidth(),
+                                    textAlign = TextAlign.Center
                                 )
                             }
                         }
                     }
-                }
 
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // === 震动反馈（全宽折叠面板） ===
-                Card(
-                    onClick = { isVibrationExpanded = !isVibrationExpanded },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = cardBgColor)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(
+                    // 震动反馈展开面板
+                    AnimatedVisibility(visible = isVibrationExpanded) {
+                        Card(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = cardBgColor)
                         ) {
-                            Column {
-                                Text("震动反馈", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = textColor)
-                                Text("自定义震动波形与频率", fontSize = 11.sp, color = subTextColor)
-                            }
-                            Text(text = if (isVibrationExpanded) "▲" else "▼", fontSize = 14.sp, color = subTextColor)
-                        }
-                        AnimatedVisibility(visible = isVibrationExpanded) {
-                            Column(modifier = Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Text("震动波形自定义", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = textColor)
                                 HorizontalDivider(color = dividerColor)
                                 Text("震动时长: ${patternOnDuration}ms", fontSize = 13.sp, color = textColor)
                                 Slider(value = patternOnDuration.toFloat(), onValueChange = { patternOnDuration = it.toInt() }, valueRange = 100f..2000f, steps = 19, modifier = Modifier.fillMaxWidth())
@@ -618,23 +679,46 @@ fun PhoneSyncMainScreen(
                                     Switch(checked = repeatIndex == 0, onCheckedChange = { repeatIndex = if (it) 0 else -1 })
                                 }
                                 HorizontalDivider(color = dividerColor)
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                     OutlinedButton(
                                         onClick = { actions.onVibrationCommand("preview", patternOnDuration, patternOffDuration, repeatIndex) },
-                                        modifier = Modifier.weight(1f)
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(12.dp)
                                     ) { Text("📳 预览") }
                                     Button(
                                         modifier = Modifier.weight(1f),
                                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
-                                        onClick = { actions.onVibrationSave(patternOnDuration, patternOffDuration, repeatIndex) }
+                                        onClick = { actions.onVibrationSave(patternOnDuration, patternOffDuration, repeatIndex) },
+                                        shape = RoundedCornerShape(12.dp)
                                     ) { Text("💾 保存") }
                                 }
                             }
                         }
                     }
                 }
+                
+                Spacer(modifier = Modifier.height(24.dp))
             }
         }
+    }
+}
+
+@Composable
+private fun StatusDot(
+    isActive: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(50),
+        color = (if (isActive) Color(0xFF4CAF50) else Color(0xFFF44336)).copy(alpha = 0.15f),
+        modifier = Modifier.padding(2.dp)
+    ) {
+        Text(
+            text = if (isActive) "🟢" else "🔴",
+            fontSize = 12.sp,
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+        )
     }
 }
 
@@ -747,7 +831,6 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                     fileName,
                     object : PhoneSyncFileTransferManager.TransferCallback {
                         override fun onHandshakeSuccess() {
-                            // 握手成功，不需要立刻设为成功，等待后续 status 变化
                             PhoneLog.d(TAG, "🤝 文件传输握手成功")
                         }
 

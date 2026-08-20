@@ -1,7 +1,7 @@
 plugins {
     // 🎯 统一管理：将版本号修改为带有预览版后缀的完整版本号
-    id 'com.android.application' version '9.4.0-alpha07' apply false
-    id 'com.android.library' version '9.4.0-alpha07' apply false
+    id 'com.android.application' version '9.4.0-alpha08' apply false
+    id 'com.android.library' version '9.4.0-alpha08' apply false
 
     // ✅ 核心修复 1：使用 Kotlin 2.4.10。只有 2.4+ 才能认识并编译过手机端的 jvmTarget = '26'
     id 'org.jetbrains.kotlin.android' version '2.4.10' apply false
