@@ -1346,10 +1346,10 @@ private Size chooseBestPreviewSize(Size[] choices,
                         finalBitmap = originalBitmap; // 降级使用原图
                     }
                     
-                    String thumbName = "THUMB_" + timeStamp + ".webp";
+                    String thumbName = timeStamp + ".webp";
                     File thumbFile = new File(getCacheDir(), thumbName);
                     try (FileOutputStream thumbFos = new FileOutputStream(thumbFile)) {
-                        finalBitmap.compress(Bitmap.CompressFormat.WEBP_LOSSY, 75, thumbFos);
+                        finalBitmap.compress(Bitmap.CompressFormat.WEBP_LOSSY, 60, thumbFos);
                     }
                     
                     // 🛡️ [防崩溃] 再次确认状态，防止在压缩期间通道被关闭
