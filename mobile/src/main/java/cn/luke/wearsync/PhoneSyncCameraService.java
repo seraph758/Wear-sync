@@ -455,6 +455,7 @@ public class PhoneSyncCameraService extends Service {
         }
     
         PhoneLog.d(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    }
 
     /**
      * 无参包装方法：从当前相机设备获取信息并调用有参版本，确保使用 PhoneLog 输出
@@ -692,26 +693,25 @@ private static final Comparator<Size> SIZE_BY_AREA = (lhs, rhs) ->
             mPreviewSize = previewChoices[0];
         }
     
-        PhoneLog.d(TAG, "📷 [chooseOptimalSizes] captureFormat="
-
-            // ===== Fix 4: 将 chooseOptimalSizes 计算结果同步到实际使用字段 =====
-            if (mPreviewSize != null) {
-                mPreviewWidth = mPreviewSize.getWidth();
-                mPreviewHeight = mPreviewSize.getHeight();
-                PhoneLog.i(TAG, "✅ 预览尺寸已更新: " + mPreviewWidth + "x" + mPreviewHeight);
-            }
-            if (mCaptureSize != null) {
-                photoWidth = mCaptureSize.getWidth();
-                photoHeight = mCaptureSize.getHeight();
-                PhoneLog.i(TAG, "✅ 拍照尺寸已更新: " + photoWidth + "x" + photoHeight);
-            }
-        } catch (CameraAccessException e) {
-            PhoneLog.e(TAG, "❌ 选择最优尺寸失败", e);
+        // ===== Fix 4: 将 chooseOptimalSizes 计算结果同步到实际使用字段 =====
+        if (mPreviewSize != null) {
+            mPreviewWidth = mPreviewSize.getWidth();
+            mPreviewHeight = mPreviewSize.getHeight();
+            PhoneLog.i(TAG, "✅ 预览尺寸已更新: " + mPreviewWidth + "x" + mPreviewHeight);
+        }
+        if (mCaptureSize != null) {
+            photoWidth = mCaptureSize.getWidth();
+            photoHeight = mCaptureSize.getHeight();
+            PhoneLog.i(TAG, "✅ 拍照尺寸已更新: " + photoWidth + "x" + photoHeight);
         }
 
-                + (mCaptureFormat == ImageFormat.HEIC ? "HEIC" : "JPEG")
-                + ", captureSize=" + mCaptureSize
-                + ", previewSize=" + mPreviewSize);
+        PhoneLog.d(TAG, "📷 [chooseOptimalSizes] captureFormat="
+            + (mCaptureFormat == ImageFormat.HEIC ? "HEIC" : "JPEG")
+            + ", captureSize=" + mCaptureSize
+            + ", previewSize=" + mPreviewSize);
+    } catch (CameraAccessException e) {
+        PhoneLog.e(TAG, "❌ 选择最优尺寸失败", e);
+    }
     }
 
     private Size chooseBestCaptureSize(Size[] choices,
@@ -849,7 +849,6 @@ private Size chooseBestPreviewSize(Size[] choices,
     /**
      * 比较器：用于比较 Size 对象的面积大小
      */
-    }
 
 
 
