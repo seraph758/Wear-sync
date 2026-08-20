@@ -14,7 +14,22 @@
           "line": 102
         }
       }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncCameraService.java",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 53320,
+          "line": 1336
+        },
+        "start": {
+          "column": 0,
+          "index": 53320,
+          "line": 1336
+        }
+      }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneLogActivity.kt"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/Wear-sync/mobile/src/main/java/cn/luke/wearsync/PhoneSyncCameraService.java"
 }

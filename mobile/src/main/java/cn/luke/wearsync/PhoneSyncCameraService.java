@@ -248,9 +248,9 @@ public class PhoneSyncCameraService extends Service {
         }
         
         if (mOrientationEventListener != null) {
-        mOrientationEventListener.disable();
-        mOrientationEventListener = null;
-    }
+            mOrientationEventListener.disable();
+            mOrientationEventListener = null;
+        }
 
         stopStreamingAndRelease();
         stopForeground(STOP_FOREGROUND_REMOVE);
@@ -491,7 +491,7 @@ public class PhoneSyncCameraService extends Service {
      */
     private void checkHeifEncoderAvailable() {
         try {
-            MediaCodec codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_IMAGE_HEIF);
+            MediaCodec codec = MediaCodec.createEncoderByType("image/heif");
             codec.release();
             mHeifEncoderAvailable = true;
             PhoneLog.i(TAG, "✅ HeifWriter 硬件编码器可用");
@@ -581,14 +581,14 @@ private static final Comparator<Size> SIZE_BY_AREA = (lhs, rhs) ->
         // ------------------------------------------------------------------
         // 1. 检查 HEIC 支持情况
         // ------------------------------------------------------------------
-    
+        
         Size[] heicSizes = map.getOutputSizes(ImageFormat.HEIC);
         boolean mapSupport = heicSizes != null && heicSizes.length > 0;
-    
-        Set<Integer> readerFormats = ImageReader.getSupportedImageFormats();
-        boolean readerSupport = readerFormats != null
-                && readerFormats.contains(ImageFormat.HEIC);
-    
+        
+        // 删除以下两行，因为 ImageReader 没有 getSupportedImageFormats() 方法
+        // Set<Integer> readerFormats = ImageReader.getSupportedImageFormats();
+        // boolean readerSupport = readerFormats != null && readerFormats.contains(ImageFormat.HEIC);
+        
         boolean canCreate = false;
         try {
             Size testSize;
@@ -599,7 +599,7 @@ private static final Comparator<Size> SIZE_BY_AREA = (lhs, rhs) ->
                 // 如果相机没有声明 HEIC 尺寸，这里只是测试 ImageReader 是否接受 HEIC 格式
                 testSize = new Size(1920, 1080);
             }
-    
+        
             ImageReader testReader = ImageReader.newInstance(
                     testSize.getWidth(),
                     testSize.getHeight(),
@@ -611,21 +611,15 @@ private static final Comparator<Size> SIZE_BY_AREA = (lhs, rhs) ->
         } catch (Exception | OutOfMemoryError e) {
             canCreate = false;
         }
-    
-        // Camera2 直出 HEIC 时，最可靠的前提仍然是 StreamConfigurationMap 支持 HEIC。
-        // 所以这里建议：mapSupport 必须为 true。
-        //
-        // 如果你想用“任意一个检查通过就算支持”的宽松策略，可以改成：
-        // boolean heicUsable = mapSupport || readerSupport || canCreate;
-        //
-        // 但不建议，因为如果 map 不支持 HEIC，后续 createCaptureSession 可能失败。
-        boolean heicUsable = mapSupport && (readerSupport || canCreate);
+        
+        // 修改判断逻辑：只要 map 支持且能成功创建 ImageReader，就认为可用
+        boolean heicUsable = mapSupport && canCreate;
         mHeicDirectSupported = heicUsable;
-    
+        
         PhoneLog.d(TAG, "📷 [chooseOptimalSizes] HEIC检查 map=" + mapSupport
-                + ", ImageReader=" + readerSupport
                 + ", create=" + canCreate
                 + ", heicUsable=" + heicUsable);
+
     
         // ------------------------------------------------------------------
         // 2. 选择拍照格式和拍照尺寸
@@ -698,11 +692,19 @@ private static final Comparator<Size> SIZE_BY_AREA = (lhs, rhs) ->
             mPreviewWidth = mPreviewSize.getWidth();
             mPreviewHeight = mPreviewSize.getHeight();
             PhoneLog.i(TAG, "✅ 预览尺寸已更新: " + mPreviewWidth + "x" + mPreviewHeight);
+        } else {
+            PhoneLog.w(TAG, "⚠️ [chooseOptimalSizes] mPreviewSize 为 null，使用默认值 320x320");
+            mPreviewWidth = 320;
+            mPreviewHeight = 320;
         }
         if (mCaptureSize != null) {
             photoWidth = mCaptureSize.getWidth();
             photoHeight = mCaptureSize.getHeight();
             PhoneLog.i(TAG, "✅ 拍照尺寸已更新: " + photoWidth + "x" + photoHeight);
+        } else {
+            PhoneLog.w(TAG, "⚠️ [chooseOptimalSizes] mCaptureSize 为 null，使用默认值 1920x1080");
+            photoWidth = 1920;
+            photoHeight = 1080;
         }
 
         PhoneLog.d(TAG, "📷 [chooseOptimalSizes] captureFormat="
@@ -876,6 +878,11 @@ private Size chooseBestPreviewSize(Size[] choices,
                     mDataOutputStream = new DataOutputStream(outputStream);
 
                     try {
+                        // 【修复】防止 stopStreamingAndRelease 在异步回调执行前释放了 mEncoder
+                        if (mEncoder == null || !mIsStreaming.get()) {
+                            PhoneLog.w(TAG, "⚠️ 编码器已释放或推流已停止，跳过启动");
+                            return;
+                        }
                         mEncoderSurface = mEncoder.createInputSurface();
                         mEncoder.setCallback(new EncoderCallback(), mBgHandler);
                         mEncoder.start();
@@ -1170,8 +1177,7 @@ private Size chooseBestPreviewSize(Size[] choices,
             }
             
             
-            
-            // 1. 🎯 [手机端保存]
+                     // 1. 🎯 [手机端保存]
             File dcimDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM);
             File wearSyncDir = new File(dcimDir, "WearSync");
             if (!wearSyncDir.exists()) wearSyncDir.mkdirs();
@@ -1182,6 +1188,7 @@ private Size chooseBestPreviewSize(Size[] choices,
             String extension;
             String mimeType;
             byte[] finalData;
+            File photoFile = null; // 【修复1】提前声明 photoFile，解决作用域问题
 
             if (isHeic) {
                 extension = ".heic";
@@ -1205,10 +1212,10 @@ private Size chooseBestPreviewSize(Size[] choices,
                         exif.saveAttributes();
                         try (FileInputStream fis = new FileInputStream(tempFile)) {
                             ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                            byte[] buffer = new byte[8192];
+                            byte[] readBuffer = new byte[8192];
                             int len;
-                            while ((len = fis.read(buffer)) != -1) {
-                                baos.write(buffer, 0, len);
+                            while ((len = fis.read(readBuffer)) != -1) {
+                                baos.write(readBuffer, 0, len);
                             }
                             finalData = baos.toByteArray();
                         }
@@ -1232,13 +1239,17 @@ private Size chooseBestPreviewSize(Size[] choices,
                     Bitmap rawBmp = BitmapFactory.decodeByteArray(encodedData, 0, encodedData.length);
                     if (rawBmp != null) {
                         try {
-                            File photoFile = new File(wearSyncDir, "IMG_" + timeStamp + extension);
-                            HeifWriter heifWriter = new HeifWriter.Builder(photoFile.getAbsolutePath())
-                                    .setWidth(rawBmp.getWidth())
-                                    .setHeight(rawBmp.getHeight())
-                                    .setQuality(95)
-                                    .setRotation(rotationDegrees)
-                                    .build();
+                            photoFile = new File(wearSyncDir, "IMG_" + timeStamp + extension); // 【修复1】赋值给外部变量
+                            int heifWidth = (mPreviewSize != null) ? mPreviewSize.getWidth() : 1920;
+                            int heifHeight = (mPreviewSize != null) ? mPreviewSize.getHeight() : 1080;
+                            HeifWriter heifWriter = new HeifWriter.Builder(
+                                    photoFile.getAbsolutePath(),
+                                    heifWidth,
+                                    heifHeight,
+                                    1
+                                )
+                                .setQuality(90)
+                                .build();
                             
                             heifWriter.addBitmap(rawBmp);
                             heifWriter.stop(5000);
@@ -1253,6 +1264,8 @@ private Size chooseBestPreviewSize(Size[] choices,
                             extension = ".webp";
                             mimeType = "image/webp";
                             finalData = encodedData;
+                            photoFile = null; // 重置，让下面的通用逻辑重新生成文件
+                            rawBmp.recycle(); // 【修复】防止 HeifWriter 异常时 Bitmap 泄漏
                         }
                     } else {
                         // Bitmap 解码失败，降级到策略3
@@ -1274,11 +1287,13 @@ private Size chooseBestPreviewSize(Size[] choices,
                         
                         ByteArrayOutputStream baos = new ByteArrayOutputStream();
                         // minSdk 35，直接使用 WEBP_LOSSY
-                        bmp.compress(Bitmap.CompressFormat.WEBP_LOSSY, 95, baos);
-                        finalData = baos.toByteArray();
-                        
-                        bmp.recycle();
-                        if (bmp != rawBmp) rawBmp.recycle();
+                        try {
+                            bmp.compress(Bitmap.CompressFormat.WEBP_LOSSY, 95, baos);
+                            finalData = baos.toByteArray();
+                        } finally {
+                            bmp.recycle();
+                            if (bmp != rawBmp) rawBmp.recycle();
+                        }
                         PhoneLog.d(TAG, "策略3: 保存 WebP 兜底: IMG_" + timeStamp + extension);
                     } else {
                         finalData = encodedData;
@@ -1290,14 +1305,19 @@ private Size chooseBestPreviewSize(Size[] choices,
             
             // 写入文件（HeifWriter 路径已直接写入，跳过 FileOutputStream）
             if (finalData != null) {
-                File photoFile = new File(wearSyncDir, "IMG_" + timeStamp + extension);
+                photoFile = new File(wearSyncDir, "IMG_" + timeStamp + extension); // 【修复1】赋值给外部变量
                 try (FileOutputStream fos = new FileOutputStream(photoFile)) {
                     fos.write(finalData);
                 }
             }
 
             // 通知系统扫描
-            MediaScannerConnection.scanFile(getApplicationContext(), new String[]{photoFile.getAbsolutePath()}, new String[]{mimeType}, null);
+            // 【修复1】增加 null 检查，防止文件未成功创建时崩溃
+            if (photoFile != null) {
+                MediaScannerConnection.scanFile(getApplicationContext(), 
+                    new String[]{photoFile.getAbsolutePath()}, 
+                    new String[]{mimeType}, null);
+            }
 
             // 2. 🎯 [预览图优化] 为手表生成 320px WebP 缩略图
             SharedPreferences sp = getSharedPreferences("dndsync_prefs", Context.MODE_PRIVATE);
@@ -1305,15 +1325,26 @@ private Size chooseBestPreviewSize(Size[] choices,
 
             // 🛡️ [防崩溃] 检查 nodeId 和 streaming 状态
             String nodeId = mCachedNodeId;
-            if (previewEnabled && nodeId != null && mIsStreaming.get()) {
+            // 【修复2】增加 finalData != null 判断，防止 HeifWriter 写入文件后 finalData 为 null 导致空指针异常
+            if (previewEnabled && nodeId != null && mIsStreaming.get() && finalData != null) {
                 Bitmap originalBitmap = BitmapFactory.decodeByteArray(finalData, 0, finalData.length);
                 
                 if (originalBitmap != null) {
                     // 🚀 注意：finalData 已经是旋转补正过的了，不需要再次旋转 90 度
                     int targetWidth = 320;
-                    float ratio = (float) originalBitmap.getHeight() / (float) originalBitmap.getWidth();
+                    int origWidth = originalBitmap.getWidth();
+                    int origHeight = originalBitmap.getHeight();
+                    if (origWidth <= 0) {
+                        PhoneLog.w(TAG, "⚠️ 原始图片宽度为0，跳过预览发送");
+                        origWidth = 1;
+                    }
+                    float ratio = (float) origHeight / (float) origWidth;
                     int targetHeight = (int) (targetWidth * ratio);
                     Bitmap finalBitmap = Bitmap.createScaledBitmap(originalBitmap, targetWidth, targetHeight, true);
+                    if (finalBitmap == null) {
+                        PhoneLog.w(TAG, "⚠️ 缩略图缩放返回 null，跳过预览发送");
+                        finalBitmap = originalBitmap; // 降级使用原图
+                    }
                     
                     String thumbName = "THUMB_" + timeStamp + ".webp";
                     File thumbFile = new File(getCacheDir(), thumbName);
@@ -1332,7 +1363,6 @@ private Size chooseBestPreviewSize(Size[] choices,
                     originalBitmap.recycle();
                 }
             }
-
         } catch (Exception e) {
             PhoneLog.e(TAG, "❌ 保存照片或生成预览异常", e);
         }
