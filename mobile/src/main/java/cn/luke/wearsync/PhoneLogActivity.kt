@@ -96,7 +96,10 @@ class PhoneLogActivity : ComponentActivity() {
                                 }
                                 Button(
                                     onClick = {
-                                        val backup = PhoneLog.exportBackupFile(this)
+                                     // 在 @Composable 函数内部
+                            val context = LocalContext.current
+                            val backup = PhoneLog.exportBackupFile(context)
+
                                         if (backup != null) {
                                             Toast.makeText(context, "备份成功！", Toast.LENGTH_LONG).show()
                                         }
