@@ -44,8 +44,8 @@ import java.util.Locale;
 import java.util.concurrent.LinkedBlockingQueue;
 
 /**
- * 手表端相机 UI (SDK 35 优化版)
- * 修复：黑屏 (Codec Logic), 按钮重叠 (Angle & Clean), 录像状态同步
+ * 手表端相机 UI (SDK 35 最终稳定性版本)
+ * 修复：黑屏 (解码状态机同步)、按钮重叠、录像切换显示
  */
 public class WearCameraActivity extends ComponentActivity implements SurfaceHolder.Callback {
     private static final String TAG = "WearSync_WearCameraUI";
@@ -68,6 +68,7 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
     private float mScaleFactor = 1.0f, mPosX = 0, mPosY = 0, mMaxZoom = 1.0f;
     private ScaleGestureDetector mScaleDetector;
     private GestureDetector mGestureDetector;
+    private final Handler mHandler = new Handler(Looper.getMainLooper());
     private BroadcastReceiver mFileReceiver, mCameraListReceiver, mVideoStatusReceiver;
     
     private final List<View> mDynamicButtons = new ArrayList<>();
@@ -103,7 +104,7 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
         startDecoderThread();
         Wearable.getChannelClient(this).registerChannelCallback(mChannelListener);
         WearSyncCommManager.getInstance(getApplicationContext()).sendBusinessCommand("camera_control", "open_phone_camera");
-        WearLog.d(TAG, "🟢 UI Initialized");
+        WearLog.d(TAG, "🟢 UI Started");
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -130,7 +131,7 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
                 return true;
             });
         }
-        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+        mHandler.postDelayed(() -> {
             if (mDynamicButtons.isEmpty()) WearSyncCommManager.getInstance(this).sendBusinessCommand("camera_control", "REQUEST_CAMERA_LIST");
         }, 2000);
     }
@@ -150,6 +151,7 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
         runOnUiThread(() -> {
             try {
                 clearDynamicButtons();
+                if (layoutCameraList != null) layoutCameraList.removeAllViews();
                 JSONArray arr = new JSONArray(json);
                 boolean isRound = getResources().getConfiguration().isScreenRound();
                 for (int i = 0; i < arr.length(); i++) {
@@ -158,17 +160,17 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
                     float maxZ = (float) obj.optDouble("maxZoom", 1.0);
                     Button btn = createSmallButton(name.substring(0, 1));
                     btn.setOnClickListener(v -> { mMaxZoom = maxZ; updateZoomUI(); WearSyncCommManager.getInstance(this).selectCamera(id); });
-                    // 🎯 顶部圆弧，起始角度 240，间隔 30，确保不重叠
-                    if (isRound) positionCircular(btn, 240 + i * 35); else if (layoutCameraList != null) layoutCameraList.addView(btn);
+                    // 🎯 顶部角度 225° 开始，间隔 30°
+                    if (isRound) positionCircular(btn, 225 + i * 30); else if (layoutCameraList != null) { layoutCameraList.setVisibility(View.VISIBLE); layoutCameraList.addView(btn); }
                     if (i == 0) { mMaxZoom = maxZ; updateZoomUI(); }
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception e) { WearLog.e(TAG, "Update Camera List Error", e); }
         });
     }
 
     private void updateZoomUI() {
         runOnUiThread(() -> {
-            layoutZoomList.removeAllViews();
+            if (layoutZoomList != null) layoutZoomList.removeAllViews();
             float[] lvls = {1f, 2f, 5f, 10f};
             boolean isRound = getResources().getConfiguration().isScreenRound();
             int count = 0;
@@ -176,8 +178,8 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
                 if (l <= mMaxZoom || l == 1f) {
                     Button btn = createSmallButton(String.format(Locale.US, "%.0f", l));
                     btn.setOnClickListener(v -> { WearSyncCommManager.getInstance(this).setZoom(l); showCaptureHint(l + "X"); });
-                    // 🎯 右侧圆弧，起始角度 60
-                    if (isRound) positionCircular(btn, 60 + count * 35); else layoutZoomList.addView(btn);
+                    // 🎯 右侧角度 45° 开始
+                    if (isRound) positionCircular(btn, 45 + count * 30); else if (layoutZoomList != null) { layoutZoomList.setVisibility(View.VISIBLE); layoutZoomList.addView(btn); }
                     count++;
                 }
             }
@@ -186,6 +188,7 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
 
     private void clearDynamicButtons() {
         ConstraintLayout root = findViewById(R.id.layout_camera_root);
+        if (root == null) return;
         for (View v : mDynamicButtons) root.removeView(v);
         mDynamicButtons.clear();
     }
@@ -200,10 +203,12 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
 
     private void positionCircular(View v, int angle) {
         ConstraintLayout root = findViewById(R.id.layout_camera_root);
+        if (root == null) return;
         if (v.getParent() == null) { root.addView(v); mDynamicButtons.add(v); }
         ConstraintLayout.LayoutParams lp = (ConstraintLayout.LayoutParams) v.getLayoutParams();
-        lp.circleConstraint = R.id.anchor_center; lp.circleAngle = angle;
-        lp.circleRadius = (int) (85 * getResources().getDisplayMetrics().density);
+        lp.circleConstraint = R.id.anchor_center;
+        lp.circleAngle = angle;
+        lp.circleRadius = (int) (85 * getResources().getDisplayMetrics().density); 
         v.setLayoutParams(lp);
     }
 
@@ -214,13 +219,15 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
         registerReceiver(mCameraListReceiver, new IntentFilter("cn.luke.wearsync.ACTION_CAMERA_LIST_RECEIVED"), Context.RECEIVER_EXPORTED);
         mVideoStatusReceiver = new BroadcastReceiver() { 
             @Override public void onReceive(Context c, Intent i) {
+                String status = i.getStringExtra("status");
+                if (status == null) return;
                 try {
-                    JSONObject j = new JSONObject(i.getStringExtra("status"));
+                    JSONObject j = new JSONObject(status);
                     isRecording = j.optBoolean("isRecording");
                     runOnUiThread(() -> {
                         Button rb = findViewById(R.id.btn_record);
                         if (rb != null) { rb.setText(isRecording ? "停" : "录"); rb.setTextColor(isRecording ? 0xFFFF0000 : 0xFFFFFFFF); }
-                        showCaptureHint(isRecording ? "正在录像" : "录像结束");
+                        showCaptureHint(isRecording ? "录像中" : "录像停止");
                     });
                 } catch (Exception ignored) {}
             }
@@ -238,9 +245,52 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
     private void freezePreview() { isFrozen = true; }
     private void unfreezePreview() { isFrozen = false; resetTransform(); frameQueue.clear(); }
     private void showFocusMarker(float x, float y) { if (focusMarker != null) { focusMarker.setX(x-20); focusMarker.setY(y-20); focusMarker.setVisibility(View.VISIBLE); focusMarker.setAlpha(1f); focusMarker.animate().alpha(0f).setDuration(800).withEndAction(() -> focusMarker.setVisibility(View.GONE)).start(); } }
-    private void readStreamFromChannel(ChannelClient.Channel c) { new Thread(() -> { try (InputStream is = Tasks.await(Wearable.getChannelClient(this).getInputStream(c)); DataInputStream dis = new DataInputStream(is)) { while (!isUserExiting) { int len = dis.readInt(); long time = dis.readLong(); int flags = dis.readInt(); if (len > 0 && len < 1000000) { byte[] d = new byte[len]; dis.readFully(d); if (!isFrozen) frameQueue.offer(new VideoFrame(d, time, flags)); } } } catch (Exception e) { WearLog.e(TAG, "Stream err", e); } }).start(); }
-    private void startDecoderThread() { new Thread(() -> { while (!isUserExiting) { try { VideoFrame f = frameQueue.take(); if (isSurfaceReady && mDecoder != null) { int id = mDecoder.dequeueInputBuffer(10000); if (id >= 0) { ByteBuffer b = mDecoder.getInputBuffer(id); if (b != null) { b.clear(); b.put(f.data); mDecoder.queueInputBuffer(id, 0, f.data.length, f.timestamp, f.flags); } } MediaCodec.BufferInfo bi = new MediaCodec.BufferInfo(); int outId = mDecoder.dequeueOutputBuffer(bi, 10000); if (outId >= 0) mDecoder.releaseOutputBuffer(outId, true); } } catch (Exception e) { if (e instanceof IllegalStateException) initDecoder(); } } }).start(); }
-    private void initDecoder() { try { MediaFormat f = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, 256, 256); f.setInteger(MediaFormat.KEY_ROTATION, 90); mDecoder = MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_VIDEO_AVC); mDecoder.configure(f, surfaceView.getHolder().getSurface(), null, 0); mDecoder.start(); WearLog.i(TAG, "Decoder Ready"); } catch (Exception e) { WearLog.e(TAG, "Init Decoder err", e); } }
+    
+    private void readStreamFromChannel(ChannelClient.Channel c) {
+        new Thread(() -> {
+            try (InputStream is = Tasks.await(Wearable.getChannelClient(this).getInputStream(c)); DataInputStream dis = new DataInputStream(is)) {
+                while (!isUserExiting) {
+                    int len = dis.readInt(); long time = dis.readLong(); int flags = dis.readInt();
+                    if (len > 0 && len < 1000000) {
+                        byte[] d = new byte[len]; dis.readFully(d);
+                        if (!isFrozen) frameQueue.offer(new VideoFrame(d, time, flags));
+                    }
+                }
+            } catch (Exception e) { WearLog.e(TAG, "Read stream error", e); }
+        }).start();
+    }
+    
+    private void startDecoderThread() {
+        new Thread(() -> {
+            while (!isUserExiting) {
+                try {
+                    VideoFrame f = frameQueue.take();
+                    if (isSurfaceReady && mDecoder != null) {
+                        int id = mDecoder.dequeueInputBuffer(10000);
+                        if (id >= 0) {
+                            ByteBuffer b = mDecoder.getInputBuffer(id);
+                            if (b != null) { b.clear(); b.put(f.data); mDecoder.queueInputBuffer(id, 0, f.data.length, f.timestamp, f.flags); }
+                        }
+                        MediaCodec.BufferInfo bi = new MediaCodec.BufferInfo();
+                        int outId = mDecoder.dequeueOutputBuffer(bi, 10000);
+                        if (outId >= 0) mDecoder.releaseOutputBuffer(outId, true);
+                    }
+                } catch (Exception e) { if (e instanceof IllegalStateException) initDecoder(); }
+            }
+        }).start();
+    }
+
+    private void initDecoder() {
+        try {
+            MediaFormat f = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, 256, 256);
+            f.setInteger(MediaFormat.KEY_ROTATION, 90);
+            mDecoder = MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);
+            mDecoder.configure(f, surfaceView.getHolder().getSurface(), null, 0);
+            mDecoder.start();
+            WearLog.i(TAG, "Decoder Synchronized");
+        } catch (Exception e) { WearLog.e(TAG, "Init Decoder err", e); }
+    }
+
     public static void forceClose() { WearCameraActivity activity = sActivityRef.get(); if (activity != null && !activity.isUserExiting) { activity.runOnUiThread(activity::cleanExit); } }
     private void cleanExit() { isUserExiting = true; if (mDecoder != null) { try { mDecoder.stop(); mDecoder.release(); } catch (Exception ignored) {} } finishAndRemoveTask(); }
     @Override public void surfaceCreated(@NonNull SurfaceHolder h) { isSurfaceReady = true; initDecoder(); }
