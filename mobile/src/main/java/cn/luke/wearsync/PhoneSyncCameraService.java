@@ -206,6 +206,9 @@ public class PhoneSyncCameraService extends Service {
 
             if (!mIsStreaming.get()) {
                 initCameraAndStartStreaming();
+            } else {
+                // 🎯 如果已经启动，强制重发一次镜头列表给手表
+                sendCameraListToWear();
             }
 
         } else if (ACTION_STOP_CAMERA.equals(action)) {

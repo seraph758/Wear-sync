@@ -47,7 +47,7 @@
         android:id="@+id/scroll_cameras"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="32dp"
         android:scrollbars="none"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
@@ -57,14 +57,14 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:padding="4dp" />
+            android:paddingHorizontal="24dp" />
     </HorizontalScrollView>
 
     <HorizontalScrollView
         android:id="@+id/scroll_zoom"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="4dp"
+        android:layout_marginBottom="8dp"
         android:scrollbars="none"
         app:layout_constraintBottom_toTopOf="@id/btn_shutter"
         app:layout_constraintEnd_toEndOf="parent"
@@ -74,7 +74,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:padding="4dp" />
+            android:paddingHorizontal="24dp" />
     </HorizontalScrollView>
 
     <Button
@@ -85,22 +85,10 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        android:layout_marginBottom="12dp"
+        android:layout_marginBottom="24dp"
         android:contentDescription="Take Photo" />
 
-    <Button
-        android:id="@+id/btn_switch_camera"
-        android:layout_width="44dp"
-        android:layout_height="44dp"
-        android:background="@drawable/bg_action_btn"
-        android:text="🔄"
-        android:textColor="#FFFFFF"
-        android:textSize="16sp"
-        app:layout_constraintCircle="@id/btn_shutter"
-        app:layout_constraintCircleAngle="45"
-        app:layout_constraintCircleRadius="65dp"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+    <!-- 移除了冗余的 btn_switch_camera，改用顶部的动态列表 -->
 
     <TextView
         android:id="@+id/tv_countdown"

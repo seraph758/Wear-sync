@@ -132,11 +132,6 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
 
         findViewById(R.id.btn_shutter).setOnClickListener(v -> startCountdownAndCapture());
         
-        findViewById(R.id.btn_switch_camera).setOnClickListener(v -> {
-            WearSyncCommManager.getInstance(getApplicationContext()).sendBusinessCommand("camera_control", "SWITCH_CAMERA");
-            showCaptureHint("🔄 切换摄像头...");
-        });
-
         mFileReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
@@ -239,6 +234,10 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
                     Button btn = new Button(this);
                     btn.setText(name);
                     btn.setAllCaps(false);
+                    btn.setTextSize(10);
+                    btn.setTextColor(0xFFFFFFFF);
+                    btn.setBackgroundResource(R.drawable.bg_action_btn);
+
                     btn.setOnClickListener(v -> {
                         mCurrentZoom = 1.0f;
                         mMaxZoom = maxZoom;
@@ -246,7 +245,14 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
                         WearSyncCommManager.getInstance(getApplicationContext()).selectCamera(id);
                         showCaptureHint("🔄 " + name);
                     });
-                    layoutCameraList.addView(btn);
+                    
+                    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        70 // 固定高度
+                    );
+                    lp.setMargins(8, 0, 8, 0);
+                    layoutCameraList.addView(btn, lp);
+
                     if (i == 0 && mMaxZoom <= 1.0f) {
                         mMaxZoom = maxZoom;
                         updateZoomUI();
@@ -260,17 +266,27 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
         if (layoutZoomList == null) return;
         runOnUiThread(() -> {
             layoutZoomList.removeAllViews();
-            float[] levels = {1.0f, 2.0f, 3.0f, 5.0f, 10.0f};
+            float[] levels = {1.0f, 2.0f, 3.0f, 5.0f, 10.0f, 20.0f};
             for (float level : levels) {
                 if (level <= mMaxZoom || level == 1.0f) {
                     Button btn = new Button(this);
                     btn.setText(String.format(Locale.getDefault(), "%.0fx", level));
+                    btn.setTextSize(12);
+                    btn.setTextColor(0xFFFFFFFF);
+                    btn.setBackgroundResource(R.drawable.bg_action_btn);
+                    
                     btn.setOnClickListener(v -> {
                         mCurrentZoom = level;
                         WearSyncCommManager.getInstance(getApplicationContext()).setZoom(mCurrentZoom);
                         showCaptureHint("🔍 " + level + "x");
                     });
-                    layoutZoomList.addView(btn);
+
+                    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    );
+                    lp.setMargins(6, 0, 6, 0);
+                    layoutZoomList.addView(btn, lp);
                 }
             }
         });
