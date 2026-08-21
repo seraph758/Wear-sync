@@ -52,7 +52,15 @@ public class WearSyncListenerService extends WearableListenerService {
             
             Intent intent = new Intent("cn.luke.wearsync.ACTION_CAMERA_LIST_RECEIVED");
             intent.putExtra("camera_list", json);
-            intent.setPackage(getPackageName()); // 🎯 增强安全性
+            intent.setPackage(getPackageName()); 
+            sendBroadcast(intent);
+            return;
+        }
+
+        if ("/camera/video_status".equals(path)) {
+            Intent intent = new Intent("cn.luke.wearsync.ACTION_VIDEO_STATUS");
+            intent.putExtra("status", new String(messageEvent.getData(), StandardCharsets.UTF_8));
+            intent.setPackage(getPackageName());
             sendBroadcast(intent);
             return;
         }

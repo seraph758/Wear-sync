@@ -239,6 +239,10 @@ public class WearSyncCommManager {
         }
     }
 
+    public void toggleVideoRecording() {
+        sendCommand("camera_control", "TOGGLE_VIDEO", null);
+    }
+
     public void shutdown() {
         executor.shutdown();
         instance = null;
