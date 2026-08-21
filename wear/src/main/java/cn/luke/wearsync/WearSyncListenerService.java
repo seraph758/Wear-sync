@@ -28,6 +28,7 @@ public class WearSyncListenerService extends WearableListenerService {
     private static final String DATA_CHANNEL_BASE_PATH = "/wear_data_channel";
     private static final String FILE_TRANSFER_CHANNEL_PATH = "/wear-sync/file-transfer";
     private static final String FILE_TRANSFER_STATUS_PATH = "/file-transfer-status";
+    public static final String WEAR_MSG_PATH_CAMERA_LIST = "/camera/info_list";
 
     private ChannelClient.Channel mLogChannel;
 
@@ -41,7 +42,16 @@ public class WearSyncListenerService extends WearableListenerService {
     public void onMessageReceived(@NonNull MessageEvent messageEvent) {
         WearLog.d(TAG, "【MSG-001】收到消息. Path: " + messageEvent.getPath() + " | Source: " + messageEvent.getSourceNodeId());
 
-        if (!UNIVERSAL_SYNC_PATH.equalsIgnoreCase(messageEvent.getPath())) {
+        String path = messageEvent.getPath();
+        if (WEAR_MSG_PATH_CAMERA_LIST.equals(path)) {
+            byte[] data = messageEvent.getData();
+            Intent intent = new Intent("cn.luke.wearsync.ACTION_CAMERA_LIST_RECEIVED");
+            intent.putExtra("camera_list", new String(data, StandardCharsets.UTF_8));
+            sendBroadcast(intent);
+            return;
+        }
+
+        if (!UNIVERSAL_SYNC_PATH.equalsIgnoreCase(path)) {
             WearLog.w(TAG, "【MSG-002】路径不匹配，忽略. Expected: " + UNIVERSAL_SYNC_PATH);
             return;
         }

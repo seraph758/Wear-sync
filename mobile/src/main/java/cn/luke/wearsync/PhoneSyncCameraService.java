@@ -48,6 +48,9 @@ import com.google.android.gms.wearable.ChannelClient;
 import com.google.android.gms.wearable.MessageClient;
 import com.google.android.gms.wearable.Wearable;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
@@ -57,6 +60,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -79,9 +83,11 @@ public class PhoneSyncCameraService extends Service {
     public static final String ACTION_STOP_CAMERA = "cn.luke.wearsync.action.STOP_CAMERA";
     public static final String ACTION_TAKE_PHOTO = "cn.luke.wearsync.action.TAKE_PHOTO";
     public static final String ACTION_SWITCH_CAMERA = "cn.luke.wearsync.action.SWITCH_CAMERA";
+    public static final String ACTION_SET_ZOOM = "cn.luke.wearsync.action.SET_ZOOM";
     public static final String ACTION_FOCUS_CAMERA = "cn.luke.wearsync.action.FOCUS_CAMERA";
     public static final String WEAR_MSG_PATH_TAKE_PHOTO = "/camera/take_photo";
     public static final String WEAR_CHANNEL_PATH = "/wear_data_channel/camera";
+    public static final String WEAR_MSG_PATH_CAMERA_LIST = "/camera/info_list";
 
     private static final int BIT_RATE = 400_000; // 400Kbps
     private static final int FRAME_RATE = 25;
@@ -99,7 +105,10 @@ public class PhoneSyncCameraService extends Service {
     
     private int mDeviceOrientation = OrientationEventListener.ORIENTATION_UNKNOWN;
     private int mSensorOrientation = 0;
-    private int mCameraFacing = CameraCharacteristics.LENS_FACING_BACK;
+    private String mCameraId; // 🎯 当前选中的 Camera ID
+    private float mCurrentZoom = 1.0f; // 🎯 当前缩放倍数
+    private float mMaxZoom = 1.0f; // 🎯 当前镜头的最大缩放
+    private Rect mActiveArraySize; // 🎯 当前镜头的活跃像素区域
     
     private final AtomicBoolean mIsStreaming = new AtomicBoolean(false);
     private final AtomicBoolean mIsCameraOpened = new AtomicBoolean(false);
@@ -205,9 +214,17 @@ public class PhoneSyncCameraService extends Service {
         } else if (ACTION_TAKE_PHOTO.equals(action)) {
             captureHighResPhoto();
         } else if (ACTION_SWITCH_CAMERA.equals(action)) {
-            switchCamera();
+            String targetId = intent.getStringExtra("camera_id");
+            if (targetId != null) {
+                switchCamera(targetId);
+            }
         } else if (ACTION_FOCUS_CAMERA.equals(action)) {
-            manualFocus(intent.getDoubleExtra("x", 0.5), intent.getDoubleExtra("y", 0.5));
+            double x = intent.getDoubleExtra("x", 0.5);
+            double y = intent.getDoubleExtra("y", 0.5);
+            manualFocus(x, y);
+        } else if (ACTION_SET_ZOOM.equals(action)) {
+            float zoom = intent.getFloatExtra("zoom", 1.0f);
+            setZoom(zoom);
         }
 
         return START_NOT_STICKY;
@@ -319,17 +336,28 @@ public class PhoneSyncCameraService extends Service {
         try {
             final CameraManager manager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
             if (manager == null) return;
-            final String cameraId = getCameraId(manager);
-            if (cameraId == null) return;
+            
+            // 🎯 如果没有指定 ID，则自动选择主摄
+            if (mCameraId == null) {
+                mCameraId = getBestBackCameraId(manager);
+            }
+            
+            if (mCameraId == null) return;
 
-            final CameraCharacteristics chars = manager.getCameraCharacteristics(cameraId);
+            final CameraCharacteristics chars = manager.getCameraCharacteristics(mCameraId);
             final StreamConfigurationMap map = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
             if (map == null) return;
+
+            // 🎯 读取变焦与像素区域信息
+            Float maxZoom = chars.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM);
+            mMaxZoom = (maxZoom != null) ? maxZoom : 1.0f;
+            mActiveArraySize = chars.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE);
+            mCurrentZoom = 1.0f; // 切换镜头重置缩放
 
             // 1. HEIC 支持检测
             final Size[] heicSizes = map.getOutputSizes(ImageFormat.HEIC);
             final boolean heicUsable = heicSizes != null && heicSizes.length > 0 && testImageReaderHeic();
-            PhoneLog.d(TAG, "📷 [HEIC检查] 直出支持: " + heicUsable);
+            PhoneLog.d(TAG, "📷 [HEIC检查] ID=" + mCameraId + " 直出支持: " + heicUsable);
             
             // 2. 选择拍照参数
             final Size captureSize;
@@ -347,17 +375,17 @@ public class PhoneSyncCameraService extends Service {
 
             // 4. 同步结果
             applySelectedSizes(previewSize, captureSize);
-            logCameraHeicCapabilities(map, cameraId);
+            logCameraHeicCapabilities(map, mCameraId);
         } catch (CameraAccessException e) {
             PhoneLog.e(TAG, "❌ 选择最优尺寸失败", e);
         }
     }
 
-    private String getCameraId(CameraManager manager) throws CameraAccessException {
+    private String getBestBackCameraId(CameraManager manager) throws CameraAccessException {
         for (final String id : manager.getCameraIdList()) {
             final CameraCharacteristics chars = manager.getCameraCharacteristics(id);
             final Integer facing = chars.get(CameraCharacteristics.LENS_FACING);
-            if (facing != null && facing == mCameraFacing) return id;
+            if (facing != null && facing == CameraCharacteristics.LENS_FACING_BACK) return id;
         }
         final String[] ids = manager.getCameraIdList();
         return ids.length > 0 ? ids[0] : null;
@@ -444,6 +472,10 @@ public class PhoneSyncCameraService extends Service {
             .addOnSuccessListener(outputStream -> {
                 mChannelOutputStream = outputStream;
                 mDataOutputStream = new DataOutputStream(outputStream);
+                
+                // 🎯 开启通道后，立即发送镜头列表
+                sendCameraListToWear();
+                
                 try {
                     if (mEncoder == null || !mIsStreaming.get()) return;
                     mEncoderSurface = mEncoder.createInputSurface();
@@ -460,13 +492,87 @@ public class PhoneSyncCameraService extends Service {
         .addOnFailureListener(e -> { stopStreamingAndRelease(); stopSelf(); }); 
     }
 
+    private void sendCameraListToWear() {
+        if (mCachedNodeId == null) return;
+        new Thread(() -> {
+            try {
+                CameraManager manager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
+                String[] ids = manager.getCameraIdList();
+                JSONArray array = new JSONArray();
+                
+                for (String id : ids) {
+                    CameraCharacteristics chars = manager.getCameraCharacteristics(id);
+                    StreamConfigurationMap map = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+                    if (map == null) continue;
+                    
+                    // 🎯 筛选适合拍照的摄像头
+                    Size[] sizes = map.getOutputSizes(ImageFormat.JPEG);
+                    if (sizes == null || sizes.length == 0) continue;
+                    
+                    Size maxRes = Collections.max(Arrays.asList(sizes), SIZE_BY_AREA);
+                    if (maxRes.getWidth() < 1280) continue; // 过滤掉分辨率过低的
+                    
+                    // 过滤特殊用途镜头
+                    int[] capabilities = chars.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES);
+                    boolean isLogical = false;
+                    if (capabilities != null) {
+                        for (int cap : capabilities) {
+                            if (cap == CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_LOGICAL_MULTI_CAMERA) {
+                                isLogical = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    Integer facing = chars.get(CameraCharacteristics.LENS_FACING);
+                    float[] focalLengths = chars.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS);
+                    Float maxZoom = chars.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM);
+                    
+                    JSONObject obj = new JSONObject();
+                    obj.put("id", id);
+                    obj.put("facing", facing);
+                    obj.put("maxZoom", maxZoom != null ? maxZoom : 1.0f);
+                    obj.put("width", maxRes.getWidth());
+                    obj.put("height", maxRes.getHeight());
+                    
+                    // 动态命名
+                    String name;
+                    if (facing != null && facing == CameraCharacteristics.LENS_FACING_FRONT) {
+                        name = "前置镜头";
+                    } else if (isLogical) {
+                        name = "多摄主镜";
+                    } else {
+                        // 根据焦距简单判断（如果支持的话）
+                        if (focalLengths != null && focalLengths.length > 0) {
+                            float f = focalLengths[0];
+                            if (f < 3.0f) name = "超广角";
+                            else if (f > 6.0f) name = "长焦镜头";
+                            else name = "后置主摄";
+                        } else {
+                            name = "后置镜头 " + id;
+                        }
+                    }
+                    obj.put("name", name);
+                    array.put(obj);
+                }
+                
+                PhoneLog.d(TAG, "📤 发送镜头列表给手表: " + array.length() + " 个镜头");
+                Wearable.getMessageClient(this).sendMessage(mCachedNodeId, WEAR_MSG_PATH_CAMERA_LIST, array.toString().getBytes(StandardCharsets.UTF_8));
+            } catch (Exception e) {
+                PhoneLog.e(TAG, "❌ 获取/发送镜头列表失败", e);
+            }
+        }).start();
+    }
+
     private void startCameraHardware() {
         final CameraManager manager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
         if (manager == null) return;
 
         try {
-            final String cameraId = getCameraId(manager);
-            if (cameraId == null) return;
+            if (mCameraId == null) mCameraId = getBestBackCameraId(manager);
+            if (mCameraId == null) return;
+            
+            PhoneLog.d(TAG, "📷 [3/4] 开启相机: " + mCameraId);
             
             if (mCameraDevice != null) {
                 mCameraDevice.close();
@@ -475,7 +581,7 @@ public class PhoneSyncCameraService extends Service {
 
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) return;
 
-            manager.openCamera(cameraId, new CameraDevice.StateCallback() {
+            manager.openCamera(mCameraId, new CameraDevice.StateCallback() {
                 @Override
                 public void onOpened(@NonNull CameraDevice camera) {
                     mCameraDevice = camera;
@@ -551,6 +657,11 @@ public class PhoneSyncCameraService extends Service {
             final CaptureRequest.Builder builder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
             builder.addTarget(mEncoderSurface);
             builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO);
+            
+            // 🎯 应用变焦
+            Rect zoomRect = calculateZoomRect(mCurrentZoom);
+            if (zoomRect != null) builder.set(CaptureRequest.SCALER_CROP_REGION, zoomRect);
+            
             mCaptureSession.setRepeatingRequest(builder.build(), null, mBgHandler);
         } catch (Exception e) {
             PhoneLog.e(TAG, "❌ 发起预览失败", e);
@@ -569,8 +680,11 @@ public class PhoneSyncCameraService extends Service {
             final int deviceRot = (mDeviceOrientation != OrientationEventListener.ORIENTATION_UNKNOWN) ? (mDeviceOrientation + 45) / 90 * 90 : 0;
              final int jpegOrientation = (mSensorOrientation + deviceRot) % 360;
             builder.set(CaptureRequest.JPEG_ORIENTATION, jpegOrientation);
-            // 🎯 质量优先：JPEG_QUALITY 设置为 100
             builder.set(CaptureRequest.JPEG_QUALITY, (byte) 100);
+            
+            // 🎯 构图一致：应用当前的变焦
+            Rect zoomRect = calculateZoomRect(mCurrentZoom);
+            if (zoomRect != null) builder.set(CaptureRequest.SCALER_CROP_REGION, zoomRect);
     
             mCaptureSession.capture(builder.build(), null, mBgHandler);
         } catch (Exception e) {
@@ -673,12 +787,28 @@ public class PhoneSyncCameraService extends Service {
         }
     }
 
-    private void switchCamera() {
-        mCameraFacing = (mCameraFacing == CameraCharacteristics.LENS_FACING_BACK) ? 
-                        CameraCharacteristics.LENS_FACING_FRONT : CameraCharacteristics.LENS_FACING_BACK;
-        PhoneLog.d(TAG, "🔄 切换摄像头: " + (mCameraFacing == CameraCharacteristics.LENS_FACING_BACK ? "后置" : "前置"));
+    private void switchCamera(String cameraId) {
+        if (cameraId == null || cameraId.isEmpty()) return;
+        PhoneLog.d(TAG, "🔄 切换摄像头为: " + cameraId);
+        mCameraId = cameraId;
         stopStreamingAndRelease();
         initCameraAndStartStreaming();
+    }
+
+    private void setZoom(float zoomValue) {
+        float zoom = Math.max(1.0f, Math.min(zoomValue, mMaxZoom));
+        mCurrentZoom = zoom;
+        PhoneLog.d(TAG, "🔍 设置变焦: " + zoom + "x");
+        startPreviewRequest(); // 重新提交 RepeatingRequest 以应用变焦
+    }
+
+    private Rect calculateZoomRect(float zoom) {
+        if (mActiveArraySize == null) return null;
+        int centerX = mActiveArraySize.centerX();
+        int centerY = mActiveArraySize.centerY();
+        int deltaX = (int) (0.5f * mActiveArraySize.width() / zoom);
+        int deltaY = (int) (0.5f * mActiveArraySize.height() / zoom);
+        return new Rect(centerX - deltaX, centerY - deltaY, centerX + deltaX, centerY + deltaY);
     }
 
     private void manualFocus(double x, double y) {

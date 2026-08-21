@@ -182,9 +182,18 @@ public class PhoneSyncListenerService extends WearableListenerService {
             return;
         }
 
-        if ("SWITCH_CAMERA".equalsIgnoreCase(action)) {
+        if ("SWITCH_CAMERA".equalsIgnoreCase(action) || "SELECT_CAMERA".equalsIgnoreCase(action)) {
             Intent intent = new Intent(this, PhoneSyncCameraService.class);
             intent.setAction(PhoneSyncCameraService.ACTION_SWITCH_CAMERA);
+            intent.putExtra("camera_id", json.optString("camera_id", json.optString("cameraId")));
+            startService(intent);
+            return;
+        }
+
+        if ("SET_ZOOM".equalsIgnoreCase(action)) {
+            Intent intent = new Intent(this, PhoneSyncCameraService.class);
+            intent.setAction(PhoneSyncCameraService.ACTION_SET_ZOOM);
+            intent.putExtra("zoom", (float) json.optDouble("zoom", 1.0));
             startService(intent);
             return;
         }

@@ -219,6 +219,26 @@ public class WearSyncCommManager {
     /**
      * 生命周期清理 - 应在 Application.onDestroy 或主 Service 销毁时调用
      */
+    public void selectCamera(@NonNull String cameraId) {
+        try {
+            JSONObject extra = new JSONObject();
+            extra.put("camera_id", cameraId);
+            sendCommand("camera_control", "SELECT_CAMERA", extra);
+        } catch (Exception e) {
+             WearLog.e(TAG, "❌ selectCamera 异常", e);
+        }
+    }
+
+    public void setZoom(float zoom) {
+        try {
+            JSONObject extra = new JSONObject();
+            extra.put("zoom", (double) zoom);
+            sendCommand("camera_control", "SET_ZOOM", extra);
+        } catch (Exception e) {
+            WearLog.e(TAG, "❌ setZoom 异常", e);
+        }
+    }
+
     public void shutdown() {
         executor.shutdown();
         instance = null;

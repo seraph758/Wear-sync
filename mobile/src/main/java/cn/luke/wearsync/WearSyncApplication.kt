@@ -19,7 +19,7 @@ class WearSyncApplication : Application() {
 
                 // 2. 强制刷新并备份到 Downloads
                 PhoneLog.exportBackupFile(this)
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 // 备份本身不能再崩溃，静默忽略
             }
 

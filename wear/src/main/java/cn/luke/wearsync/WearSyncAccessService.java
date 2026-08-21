@@ -38,9 +38,6 @@ public class WearSyncAccessService extends AccessibilityService {
 
     }
 
-    public void openQuickSettings() {
-        performGlobalAction(GLOBAL_ACTION_QUICK_SETTINGS);
-    }
 
     public void goBack() {
         performGlobalAction(GLOBAL_ACTION_BACK);

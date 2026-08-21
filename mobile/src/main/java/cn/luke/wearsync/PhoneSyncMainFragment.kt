@@ -260,13 +260,8 @@ fun PhoneSyncMainScreen(
         val textColor = if (isDark) Color.White else Color(0xFF1A1A1A)
         val cardBgColor = if (isDark) Color(0xFF1C1C1E) else Color(0xFFFFFFFF)
 
-        // 展开状态管理
-        var isVibrationExpanded by remember { mutableStateOf(false) }
-        var isDndExpanded by remember { mutableStateOf(false) }
-        var isAlarmExpanded by remember { mutableStateOf(false) }
-        var isCameraExpanded by remember { mutableStateOf(false) }
-        var isLogExpanded by remember { mutableStateOf(false) }
-        var isFileTransferExpanded by remember { mutableStateOf(false) }
+        // 🎯 统一管理展开状态，实现手风琴（Accordion）互斥效果
+        var expandedSection by remember { mutableStateOf<String?>(null) }
 
         // 状态与权限面板自动展开逻辑
         val hasError = !state.isConnected || !state.isNotificationAllowed || !state.isCameraAllowed
@@ -364,25 +359,25 @@ fun PhoneSyncMainScreen(
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         GlowCard(
                             modifier = Modifier.weight(1f),
-                            onClick = { isDndExpanded = !isDndExpanded },
+                            onClick = { expandedSection = if (expandedSection == "dnd") null else "dnd" },
                             glowColor = Color(0xFF9C27B0)
                         ) {
-                            FeatureHeader("勿扰同步", "状态控制器", "🌙", actions = isDndExpanded)
+                            FeatureHeader("勿扰同步", "状态控制器", "🌙", actions = (expandedSection == "dnd"))
                         }
                         GlowCard(
                             modifier = Modifier.weight(1f),
-                            onClick = { isAlarmExpanded = !isAlarmExpanded },
+                            onClick = { expandedSection = if (expandedSection == "alarm") null else "alarm" },
                             glowColor = Color(0xFFF44336)
                         ) {
-                            FeatureHeader("闹钟代点", "Google 时钟", "⏰", actions = isAlarmExpanded)
+                            FeatureHeader("闹钟代点", "Google 时钟", "⏰", actions = (expandedSection == "alarm"))
                         }
                     }
                     
                     // 展开内容
-                    ExpandableContent(isDndExpanded) {
+                    ExpandableContent(expandedSection == "dnd") {
                         DndSettingsContent(state, actions, isDark)
                     }
-                    ExpandableContent(isAlarmExpanded) {
+                    ExpandableContent(expandedSection == "alarm") {
                         AlarmSettingsContent(state, actions, isDark)
                     }
 
@@ -390,24 +385,24 @@ fun PhoneSyncMainScreen(
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         GlowCard(
                             modifier = Modifier.weight(1f),
-                            onClick = { isCameraExpanded = !isCameraExpanded },
+                            onClick = { expandedSection = if (expandedSection == "camera") null else "camera" },
                             glowColor = Color(0xFF2196F3)
                         ) {
-                            FeatureHeader("相机中心", "全远端取景", "📷", actions = isCameraExpanded)
+                            FeatureHeader("相机中心", "全远端取景", "📷", actions = (expandedSection == "camera"))
                         }
                         GlowCard(
                             modifier = Modifier.weight(1f),
-                            onClick = { isLogExpanded = !isLogExpanded },
+                            onClick = { expandedSection = if (expandedSection == "log") null else "log" },
                             glowColor = Color(0xFFFFC107)
                         ) {
-                            FeatureHeader("调试终端", "底层日志监控", "📝", actions = isLogExpanded)
+                            FeatureHeader("调试终端", "底层日志监控", "📝", actions = (expandedSection == "log"))
                         }
                     }
                     
-                    ExpandableContent(isCameraExpanded) {
+                    ExpandableContent(expandedSection == "camera") {
                         CameraSettingsContent(state, actions, isDark)
                     }
-                    ExpandableContent(isLogExpanded) {
+                    ExpandableContent(expandedSection == "log") {
                         LogSettingsContent(state, actions, isDark)
                     }
 
@@ -415,24 +410,24 @@ fun PhoneSyncMainScreen(
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         GlowCard(
                             modifier = Modifier.weight(1f),
-                            onClick = { isFileTransferExpanded = !isFileTransferExpanded },
+                            onClick = { expandedSection = if (expandedSection == "file") null else "file" },
                             glowColor = Color(0xFFFF9800)
                         ) {
-                            FeatureHeader("文件传输", "双向枢纽", "📂", actions = isFileTransferExpanded)
+                            FeatureHeader("文件传输", "双向枢纽", "📂", actions = (expandedSection == "file"))
                         }
                         GlowCard(
                             modifier = Modifier.weight(1f),
-                            onClick = { isVibrationExpanded = !isVibrationExpanded },
+                            onClick = { expandedSection = if (expandedSection == "vibration") null else "vibration" },
                             glowColor = Color(0xFF4CAF50)
                         ) {
-                            FeatureHeader("震动反馈", "波形定义", "📳", actions = isVibrationExpanded)
+                            FeatureHeader("震动反馈", "波形定义", "📳", actions = (expandedSection == "vibration"))
                         }
                     }
                     
-                    ExpandableContent(isFileTransferExpanded) {
+                    ExpandableContent(expandedSection == "file") {
                         FileTransferContent(state, actions, isDark)
                     }
-                    ExpandableContent(isVibrationExpanded) {
+                    ExpandableContent(expandedSection == "vibration") {
                         VibrationContent(actions)
                     }
                 }
