@@ -212,6 +212,13 @@ public class PhoneSyncListenerService extends WearableListenerService {
             return;
         }
 
+        if ("REQUEST_CAMERA_LIST".equalsIgnoreCase(action)) {
+            Intent intent = new Intent(this, PhoneSyncCameraService.class);
+            intent.setAction("cn.luke.wearsync.action.REQUEST_CAMERA_LIST");
+            startService(intent);
+            return;
+        }
+
         PhoneLog.w(TAG, "unknown camera action: " + action);
     }
 

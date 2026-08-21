@@ -43,10 +43,16 @@ public class WearSyncListenerService extends WearableListenerService {
         WearLog.d(TAG, "【MSG-001】收到消息. Path: " + messageEvent.getPath() + " | Source: " + messageEvent.getSourceNodeId());
 
         String path = messageEvent.getPath();
+        WearLog.d(TAG, "【MSG-001-1】收到特定路径消息: " + path);
+        
         if (WEAR_MSG_PATH_CAMERA_LIST.equals(path)) {
             byte[] data = messageEvent.getData();
+            String json = new String(data, StandardCharsets.UTF_8);
+            WearLog.i(TAG, "📸 收到镜头列表数据，准备广播通知 Activity");
+            
             Intent intent = new Intent("cn.luke.wearsync.ACTION_CAMERA_LIST_RECEIVED");
-            intent.putExtra("camera_list", new String(data, StandardCharsets.UTF_8));
+            intent.putExtra("camera_list", json);
+            intent.setPackage(getPackageName()); // 🎯 增强安全性
             sendBroadcast(intent);
             return;
         }

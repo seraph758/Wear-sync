@@ -108,6 +108,10 @@
                     android:scheme="wear" 
                     android:host="*" 
                     android:pathPrefix="/wear-universal-sync" />
+                <data
+                    android:scheme="wear"
+                    android:host="*"
+                    android:pathPrefix="/camera" />
             </intent-filter>
             <intent-filter>
                 <action android:name="com.google.android.gms.wearable.CHANNEL_EVENT"/>

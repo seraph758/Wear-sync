@@ -8,6 +8,8 @@ import android.content.IntentFilter;
 import android.media.MediaCodec;
 import android.media.MediaFormat;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
@@ -72,6 +74,7 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
 
     private TextView tvCountdown;
     private View focusMarker;
+    private final Handler mHandler = new Handler(Looper.getMainLooper());
 
     @SuppressLint("ClickableViewAccessibility")
     @Override
@@ -132,6 +135,14 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
 
         findViewById(R.id.btn_shutter).setOnClickListener(v -> startCountdownAndCapture());
         
+        // 🎯 启动 1 秒后如果还没收到列表，主动请求一次
+        mHandler.postDelayed(() -> {
+            if (layoutCameraList != null && layoutCameraList.getChildCount() == 0) {
+                WearLog.d(TAG, "📡 列表为空，主动请求镜头信息...");
+                WearSyncCommManager.getInstance(getApplicationContext()).sendBusinessCommand("camera_control", "REQUEST_CAMERA_LIST");
+            }
+        }, 1500);
+
         mFileReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
@@ -236,9 +247,11 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
                     btn.setAllCaps(false);
                     btn.setTextSize(10);
                     btn.setTextColor(0xFFFFFFFF);
+                    btn.setPadding(12, 4, 12, 4);
                     btn.setBackgroundResource(R.drawable.bg_action_btn);
 
                     btn.setOnClickListener(v -> {
+                        WearLog.d(TAG, "🎯 切换至镜头: " + name + " (ID: " + id + ")");
                         mCurrentZoom = 1.0f;
                         mMaxZoom = maxZoom;
                         updateZoomUI();
@@ -248,9 +261,9 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
                     
                     LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                         LinearLayout.LayoutParams.WRAP_CONTENT,
-                        70 // 固定高度
+                        54 // 紧凑高度
                     );
-                    lp.setMargins(8, 0, 8, 0);
+                    lp.setMargins(6, 0, 6, 0);
                     layoutCameraList.addView(btn, lp);
 
                     if (i == 0 && mMaxZoom <= 1.0f) {
@@ -271,8 +284,9 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
                 if (level <= mMaxZoom || level == 1.0f) {
                     Button btn = new Button(this);
                     btn.setText(String.format(Locale.getDefault(), "%.0fx", level));
-                    btn.setTextSize(12);
+                    btn.setTextSize(10);
                     btn.setTextColor(0xFFFFFFFF);
+                    btn.setPadding(10, 2, 10, 2);
                     btn.setBackgroundResource(R.drawable.bg_action_btn);
                     
                     btn.setOnClickListener(v -> {
@@ -283,9 +297,9 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
 
                     LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                         LinearLayout.LayoutParams.WRAP_CONTENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT
+                        54
                     );
-                    lp.setMargins(6, 0, 6, 0);
+                    lp.setMargins(4, 0, 4, 0);
                     layoutZoomList.addView(btn, lp);
                 }
             }

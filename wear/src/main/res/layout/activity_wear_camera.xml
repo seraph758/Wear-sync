@@ -45,36 +45,34 @@
 
     <HorizontalScrollView
         android:id="@+id/scroll_cameras"
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="32dp"
+        android:layout_marginTop="40dp"
         android:scrollbars="none"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
         <LinearLayout
             android:id="@+id/layout_camera_list"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:gravity="center"
             android:orientation="horizontal"
-            android:paddingHorizontal="24dp" />
+            android:paddingHorizontal="30dp" />
     </HorizontalScrollView>
 
     <HorizontalScrollView
         android:id="@+id/scroll_zoom"
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="8dp"
+        android:layout_marginBottom="4dp"
         android:scrollbars="none"
-        app:layout_constraintBottom_toTopOf="@id/btn_shutter"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent">
+        app:layout_constraintBottom_toTopOf="@id/btn_shutter">
         <LinearLayout
             android:id="@+id/layout_zoom_list"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:gravity="center"
             android:orientation="horizontal"
-            android:paddingHorizontal="24dp" />
+            android:paddingHorizontal="30dp" />
     </HorizontalScrollView>
 
     <Button
