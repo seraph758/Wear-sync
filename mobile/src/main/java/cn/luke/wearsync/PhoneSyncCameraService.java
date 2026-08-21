@@ -18,6 +18,7 @@ import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.CameraMetadata;
 import android.hardware.camera2.CaptureRequest;
+import android.hardware.camera2.params.MeteringRectangle;
 import android.hardware.camera2.params.OutputConfiguration;
 import android.hardware.camera2.params.SessionConfiguration;
 import android.hardware.camera2.params.StreamConfigurationMap;
@@ -67,6 +68,9 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+/**
+ * 手机端推流与控制服务：支持动态多摄、高清录像及 GPS 信息保存 (SDK 35 优化版)
+ */
 public class PhoneSyncCameraService extends Service {
     private static final String TAG = "PhoneSync_CameraSvc";
 
@@ -76,6 +80,7 @@ public class PhoneSyncCameraService extends Service {
     public static final String ACTION_SWITCH_CAMERA = "cn.luke.wearsync.action.SWITCH_CAMERA";
     public static final String ACTION_SET_ZOOM = "cn.luke.wearsync.action.SET_ZOOM";
     public static final String ACTION_TOGGLE_VIDEO = "cn.luke.wearsync.action.TOGGLE_VIDEO";
+    public static final String ACTION_FOCUS_CAMERA = "cn.luke.wearsync.action.FOCUS_CAMERA";
     public static final String ACTION_REQUEST_CAMERA_LIST = "cn.luke.wearsync.action.REQUEST_CAMERA_LIST";
     
     public static final String WEAR_CHANNEL_PATH = "/wear_data_channel/camera";
@@ -83,7 +88,6 @@ public class PhoneSyncCameraService extends Service {
 
     private final AtomicBoolean mIsStreaming = new AtomicBoolean(false);
     private final AtomicBoolean mIsRecording = new AtomicBoolean(false);
-    private final AtomicBoolean mIsCameraOpened = new AtomicBoolean(false);
     
     private String mCameraId; 
     private float mCurrentZoom = 1.0f; 
@@ -105,6 +109,7 @@ public class PhoneSyncCameraService extends Service {
     private String mCachedNodeId;
     private ChannelClient mChannelClient;
     private DataOutputStream mDataOutputStream;
+    private OrientationEventListener mOrientationEventListener;
 
     private static final Comparator<Size> SIZE_BY_AREA = (lhs, rhs) -> Long.signum((long) lhs.getWidth() * lhs.getHeight() - (long) rhs.getWidth() * rhs.getHeight());
 
@@ -121,7 +126,7 @@ public class PhoneSyncCameraService extends Service {
                 try {
                     JSONObject json = new JSONObject(new String(event.getData(), StandardCharsets.UTF_8));
                     String action = json.optString("action");
-                    switch (action.toUpperCase()) {
+                    switch (action.toUpperCase(Locale.US)) {
                         case "REQUEST_CAMERA_LIST":
                             sendCameraListToWear();
                             break;
@@ -144,6 +149,16 @@ public class PhoneSyncCameraService extends Service {
         mChannelClient = Wearable.getChannelClient(this);
         Wearable.getMessageClient(this).addListener(mMessageListener);
     }
+    
+    @Override public void onDestroy() {
+        if (mOrientationEventListener != null) {
+            mOrientationEventListener.disable();
+            mOrientationEventListener = null;
+        }
+        Wearable.getMessageClient(this).removeListener(mMessageListener);
+        stopStreamingAndRelease();
+        super.onDestroy();
+    }
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent == null) return START_NOT_STICKY;
@@ -159,33 +174,29 @@ public class PhoneSyncCameraService extends Service {
         else if (ACTION_SWITCH_CAMERA.equals(action)) switchCamera(intent.getStringExtra("camera_id"));
         else if (ACTION_TOGGLE_VIDEO.equals(action)) toggleVideoRecording();
         else if (ACTION_SET_ZOOM.equals(action)) setZoom(intent.getFloatExtra("zoom", 1.0f));
+        else if (ACTION_FOCUS_CAMERA.equals(action)) manualFocus(intent.getDoubleExtra("x", 0.5), intent.getDoubleExtra("y", 0.5));
         else if (ACTION_REQUEST_CAMERA_LIST.equals(action)) sendCameraListToWear();
         return START_NOT_STICKY;
     }
 
     private void initCameraAndStartStreaming() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) return;
-        mIsStreaming.set(true); 
-        startBackgroundThread();
-        startOrientationListener();
+        mIsStreaming.set(true); startBackgroundThread(); startOrientationListener();
         try {
             chooseOptimalSizes();
             MediaFormat format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, 256, 256);
             format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
-            format.setInteger(MediaFormat.KEY_BIT_RATE, 450_000); 
-            format.setInteger(MediaFormat.KEY_FRAME_RATE, 25); 
-            format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
+            format.setInteger(MediaFormat.KEY_BIT_RATE, 450_000); format.setInteger(MediaFormat.KEY_FRAME_RATE, 25); format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
             int rot = (mCameraFacing == CameraCharacteristics.LENS_FACING_FRONT) ? 270 : 90;
             format.setInteger(MediaFormat.KEY_ROTATION, rot);
             mEncoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);
             mEncoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
             mPhotoReader = ImageReader.newInstance(4096, 3072, ImageFormat.JPEG, 2);
             mPhotoReader.setOnImageAvailableListener(reader -> { 
-                Image img = reader.acquireLatestImage(); 
-                if (img != null) { savePhoto(img); img.close(); } 
+                Image img = reader.acquireLatestImage(); if (img != null) { savePhoto(img); img.close(); } 
             }, mBgHandler);
             openChannelStream();
-        } catch (Exception e) { PhoneLog.e(TAG, "Streaming Init Failed", e); stopStreamingAndRelease(); stopSelf(); }
+        } catch (Exception e) { stopStreamingAndRelease(); stopSelf(); }
     }
 
     private void chooseOptimalSizes() throws CameraAccessException {
@@ -209,7 +220,7 @@ public class PhoneSyncCameraService extends Service {
         try {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) return;
             mgr.openCamera(mCameraId, new CameraDevice.StateCallback() {
-                @Override public void onOpened(@NonNull CameraDevice camera) { mCameraDevice = camera; mIsCameraOpened.set(true); createCameraCaptureSession(); }
+                @Override public void onOpened(@NonNull CameraDevice camera) { mCameraDevice = camera; createCameraCaptureSession(); }
                 @Override public void onDisconnected(@NonNull CameraDevice camera) { stopStreamingAndRelease(); }
                 @Override public void onError(@NonNull CameraDevice camera, int error) { stopStreamingAndRelease(); }
             }, mBgHandler);
@@ -257,7 +268,7 @@ public class PhoneSyncCameraService extends Service {
     private void startVideoRecording() {
         try {
             File dir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "WearSync");
-            if (!dir.exists() && !dir.mkdirs()) PhoneLog.w(TAG, "Dir Creation Failed");
+            if (!dir.exists() && !dir.mkdirs()) PhoneLog.w(TAG, "Save Dir Create Failed");
             mVideoFile = new File(dir, "VID_" + new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date()) + ".mp4");
             mVideoRecorder = new MediaRecorder(this);
             mVideoRecorder.setVideoSource(MediaRecorder.VideoSource.SURFACE);
@@ -266,7 +277,7 @@ public class PhoneSyncCameraService extends Service {
             mVideoRecorder.setVideoEncoder(MediaRecorder.VideoEncoder.H264);
             mVideoRecorder.setVideoSize(1920, 1080); mVideoRecorder.setVideoFrameRate(30); mVideoRecorder.setVideoEncodingBitRate(8_000_000);
             mVideoRecorder.prepare(); mIsRecording.set(true); createCameraCaptureSession(); mVideoRecorder.start(); notifyWearVideoStatus(true);
-        } catch (Exception e) { PhoneLog.e(TAG, "Record Start Failed", e); mIsRecording.set(false); }
+        } catch (Exception e) { mIsRecording.set(false); }
     }
 
     private void stopVideoRecording() {
@@ -294,7 +305,8 @@ public class PhoneSyncCameraService extends Service {
         new Thread(() -> {
             try {
                 CameraManager mgr = (CameraManager) getSystemService(Context.CAMERA_SERVICE); JSONArray arr = new JSONArray();
-                for (String id : mgr.getCameraIdList()) {
+                String[] idList = mgr.getCameraIdList();
+                for (String id : idList) {
                     CameraCharacteristics chars = mgr.getCameraCharacteristics(id);
                     StreamConfigurationMap map = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
                     if (map == null) continue;
@@ -328,8 +340,8 @@ public class PhoneSyncCameraService extends Service {
             LocationManager lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return;
             Location bestLocation = null;
-            for (String provider : lm.getProviders(true)) {
-                Location l = lm.getLastKnownLocation(provider);
+            for (String p : lm.getProviders(true)) {
+                Location l = lm.getLastKnownLocation(p);
                 if (l != null && (bestLocation == null || l.getAccuracy() < bestLocation.getAccuracy())) {
                     bestLocation = l;
                 }
@@ -345,13 +357,34 @@ public class PhoneSyncCameraService extends Service {
 
     private void setZoom(float z) { mCurrentZoom = Math.max(1.0f, Math.min(z, mMaxZoom)); startPreviewRequest(); }
     private void switchCamera(String id) { if (id != null) { mCameraId = id; stopStreamingAndRelease(); initCameraAndStartStreaming(); } }
+    
+    private void manualFocus(double x, double y) {
+        if (mCaptureSession == null || mCameraDevice == null || mEncoderSurface == null) return;
+        try {
+            CameraCharacteristics chars = ((CameraManager) getSystemService(Context.CAMERA_SERVICE)).getCameraCharacteristics(mCameraDevice.getId());
+            Rect sensor = chars.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE);
+            if (sensor != null) {
+                int centerX = (int) (x * sensor.width()), centerY = (int) (y * sensor.height());
+                MeteringRectangle area = new MeteringRectangle(Math.max(0, centerX - 100), Math.max(0, centerY - 100), Math.min(sensor.width(), 200), Math.min(sensor.height(), 200), MeteringRectangle.METERING_WEIGHT_MAX);
+                CaptureRequest.Builder builder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
+                builder.addTarget(mEncoderSurface);
+                builder.set(CaptureRequest.CONTROL_AF_REGIONS, new MeteringRectangle[]{area});
+                builder.set(CaptureRequest.CONTROL_AE_REGIONS, new MeteringRectangle[]{area});
+                builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO);
+                builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_START);
+                mCaptureSession.setRepeatingRequest(builder.build(), null, mBgHandler);
+            }
+        } catch (Exception ignored) {}
+    }
+
     private void openChannelStream() { mChannelClient.openChannel(mCachedNodeId, WEAR_CHANNEL_PATH).addOnSuccessListener(c -> mChannelClient.getOutputStream(c).addOnSuccessListener(os -> { mDataOutputStream = new DataOutputStream(os); sendCameraListToWear(); try { mEncoderSurface = mEncoder.createInputSurface(); mEncoder.setCallback(new EncoderCallback(), mBgHandler); mEncoder.start(); startCameraHardware(); } catch (Exception ignored) {} })); }
     private void stopStreamingAndRelease() { mIsStreaming.set(false); stopVideoRecording(); if (mCaptureSession != null) { try { mCaptureSession.close(); } catch (Exception ignored) {} mCaptureSession = null; } if (mCameraDevice != null) { try { mCameraDevice.close(); } catch (Exception ignored) {} mCameraDevice = null; } if (mEncoder != null) { try { mEncoder.stop(); mEncoder.release(); } catch (Exception ignored) {} mEncoder = null; } if (mBgThread != null) { mBgThread.quitSafely(); mBgThread = null; } }
     private void startBackgroundThread() { if (mBgThread == null) { mBgThread = new HandlerThread("CamBg"); mBgThread.start(); mBgHandler = new Handler(mBgThread.getLooper()); } }
-    private void startOrientationListener() { OrientationEventListener l = new OrientationEventListener(this) { @Override public void onOrientationChanged(int o) { if (o != ORIENTATION_UNKNOWN) mDeviceOrientation = o; } }; l.enable(); }
+    private void startOrientationListener() { mOrientationEventListener = new OrientationEventListener(this) { @Override public void onOrientationChanged(int o) { if (o != ORIENTATION_UNKNOWN) mDeviceOrientation = o; } }; mOrientationEventListener.enable(); }
     private void createNotificationChannel() { ((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).createNotificationChannel(new NotificationChannel("camera_service_channel", "Camera", NotificationManager.IMPORTANCE_LOW)); }
     private Notification buildNotification() { return new NotificationCompat.Builder(this, "camera_service_channel").setContentTitle("WearSync Camera").setSmallIcon(R.drawable.ic_notification).setOngoing(true).build(); }
     @Nullable @Override public IBinder onBind(Intent intent) { return null; }
+
     private class EncoderCallback extends MediaCodec.Callback {
         @Override public void onInputBufferAvailable(@NonNull MediaCodec c, int i) {}
         @Override public void onOutputBufferAvailable(@NonNull MediaCodec c, int i, @NonNull MediaCodec.BufferInfo info) {
