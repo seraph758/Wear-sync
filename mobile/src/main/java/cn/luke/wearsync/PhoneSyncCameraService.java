@@ -72,7 +72,8 @@ import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * 手机端推流与控制服务：支持动态多摄、高清录像及 GPS 信息保存 (SDK 35 优化版)
+ * 手机端相机同步服务 (SDK 35 优化版)
+ * 修复：黑屏、录像、前置翻转及拍照保存
  */
 public class PhoneSyncCameraService extends Service {
     private static final String TAG = "PhoneSync_CameraSvc";
@@ -191,7 +192,7 @@ public class PhoneSyncCameraService extends Service {
                 if (img != null) { savePhoto(img); img.close(); } 
             }, mBgHandler);
             startCameraHardware();
-        } catch (Exception e) { stopStreamingAndRelease(); stopSelf(); }
+        } catch (Exception e) { PhoneLog.e(TAG, "Streaming Init Failed", e); stopStreamingAndRelease(); stopSelf(); }
     }
 
     private void chooseOptimalSizes() throws CameraAccessException {
@@ -229,7 +230,8 @@ public class PhoneSyncCameraService extends Service {
         if (mCameraDevice == null || mEncoderSurface == null || mPhotoReader == null || !mIsStreaming.get()) return;
         try {
             List<Surface> targets = new ArrayList<>();
-            targets.add(mEncoderSurface); targets.add(mPhotoReader.getSurface());
+            targets.add(mEncoderSurface); 
+            targets.add(mPhotoReader.getSurface());
             if (mIsRecording.get() && mVideoRecorder != null) targets.add(mVideoRecorder.getSurface());
             List<OutputConfiguration> configs = new ArrayList<>();
             for (Surface s : targets) configs.add(new OutputConfiguration(s));
@@ -238,16 +240,16 @@ public class PhoneSyncCameraService extends Service {
                     if (!mIsStreaming.get()) { session.close(); return; }
                     mCaptureSession = session; startPreviewRequest(); openChannelStream();
                 }
-                @Override public void onConfigureFailed(@NonNull CameraCaptureSession session) { stopStreamingAndRelease(); }
+                @Override public void onConfigureFailed(@NonNull CameraCaptureSession session) { PhoneLog.e(TAG, "Session Config Failed"); stopStreamingAndRelease(); }
             }));
-        } catch (Exception ignored) {}
+        } catch (Exception e) { PhoneLog.e(TAG, "Create Session Error", e); }
     }
 
     private void openChannelStream() {
         if (mDataOutputStream != null || mCachedNodeId == null) return;
         mChannelClient.openChannel(mCachedNodeId, WEAR_CHANNEL_PATH).addOnSuccessListener(c -> mChannelClient.getOutputStream(c).addOnSuccessListener(os -> {
             mDataOutputStream = new DataOutputStream(os); sendCameraListToWear();
-            try { mEncoder.setCallback(new EncoderCallback(), mBgHandler); mEncoder.start(); } catch (Exception ignored) {}
+            try { mEncoder.setCallback(new EncoderCallback(), mBgHandler); mEncoder.start(); PhoneLog.d(TAG, "Encoder & Channel OK"); } catch (Exception ignored) {}
         }));
     }
 
@@ -261,7 +263,7 @@ public class PhoneSyncCameraService extends Service {
     }
 
     private void captureHighResPhoto() {
-        if (mCaptureSession == null || !mIsStreaming.get()) return;
+        if (mCaptureSession == null || !mIsStreaming.get()) { PhoneLog.w(TAG, "Capture failed: Session null or not streaming"); return; }
         try {
             CaptureRequest.Builder b = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
             b.addTarget(mPhotoReader.getSurface()); applyZoom(b);
@@ -269,7 +271,8 @@ public class PhoneSyncCameraService extends Service {
             b.set(CaptureRequest.JPEG_ORIENTATION, (mSensorOrientation + devRot) % 360);
             b.set(CaptureRequest.JPEG_QUALITY, (byte)100);
             mCaptureSession.capture(b.build(), null, mBgHandler);
-        } catch (Exception ignored) {}
+            PhoneLog.d(TAG, "📸 High-res capture requested");
+        } catch (Exception e) { PhoneLog.e(TAG, "Capture Request Error", e); }
     }
 
     private void toggleVideoRecording() { if (mIsRecording.get()) stopVideoRecording(); else startVideoRecording(); }
@@ -286,7 +289,7 @@ public class PhoneSyncCameraService extends Service {
             mVideoRecorder.setVideoEncoder(MediaRecorder.VideoEncoder.H264);
             mVideoRecorder.setVideoSize(1920, 1080); mVideoRecorder.setVideoFrameRate(30); mVideoRecorder.setVideoEncodingBitRate(8_000_000);
             mVideoRecorder.prepare(); mIsRecording.set(true); createCameraCaptureSession(); mVideoRecorder.start(); notifyWearVideoStatus(true);
-        } catch (Exception e) { mIsRecording.set(false); }
+        } catch (Exception e) { PhoneLog.e(TAG, "Record Start Failed", e); mIsRecording.set(false); }
     }
 
     private void stopVideoRecording() {
@@ -341,7 +344,8 @@ public class PhoneSyncCameraService extends Service {
             try (FileOutputStream fos = new FileOutputStream(f)) { fos.write(d); }
             if (getSharedPreferences("dndsync_prefs", Context.MODE_PRIVATE).getBoolean("save_location_enabled", false)) writeLocationExif(f);
             MediaScannerConnection.scanFile(this, new String[]{f.getAbsolutePath()}, null, null);
-        } catch (Exception ignored) {}
+            PhoneLog.d(TAG, "✅ Photo saved: " + f.getName());
+        } catch (Exception e) { PhoneLog.e(TAG, "Save Photo Error", e); }
     }
 
     private void writeLocationExif(File f) {
