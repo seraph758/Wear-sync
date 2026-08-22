@@ -155,8 +155,19 @@ fun PhoneSyncMainScreen(state: PhoneSyncUIState, actions: PhoneSyncUIActions) {
         val cardBgColor = if (isDark) Color(0xFF1C1C1E) else Color(0xFFFFFFFF)
         var expandedSection by remember { mutableStateOf<String?>(null) }
         val hasError = !state.isConnected || !state.isNotificationAllowed || !state.isCameraAllowed
-        var isStatusExpanded by remember { mutableStateOf(hasError) }
-        LaunchedEffect(hasError) { isStatusExpanded = hasError }
+        // 🚀 默认折叠，仅在状态恶化（出现新红灯）时自动展开
+        var isStatusExpanded by remember { mutableStateOf(false) }
+        var lastErrorCount by remember { mutableIntStateOf(listOf(state.isConnected, state.isNotificationAllowed, state.isCameraAllowed).count { !it }) }
+
+        LaunchedEffect(state.isConnected, state.isNotificationAllowed, state.isCameraAllowed) {
+            val currentErrors = listOf(state.isConnected, state.isNotificationAllowed, state.isCameraAllowed).count { !it }
+            if (currentErrors > lastErrorCount) {
+                isStatusExpanded = true
+            } else if (currentErrors == 0) {
+                isStatusExpanded = false
+            }
+            lastErrorCount = currentErrors
+        }
         Surface(modifier = Modifier.fillMaxSize(), color = backgroundColor) {
             Column(modifier = Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 20.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Row(modifier = Modifier.padding(top = 24.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {

@@ -101,6 +101,7 @@ public class PhoneSyncCameraService extends Service {
     private int mCameraFacing = CameraCharacteristics.LENS_FACING_BACK;
     private int mSensorOrientation = 0;
     private int mDeviceOrientation = OrientationEventListener.ORIENTATION_UNKNOWN;
+    private Size mPhotoSize = new Size(1920, 1080); // 🎯 默认拍照尺寸
 
     private HandlerThread mBgThread;
     private Handler mBgHandler;
@@ -219,8 +220,8 @@ public class PhoneSyncCameraService extends Service {
             mEncoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
             mEncoderSurface = mEncoder.createInputSurface(); 
             
-            PhoneLog.d(TAG, "🖼️ 正在配置 ImageReader (用于拍照)...");
-            mPhotoReader = ImageReader.newInstance(4096, 3072, ImageFormat.JPEG, 2);
+            PhoneLog.d(TAG, "🖼️ 正在配置 ImageReader (用于拍照)... 尺寸: " + mPhotoSize);
+            mPhotoReader = ImageReader.newInstance(mPhotoSize.getWidth(), mPhotoSize.getHeight(), ImageFormat.JPEG, 2);
             mPhotoReader.setOnImageAvailableListener(reader -> { 
                 Image img = reader.acquireLatestImage(); 
                 if (img != null) { savePhoto(img); img.close(); } 
@@ -259,7 +260,17 @@ public class PhoneSyncCameraService extends Service {
         mMaxZoom = Objects.requireNonNullElse(chars.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM), 1.0f);
         mActiveArraySize = chars.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE);
         mSensorOrientation = Objects.requireNonNullElse(chars.get(CameraCharacteristics.SENSOR_ORIENTATION), 0);
-        PhoneLog.d(TAG, "📊 相机参数: Facing=" + mCameraFacing + ", MaxZoom=" + mMaxZoom + ", Orientation=" + mSensorOrientation);
+        
+        // 🎯 动态选择该镜头支持的最大 JPEG 尺寸，防止 Session 配置失败
+        StreamConfigurationMap map = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+        if (map != null) {
+            Size[] sizes = map.getOutputSizes(ImageFormat.JPEG);
+            if (sizes != null && sizes.length > 0) {
+                mPhotoSize = Collections.max(Arrays.asList(sizes), SIZE_BY_AREA);
+            }
+        }
+        
+        PhoneLog.d(TAG, "📊 相机参数: Facing=" + mCameraFacing + ", MaxZoom=" + mMaxZoom + ", Orientation=" + mSensorOrientation + ", PhotoSize=" + mPhotoSize);
     }
 
     @SuppressLint("MissingPermission")

@@ -17,6 +17,14 @@ public class WearSyncState {
         if (nodeId == null || nodeId.isEmpty()) {
             return;
         }
+        
+        // 🚀 优化：只有当 NodeID 真正发生变化时才执行写入，减少 IO 损耗
+        String oldNodeId = getNodeId(context);
+        if (nodeId.equals(oldNodeId)) {
+            activeNodeId = nodeId;
+            return;
+        }
+
         activeNodeId = nodeId;
         context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
                 .edit()
