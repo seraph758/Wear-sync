@@ -229,7 +229,9 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
                         if (rb != null) { rb.setText(isRecording ? "停" : "录"); rb.setTextColor(isRecording ? 0xFFFF0000 : 0xFFFFFFFF); }
                         showCaptureHint(isRecording ? "录像中" : "录像停止");
                     });
-                } catch (Exception ignored) {}
+                } catch (Exception e) {
+                    WearLog.e(TAG, "解析视频状态失败", e);
+                }
             }
         };
         registerReceiver(mVideoStatusReceiver, new IntentFilter("cn.luke.wearsync.ACTION_VIDEO_STATUS"), Context.RECEIVER_EXPORTED);
@@ -275,7 +277,14 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
                         int outId = mDecoder.dequeueOutputBuffer(bi, 10000);
                         if (outId >= 0) mDecoder.releaseOutputBuffer(outId, true);
                     }
-                } catch (Exception e) { if (e instanceof IllegalStateException) initDecoder(); }
+                } catch (Exception e) {
+                    if (e instanceof IllegalStateException) {
+                        WearLog.w(TAG, "解码器状态异常，尝试重置");
+                        initDecoder();
+                    } else {
+                        WearLog.e(TAG, "解码线程意外错误", e);
+                    }
+                }
             }
         }).start();
     }
@@ -292,10 +301,33 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
     }
 
     public static void forceClose() { WearCameraActivity activity = sActivityRef.get(); if (activity != null && !activity.isUserExiting) { activity.runOnUiThread(activity::cleanExit); } }
-    private void cleanExit() { isUserExiting = true; if (mDecoder != null) { try { mDecoder.stop(); mDecoder.release(); } catch (Exception ignored) {} } finishAndRemoveTask(); }
+    private void cleanExit() {
+        isUserExiting = true;
+        if (mDecoder != null) {
+            try {
+                mDecoder.stop();
+                mDecoder.release();
+            } catch (Exception e) {
+                WearLog.w(TAG, "清理解码器异常: " + e.getMessage());
+            }
+            mDecoder = null;
+        }
+        finishAndRemoveTask();
+    }
     @Override public void surfaceCreated(@NonNull SurfaceHolder h) { isSurfaceReady = true; initDecoder(); }
     @Override public void surfaceChanged(@NonNull SurfaceHolder h, int f, int w, int h1) {}
     @Override public void surfaceDestroyed(@NonNull SurfaceHolder h) { isSurfaceReady = false; }
-    @Override protected void onDestroy() { Wearable.getChannelClient(this).unregisterChannelCallback(mChannelListener); try { unregisterReceiver(mFileReceiver); unregisterReceiver(mCameraListReceiver); unregisterReceiver(mVideoStatusReceiver); } catch (Exception ignored) {} cleanExit(); super.onDestroy(); }
+    @Override protected void onDestroy() {
+        Wearable.getChannelClient(this).unregisterChannelCallback(mChannelListener);
+        try {
+            unregisterReceiver(mFileReceiver);
+            unregisterReceiver(mCameraListReceiver);
+            unregisterReceiver(mVideoStatusReceiver);
+        } catch (Exception e) {
+            WearLog.w(TAG, "解注册接收器失败: " + e.getMessage());
+        }
+        cleanExit();
+        super.onDestroy();
+    }
     private void showCaptureHint(String t) { if (tvStatusHint != null) { tvStatusHint.setText(t); tvStatusHint.setVisibility(View.VISIBLE); tvStatusHint.animate().alpha(0f).setDuration(1500).setStartDelay(500).withEndAction(()->tvStatusHint.setVisibility(View.GONE)).start(); } }
 }

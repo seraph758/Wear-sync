@@ -3,7 +3,6 @@ package cn.luke.wearsync;
 import android.content.Intent;
 
 import androidx.annotation.NonNull;
-import androidx.wear.remote.interactions.RemoteActivityHelper;
 
 import com.google.android.gms.tasks.Tasks;
 import com.google.android.gms.wearable.ChannelClient;
@@ -11,7 +10,6 @@ import com.google.android.gms.wearable.MessageEvent;
 import com.google.android.gms.wearable.Node;
 import com.google.android.gms.wearable.Wearable;
 import com.google.android.gms.wearable.WearableListenerService;
-import com.google.common.util.concurrent.ListenableFuture;
 
 import org.json.JSONObject;
 
@@ -133,22 +131,25 @@ public class PhoneSyncListenerService extends WearableListenerService {
     }
 
     private void handleCamera(JSONObject json, String action) {
-        PhoneLog.d(TAG, "P-080 handleCamera action=" + action);
+        PhoneLog.d(TAG, "P-080 收到相机指令，Action=" + action);
         String nodeId = WearSyncState.getNodeId(this);
 
         if ("START_CAMERA".equalsIgnoreCase(action) || "START_CAMERA_UI".equalsIgnoreCase(action) || "open_phone_camera".equalsIgnoreCase(action)) {
+            PhoneLog.d(TAG, "📸 准备启动手机端相机流程...");
             if (nodeId == null || nodeId.isEmpty()) {
+                PhoneLog.w(TAG, "⚠️ 内存无 NodeID，尝试扫描连接的节点...");
                 REMOTE_EXECUTOR.execute(() -> {
                     try {
                         List<Node> nodes = Tasks.await(Wearable.getNodeClient(this).getConnectedNodes());
                         if (nodes == null || nodes.isEmpty()) {
+                            PhoneLog.e(TAG, "❌ 未找到任何连接的 Wear 节点");
                             return;
                         }
                         String id = nodes.get(0).getId();
                         WearSyncState.setNodeId(this, id);
                         launchLocalCameraSpringboard(id);
                     } catch (Exception e) {
-                        PhoneLog.e(TAG, "node scan failed", e);
+                        PhoneLog.e(TAG, "❌ 节点扫描失败", e);
                     }
                 });
             } else {
@@ -168,6 +169,7 @@ public class PhoneSyncListenerService extends WearableListenerService {
         }
 
         if ("STOP_CAMERA".equalsIgnoreCase(action) || "FORCE_QUIT_CAMERA".equalsIgnoreCase(action)) {
+            PhoneLog.d(TAG, "🛑 收到停止相机指令");
             Intent stop = new Intent(this, PhoneSyncCameraService.class);
             stop.setAction(PhoneSyncCameraService.ACTION_STOP_CAMERA);
             startService(stop);
@@ -175,6 +177,7 @@ public class PhoneSyncListenerService extends WearableListenerService {
         }
 
         if ("TAKE_PHOTO".equalsIgnoreCase(action)) {
+            PhoneLog.d(TAG, "📸 收到拍照指令");
             Intent photo = new Intent(this, PhoneSyncCameraService.class);
             photo.setAction(PhoneSyncCameraService.ACTION_TAKE_PHOTO);
             startService(photo);
@@ -182,9 +185,11 @@ public class PhoneSyncListenerService extends WearableListenerService {
         }
 
         if ("SWITCH_CAMERA".equalsIgnoreCase(action) || "SELECT_CAMERA".equalsIgnoreCase(action)) {
+            String camId = json.optString("camera_id", json.optString("cameraId"));
+            PhoneLog.d(TAG, "🔄 收到切换摄像头指令: " + camId);
             Intent intent = new Intent(this, PhoneSyncCameraService.class);
             intent.setAction(PhoneSyncCameraService.ACTION_SWITCH_CAMERA);
-            intent.putExtra("camera_id", json.optString("camera_id", json.optString("cameraId")));
+            intent.putExtra("camera_id", camId);
             startService(intent);
             return;
         }

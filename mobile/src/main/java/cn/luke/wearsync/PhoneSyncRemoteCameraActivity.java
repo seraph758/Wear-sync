@@ -35,10 +35,13 @@ public class PhoneSyncRemoteCameraActivity extends ComponentActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        PhoneLog.d(TAG, "🟢 PhoneSyncRemoteCameraActivity onCreate");
         // 无论是本地还是远程触发，都走这个统一的权限检查流程
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+            PhoneLog.d(TAG, "✅ 相机权限已获得，直接启动服务");
             startCameraServiceAndFinish();
         } else {
+            PhoneLog.w(TAG, "⚠️ 缺少相机权限，准备请求...");
             cameraPermissionLauncher.launch(Manifest.permission.CAMERA);
         }
     }
@@ -48,6 +51,7 @@ public class PhoneSyncRemoteCameraActivity extends ComponentActivity {
         Intent intent = getIntent();
         String source = intent.getStringExtra(EXTRA_SOURCE);
         String nodeId = intent.getStringExtra("remote_node_id");
+        PhoneLog.d(TAG, "🚀 准备启动 PhoneSyncCameraService. Source=" + source + ", NodeID=" + nodeId);
         
         Intent serviceIntent = new Intent(this, PhoneSyncCameraService.class);
         serviceIntent.setAction(PhoneSyncCameraService.ACTION_START_CAMERA);
@@ -59,7 +63,12 @@ public class PhoneSyncRemoteCameraActivity extends ComponentActivity {
         }
         
         // 使用 startForegroundService 确保在 Android 8.0+ 上能正常启动
-        ContextCompat.startForegroundService(this, serviceIntent);
+        try {
+            ContextCompat.startForegroundService(this, serviceIntent);
+            PhoneLog.d(TAG, "✅ startForegroundService 调用成功");
+        } catch (Exception e) {
+            PhoneLog.e(TAG, "❌ startForegroundService 失败", e);
+        }
         finish(); // 任务完成，立即关闭自身
     }
 }
