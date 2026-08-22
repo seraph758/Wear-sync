@@ -45,12 +45,17 @@ public class PhoneSyncRemoteCameraActivity extends ComponentActivity {
 
     private void startCameraServiceAndFinish() {
         // 将启动来源传递给 Service，方便 Service 内部做不同处理（如果需要）
-        String source = getIntent().getStringExtra(EXTRA_SOURCE);
+        Intent intent = getIntent();
+        String source = intent.getStringExtra(EXTRA_SOURCE);
+        String nodeId = intent.getStringExtra("remote_node_id");
         
         Intent serviceIntent = new Intent(this, PhoneSyncCameraService.class);
         serviceIntent.setAction(PhoneSyncCameraService.ACTION_START_CAMERA);
         if (source != null) {
             serviceIntent.putExtra(EXTRA_SOURCE, source);
+        }
+        if (nodeId != null) {
+            serviceIntent.putExtra("remote_node_id", nodeId);
         }
         
         // 使用 startForegroundService 确保在 Android 8.0+ 上能正常启动

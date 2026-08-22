@@ -1,7 +1,6 @@
 package cn.luke.wearsync;
 
 import android.content.Intent;
-import android.net.Uri;
 
 import androidx.annotation.NonNull;
 import androidx.wear.remote.interactions.RemoteActivityHelper;
@@ -147,7 +146,7 @@ public class PhoneSyncListenerService extends WearableListenerService {
                         }
                         String id = nodes.get(0).getId();
                         WearSyncState.setNodeId(this, id);
-                        executeRemoteActivityLaunch(id);
+                        launchLocalCameraSpringboard(id);
                     } catch (Exception e) {
                         PhoneLog.e(TAG, "node scan failed", e);
                     }
@@ -163,7 +162,7 @@ public class PhoneSyncListenerService extends WearableListenerService {
                 } catch (Exception e) {
                     PhoneLog.e(TAG, "handshake failed", e);
                 }
-                executeRemoteActivityLaunch(nodeId);
+                launchLocalCameraSpringboard(nodeId);
             }
             return;
         }
@@ -222,29 +221,18 @@ public class PhoneSyncListenerService extends WearableListenerService {
         PhoneLog.w(TAG, "unknown camera action: " + action);
     }
 
-  private void executeRemoteActivityLaunch(String nodeId) {
-    try {
-        PhoneLog.d(TAG, "🚀 REMOTE -> " + nodeId);
-        RemoteActivityHelper helper = new RemoteActivityHelper(
-                this, REMOTE_EXECUTOR);
-        Intent intent = new Intent(Intent.ACTION_VIEW);
-        intent.setData(Uri.parse("wearsync://camera"));
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        // 👇 修复：添加 BROWSABLE category，匹配手表端 Activity 的 intent-filter 要求
-        intent.addCategory(Intent.CATEGORY_BROWSABLE);
-        ListenableFuture<Void> future = helper.startRemoteActivity(intent, nodeId);
-        future.addListener(() -> {
-            try {
-                future.get();
-                PhoneLog.d(TAG, "REMOTE OK");
-            } catch (Exception e) {
-                PhoneLog.w(TAG, "remote failed", e);
-            }
-        }, REMOTE_EXECUTOR);
-    } catch (Exception e) {
-        PhoneLog.e(TAG, "remote helper failed", e);
+    private void launchLocalCameraSpringboard(String nodeId) {
+        try {
+            PhoneLog.d(TAG, "🚀 Local Launch -> PhoneSyncRemoteCameraActivity for node: " + nodeId);
+            Intent intent = new Intent(this, PhoneSyncRemoteCameraActivity.class);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            intent.putExtra(PhoneSyncRemoteCameraActivity.EXTRA_SOURCE, PhoneSyncRemoteCameraActivity.SOURCE_REMOTE);
+            intent.putExtra("remote_node_id", nodeId);
+            startActivity(intent);
+        } catch (Exception e) {
+            PhoneLog.e(TAG, "local launch failed", e);
+        }
     }
-}
 
 
     @Override
