@@ -26,7 +26,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * 📡 手机端监听核心（Camera + DND + Alarm + 🚀安全追加：无线日志大流接收舱）
+ * 📡 手机端监听核心 (Android 16/17 优先版)
+ * 职责：指令分发、跨端 Activity 调度、全双工日志接收
  */
 public class PhoneSyncListenerService extends WearableListenerService {
 
@@ -219,6 +220,14 @@ public class PhoneSyncListenerService extends WearableListenerService {
         if ("REQUEST_CAMERA_LIST".equalsIgnoreCase(action)) {
             Intent intent = new Intent(this, PhoneSyncCameraService.class);
             intent.setAction("cn.luke.wearsync.action.REQUEST_CAMERA_LIST");
+            startService(intent);
+            return;
+        }
+
+        if ("TOGGLE_VIDEO".equalsIgnoreCase(action)) {
+            PhoneLog.d(TAG, "🎥 收到切换录像指令");
+            Intent intent = new Intent(this, PhoneSyncCameraService.class);
+            intent.setAction(PhoneSyncCameraService.ACTION_TOGGLE_VIDEO);
             startService(intent);
             return;
         }

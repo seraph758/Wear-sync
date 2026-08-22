@@ -17,12 +17,12 @@ def githubRunNumber = System.getenv("GITHUB_RUN_NUMBER") ?: "1"
 
 android {
     namespace "cn.luke.wearsync"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId "cn.luke.wearsync"
         minSdk = 35
-        targetSdk = 36
+        targetSdk = 37
         versionCode githubRunNumber.toInteger()
         versionName "1.0.${githubRunNumber}"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"

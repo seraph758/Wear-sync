@@ -21,7 +21,7 @@ def githubRunNumber = System.getenv("GITHUB_RUN_NUMBER") ?: "1"
 
 android {
     namespace "cn.luke.wearsync"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId "cn.luke.wearsync"

@@ -44,8 +44,8 @@ import java.util.Locale;
 import java.util.concurrent.LinkedBlockingQueue;
 
 /**
- * 手表端相机 UI (SDK 35 最终稳定性版本)
- * 修复：黑屏 (解码状态机同步)、按钮重叠、录像切换显示
+ * 手表端相机 UI (Android 16/17 优先版)
+ * 职责：极致低延迟预览、多焦段切换、手势缩放、高性能 H.264 解码
  */
 public class WearCameraActivity extends ComponentActivity implements SurfaceHolder.Callback {
     private static final String TAG = "WearSync_WearCameraUI";
@@ -291,12 +291,13 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
 
     private void initDecoder() {
         try {
+            // 🎯 将解码器默认尺寸设为 256x256，匹配手机端的流畅优先策略
             MediaFormat f = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, 256, 256);
             f.setInteger(MediaFormat.KEY_ROTATION, 90);
             mDecoder = MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);
             mDecoder.configure(f, surfaceView.getHolder().getSurface(), null, 0);
             mDecoder.start();
-            WearLog.i(TAG, "Decoder Synchronized");
+            WearLog.i(TAG, "Decoder Synchronized (Low-Res Fluid Mode)");
         } catch (Exception e) { WearLog.e(TAG, "Init Decoder err", e); }
     }
 

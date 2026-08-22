@@ -72,8 +72,9 @@ import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * 手机端相机同步服务 (SDK 35 稳定版)
- * 修复：黑屏 (Surface 生命周期管理)、录像文件路径、前置翻转及拍照保存逻辑
+ * 手机端相机同步服务 (Android 16/17 优先版)
+ * 职责：高性能流媒体传输、多镜头切换、高保真拍照
+ * 优化：采用 SessionConfiguration API，动态分辨率适配，极致流畅度优先
  */
 public class PhoneSyncCameraService extends Service {
     private static final String TAG = "PhoneSync_CameraSvc";
@@ -102,6 +103,7 @@ public class PhoneSyncCameraService extends Service {
     private int mSensorOrientation = 0;
     private int mDeviceOrientation = OrientationEventListener.ORIENTATION_UNKNOWN;
     private Size mPhotoSize = new Size(1920, 1080); // 🎯 默认拍照尺寸
+    private Size mPreviewSize = new Size(256, 256); // 🎯 默认低分预览尺寸，优先流畅度
 
     private HandlerThread mBgThread;
     private Handler mBgHandler;
@@ -207,8 +209,8 @@ public class PhoneSyncCameraService extends Service {
         try {
             PhoneLog.d(TAG, "🔍 正在选择最佳相机尺寸...");
             chooseOptimalSizes();
-            PhoneLog.d(TAG, "🎥 正在配置 H.264 编码器...");
-            MediaFormat format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, 256, 256);
+            PhoneLog.d(TAG, "🎥 正在配置 H.264 编码器 (流畅优先模式)... 尺寸: " + mPreviewSize);
+            MediaFormat format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, mPreviewSize.getWidth(), mPreviewSize.getHeight());
             format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
             format.setInteger(MediaFormat.KEY_BIT_RATE, 450_000); 
             format.setInteger(MediaFormat.KEY_FRAME_RATE, 25); 
@@ -264,13 +266,32 @@ public class PhoneSyncCameraService extends Service {
         // 🎯 动态选择该镜头支持的最大 JPEG 尺寸，防止 Session 配置失败
         StreamConfigurationMap map = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
         if (map != null) {
-            Size[] sizes = map.getOutputSizes(ImageFormat.JPEG);
-            if (sizes != null && sizes.length > 0) {
-                mPhotoSize = Collections.max(Arrays.asList(sizes), SIZE_BY_AREA);
+            Size[] photoSizes = map.getOutputSizes(ImageFormat.JPEG);
+            if (photoSizes != null && photoSizes.length > 0) {
+                mPhotoSize = Collections.max(Arrays.asList(photoSizes), SIZE_BY_AREA);
+            }
+            
+            // 🎯 动态选择一个适合流传输的预览尺寸 (接近 480p)
+            Size[] previewSizes = map.getOutputSizes(MediaCodec.class);
+            if (previewSizes != null && previewSizes.length > 0) {
+                mPreviewSize = chooseBestPreviewSize(previewSizes);
             }
         }
         
-        PhoneLog.d(TAG, "📊 相机参数: Facing=" + mCameraFacing + ", MaxZoom=" + mMaxZoom + ", Orientation=" + mSensorOrientation + ", PhotoSize=" + mPhotoSize);
+        PhoneLog.d(TAG, "📊 相机参数: Facing=" + mCameraFacing + ", MaxZoom=" + mMaxZoom + ", Orientation=" + mSensorOrientation + ", PhotoSize=" + mPhotoSize + ", PreviewSize=" + mPreviewSize);
+    }
+
+    private Size chooseBestPreviewSize(Size[] sizes) {
+        // 🚀 优先寻找 250px-350px 左右的低分辨率，以确保传输流畅度
+        for (Size s : sizes) {
+            if (s.getWidth() <= 350 && s.getWidth() >= 240) return s;
+        }
+        // 如果没找到，找最小的一个
+        Size smallest = sizes[0];
+        for (Size s : sizes) {
+            if (s.getWidth() * s.getHeight() < smallest.getWidth() * smallest.getHeight()) smallest = s;
+        }
+        return smallest;
     }
 
     @SuppressLint("MissingPermission")
@@ -308,31 +329,40 @@ public class PhoneSyncCameraService extends Service {
             return;
         }
         try {
-            PhoneLog.d(TAG, "🏗️ 正在创建相机捕获会话 (CaptureSession)...");
-            List<Surface> targets = new ArrayList<>();
-            targets.add(mEncoderSurface); targets.add(mPhotoReader.getSurface());
-            if (mIsRecording.get() && mVideoRecorder != null) targets.add(mVideoRecorder.getSurface());
+            PhoneLog.d(TAG, "🏗️ 正在创建相机捕获会话 (SessionConfiguration)...");
+            List<OutputConfiguration> outputs = new ArrayList<>();
+            if (mEncoderSurface.isValid()) outputs.add(new OutputConfiguration(mEncoderSurface));
+            if (mPhotoReader.getSurface().isValid()) outputs.add(new OutputConfiguration(mPhotoReader.getSurface()));
             
-            List<OutputConfiguration> configs = new ArrayList<>();
-            for (Surface s : targets) configs.add(new OutputConfiguration(s));
+            if (mIsRecording.get() && mVideoRecorder != null) {
+                Surface recSurface = mVideoRecorder.getSurface();
+                if (recSurface != null && recSurface.isValid()) outputs.add(new OutputConfiguration(recSurface));
+            }
             
-            mCameraDevice.createCaptureSession(new SessionConfiguration(SessionConfiguration.SESSION_REGULAR, configs, command -> mBgHandler.post(command), new CameraCaptureSession.StateCallback() {
-                @Override public void onConfigured(@NonNull CameraCaptureSession session) { 
-                    PhoneLog.d(TAG, "✅ 相机捕获会话配置成功");
-                    if (!mIsStreaming.get()) { 
-                        PhoneLog.w(TAG, "⚠️ 会话已配置但 Streaming 状态已关闭，正在释放...");
-                        session.close(); 
-                        return; 
+            // 🚀 采用 Android 15/16+ 推荐的 SessionConfiguration API
+            SessionConfiguration sessionConfig = new SessionConfiguration(
+                SessionConfiguration.SESSION_REGULAR,
+                outputs,
+                command -> mBgHandler.post(command),
+                new CameraCaptureSession.StateCallback() {
+                    @Override public void onConfigured(@NonNull CameraCaptureSession session) { 
+                        PhoneLog.d(TAG, "✅ 相机捕获会话配置成功");
+                        if (!mIsStreaming.get()) { 
+                            session.close(); 
+                            return; 
+                        }
+                        mCaptureSession = session; 
+                        startPreviewRequest(); 
+                        openChannelStream();
                     }
-                    mCaptureSession = session; 
-                    startPreviewRequest(); 
-                    openChannelStream();
+                    @Override public void onConfigureFailed(@NonNull CameraCaptureSession session) { 
+                        PhoneLog.e(TAG, "❌ 相机捕获会话配置失败. Targets: " + outputs.size());
+                        stopStreamingAndRelease(); 
+                    }
                 }
-                @Override public void onConfigureFailed(@NonNull CameraCaptureSession session) { 
-                    PhoneLog.e(TAG, "❌ 相机捕获会话配置失败");
-                    stopStreamingAndRelease(); 
-                }
-            }));
+            );
+            
+            mCameraDevice.createCaptureSession(sessionConfig);
         } catch (Exception e) { PhoneLog.e(TAG, "❌ Session creation abandoned", e); }
     }
 
@@ -374,9 +404,19 @@ public class PhoneSyncCameraService extends Service {
         }
         try {
             PhoneLog.d(TAG, "📡 正在下达重复捕获请求 (RepeatingRequest)...");
-            CaptureRequest.Builder b = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
-            b.addTarget(mEncoderSurface); if (mIsRecording.get() && mVideoRecorder != null) b.addTarget(mVideoRecorder.getSurface());
-            applyZoom(b); mCaptureSession.setRepeatingRequest(b.build(), null, mBgHandler);
+            // 🎯 如果在录像，使用 TEMPLATE_RECORD；否则使用 TEMPLATE_PREVIEW 以获得更好性能
+            int template = mIsRecording.get() ? CameraDevice.TEMPLATE_RECORD : CameraDevice.TEMPLATE_PREVIEW;
+            CaptureRequest.Builder b = mCameraDevice.createCaptureRequest(template);
+            
+            b.addTarget(mEncoderSurface); 
+            if (mIsRecording.get() && mVideoRecorder != null) {
+                Surface recSurface = mVideoRecorder.getSurface();
+                if (recSurface != null && recSurface.isValid()) {
+                    b.addTarget(recSurface);
+                }
+            }
+            applyZoom(b); 
+            mCaptureSession.setRepeatingRequest(b.build(), null, mBgHandler);
         } catch (Exception e) { 
             PhoneLog.e(TAG, "❌ RepeatingRequest 下达失败", e);
         }

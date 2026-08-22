@@ -16,11 +16,8 @@ import com.google.android.gms.wearable.CapabilityClient;
 import com.google.android.gms.wearable.Wearable;
 
 /**
- * 🎬 WearOS 手表端主控制与权限状态 Fragment (ADB授权引导版)
- * <p>
- * 权限模型说明：
- * - 无障碍服务：可通过系统设置 UI 授权 → 点击跳转 ACTION_ACCESSIBILITY_SETTINGS
- * - 通知使用权：WearOS 不支持 UI 授权 → 点击弹窗展示 ADB 命令
+ * 🎬 WearOS 手表端主控制与权限状态 (Android 16/17 优先版)
+ * 职责：系统级权限引导、跨端互联状态监控、业务入口调度
  */
 public class WearSyncMainFragment extends PreferenceFragmentCompat {
 
@@ -93,9 +90,8 @@ public class WearSyncMainFragment extends PreferenceFragmentCompat {
                 WearLog.w(TAG, "📸 [交互] 用户点击【远端相机控制】");
                 try {
                     Intent localIntent = new Intent(requireContext(), WearCameraActivity.class);
-                    // 🎯 移除 FLAG_ACTIVITY_NEW_TASK
+                    // 🎯 仅启动本地 UI，让 WearCameraActivity 负责通知手机启动。
                     startActivity(localIntent);
-                    WearSyncCommManager.getInstance(requireContext().getApplicationContext()).openPhoneCamera();
                 } catch (Exception e) {
                     WearLog.e(TAG, "❌ [远端相机] 启动异常: " + e.getMessage(), e);
                 }
