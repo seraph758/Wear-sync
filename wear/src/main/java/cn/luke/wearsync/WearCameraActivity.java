@@ -250,15 +250,29 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
     
     private void readStreamFromChannel(ChannelClient.Channel c) {
         new Thread(() -> {
-            try (InputStream is = Tasks.await(Wearable.getChannelClient(this).getInputStream(c)); DataInputStream dis = new DataInputStream(is)) {
+            try (InputStream is = Tasks.await(Wearable.getChannelClient(this).getInputStream(c)); 
+                 DataInputStream dis = new DataInputStream(is)) {
+                
                 while (!isUserExiting) {
-                    int len = dis.readInt(); long time = dis.readLong(); int flags = dis.readInt();
+                    // 🎯 修复：增加非阻塞检查。DataInputStream.readInt() 在流切换时可能无限期阻塞
+                    if (is.available() < 4) {
+                        Thread.sleep(10); 
+                        continue;
+                    }
+                    
+                    int len = dis.readInt(); 
+                    long time = dis.readLong(); 
+                    int flags = dis.readInt();
+                    
                     if (len > 0 && len < 1000000) {
-                        byte[] d = new byte[len]; dis.readFully(d);
+                        byte[] d = new byte[len]; 
+                        dis.readFully(d);
                         if (!isFrozen) frameQueue.offer(new VideoFrame(d, time, flags));
                     }
                 }
-            } catch (Exception e) { WearLog.e(TAG, "Read stream error", e); }
+            } catch (Exception e) { 
+                WearLog.e(TAG, "读取流异常 (可能是流重建中断)", e); 
+            }
         }).start();
     }
     

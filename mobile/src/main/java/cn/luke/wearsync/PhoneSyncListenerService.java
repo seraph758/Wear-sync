@@ -266,6 +266,20 @@ public class PhoneSyncListenerService extends WearableListenerService {
         }
     }
 
+    @Override
+    public void onChannelClosed(@NonNull ChannelClient.Channel channel, int closeReason, int appSpecificErrorCode) {
+        String path = channel.getPath();
+        PhoneLog.d(TAG, "🔌 [管道断开] Path: " + path + ", Reason: " + closeReason);
+        
+        // 🚀 核心修复：如果相机数据通道关闭（手表崩溃/退出/断连），强制停止手机端相机服务
+        if ("/wear_data_channel/camera".equals(path)) {
+            PhoneLog.w(TAG, "⚠️ 检测到相机通道意外关闭，正在释放手机端摄像头资源...");
+            Intent stop = new Intent(this, PhoneSyncCameraService.class);
+            stop.setAction(PhoneSyncCameraService.ACTION_STOP_CAMERA);
+            startService(stop);
+        }
+    }
+
     private void readLogStream(InputStream inputStream) {
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault());
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {

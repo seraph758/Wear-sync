@@ -88,7 +88,10 @@ data class PhoneSyncUIState(
     val selectedAlarmPkg: String = "",
     val dismissKeyText: String = "",
     val snoozeKeyText: String = "",
-    val isAlarmMasterEnabled: Boolean = true
+    val isAlarmMasterEnabled: Boolean = true,
+    val isAutoOpenEnabled: Boolean = false,
+    val isTransferConfirmDialogOpen: Boolean = false,
+    val pendingTransferFileName: String = ""
 )
 
 data class PhoneSyncUIActions(
@@ -112,7 +115,10 @@ data class PhoneSyncUIActions(
     val onConnectionClick: () -> Unit = {},
     val onNotificationPermissionClick: () -> Unit = {},
     val onCameraPermissionClick: () -> Unit = {},
-    val onFileTransferClick: () -> Unit = {}
+    val onFileTransferClick: () -> Unit = {},
+    val onAutoOpenToggle: (Boolean) -> Unit = {},
+    val onTransferConfirm: () -> Unit = {},
+    val onTransferDismiss: () -> Unit = {}
 )
 
 @Composable
@@ -223,6 +229,20 @@ fun PhoneSyncMainScreen(state: PhoneSyncUIState, actions: PhoneSyncUIActions) {
                 }
                 Spacer(modifier = Modifier.height(40.dp))
             }
+
+            if (state.isTransferConfirmDialogOpen) {
+                AlertDialog(
+                    onDismissRequest = actions.onTransferDismiss,
+                    title = { Text("确认发送文件") },
+                    text = { Text("是否发送文件 \"${state.pendingTransferFileName}\" 到手表？") },
+                    confirmButton = {
+                        TextButton(onClick = actions.onTransferConfirm) { Text("发送") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = actions.onTransferDismiss) { Text("取消") }
+                    }
+                )
+            }
         }
     }
 }
@@ -330,6 +350,7 @@ fun FileTransferContent(state: PhoneSyncUIState, actions: PhoneSyncUIActions, is
     Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("文件传输中心", fontWeight = FontWeight.Bold, color = textColor)
         Text("选择照片或文件同步到手表端", fontSize = 12.sp, color = subTextColor)
+        SettingsToggle("发送完成后主动打开", state.isAutoOpenEnabled, actions.onAutoOpenToggle)
         Button(onClick = actions.onFileTransferClick, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) { Text("选择文件并发送") }
         Text(state.fileTransferStatus, fontSize = 11.sp, color = subTextColor, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
     }
@@ -366,7 +387,12 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
     private val isWatchPreviewEnabledState = mutableStateOf(true)
     private val isHeifFallbackEnabledState = mutableStateOf(true)
     private val isGpsEnabledState = mutableStateOf(false)
+    private val isAutoOpenEnabledState = mutableStateOf(false)
     private val fileTransferStatus = mutableStateOf("等待选择文件...")
+    private val showTransferConfirmDialog = mutableStateOf(false)
+    private var pendingFileUri: Uri? = null
+    private var pendingFileName: String? = null
+    private var pendingMimeType: String? = null
     private val overlayPermissionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { if (Settings.canDrawOverlays(requireContext())) { handleFloatingLogClick() } }
     private val requestCameraPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted -> isCameraAllowedState.value = isGranted; if (isGranted) { PhoneLog.d("WearSync_Main", "📸 相机权限获得") } }
     private val requestLocationPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted -> if (isGranted) { isGpsEnabledState.value = true; requireContext().getSharedPreferences("dndsync_prefs", Context.MODE_PRIVATE).edit { putBoolean("save_location_enabled", true) }; PhoneLog.d("WearSync_Main", "📍 位置权限获得") } else { isGpsEnabledState.value = false; Toast.makeText(requireContext(), "需要定位权限", Toast.LENGTH_SHORT).show() } }
@@ -385,7 +411,33 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
             } catch (e: Exception) { PhoneLog.e(TAG, "❌ 震动指令异常", e) }
         }
     }
-    private val fileTransferLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? -> uri?.let { val nodeId = WearSyncState.getNodeId(requireContext()); if (!nodeId.isNullOrEmpty()) { val fileName = requireContext().contentResolver.query(it, null, null, null, null)?.use { cursor -> val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME); cursor.moveToFirst(); cursor.getString(nameIndex) } ?: "unknown_file"; PhoneSyncFileTransferManager.sendFileToWear(requireContext(), nodeId, it, fileName, object : PhoneSyncFileTransferManager.TransferCallback { override fun onHandshakeSuccess() {} override fun onStatusUpdate(status: String) { fileTransferStatus.value = status } override fun onError(message: String) { fileTransferStatus.value = "❌ 传输失败: $message" } }) } } }
+    private val fileTransferLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        uri?.let {
+            val context = requireContext()
+            pendingFileUri = it
+            pendingFileName = context.contentResolver.query(it, null, null, null, null)?.use { cursor ->
+                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                cursor.moveToFirst()
+                cursor.getString(nameIndex)
+            } ?: "unknown_file"
+            pendingMimeType = context.contentResolver.getType(it)
+            showTransferConfirmDialog.value = true
+        }
+    }
+
+    private fun executeFileTransfer(uri: Uri, fileName: String, mimeType: String?) {
+        val nodeId = WearSyncState.getNodeId(requireContext())
+        if (!nodeId.isNullOrEmpty()) {
+            PhoneSyncFileTransferManager.sendFileToWear(
+                requireContext(), nodeId, uri, fileName, mimeType, isAutoOpenEnabledState.value,
+                object : PhoneSyncFileTransferManager.TransferCallback {
+                    override fun onHandshakeSuccess() {}
+                    override fun onStatusUpdate(status: String) { fileTransferStatus.value = status }
+                    override fun onError(message: String) { fileTransferStatus.value = "❌ 传输失败: $message" }
+                }
+            )
+        }
+    }
     override fun onMessageReceived(messageEvent: MessageEvent) {}
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         val sp = requireContext().getSharedPreferences("dndsync_prefs", Context.MODE_PRIVATE)
@@ -394,6 +446,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
         isWatchPreviewEnabledState.value = sp.getBoolean("camera_watch_preview_enabled", true)
         isHeifFallbackEnabledState.value = sp.getBoolean("heif_fallback_enabled", true)
         isGpsEnabledState.value = sp.getBoolean("save_location_enabled", false)
+        isAutoOpenEnabledState.value = sp.getBoolean("file_auto_open_enabled", false)
         return ComposeView(requireContext()).apply {
             setContent {
                 val isConnectedVal by isConnectedState
@@ -405,6 +458,9 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                 val isWatchPreviewEnabledVal by isWatchPreviewEnabledState
                 val isHeifFallbackEnabledVal by isHeifFallbackEnabledState
                 val isGpsEnabledVal by isGpsEnabledState
+                val isAutoOpenEnabledVal by isAutoOpenEnabledState
+                val isTransferConfirmDialogOpenVal by showTransferConfirmDialog
+                val pendingTransferFileNameVal = pendingFileName ?: ""
                 val isServiceRunningVal by AppState.isServiceRunning.collectAsState()
                 var mask by remember { mutableIntStateOf(sp.getInt("KEY_MASK", 15)) }
                 var screenPullDownInterval by remember { mutableIntStateOf(sp.getInt("screen_pull_down_interval", 500)) }
@@ -413,7 +469,7 @@ class PhoneSyncMainFragment : Fragment(), MessageClient.OnMessageReceivedListene
                 var dismissKeyText by remember { mutableStateOf(sp.getString("alarm_dismiss_key", "停止") ?: "停止") }
                 var snoozeKeyText by remember { mutableStateOf(sp.getString("alarm_snooze_key", "延后") ?: "延后") }
                 var isAlarmMasterEnabled by remember { mutableStateOf(sp.getBoolean("alarm_proxy_master_switch", true)) }
-                PhoneSyncMainScreen(state = PhoneSyncUIState(isConnected = isConnectedVal, isNotificationAllowed = isNotificationAllowedVal, isCameraAllowed = isCameraAllowedVal, isServiceRunning = isServiceRunningVal, isWatchPreviewEnabled = isWatchPreviewEnabledVal, isHeifFallbackEnabled = isHeifFallbackEnabledVal, isGpsEnabled = isGpsEnabledVal, fileTransferStatus = fileTransferStatusVal, uiLogDebug = uiLogDebugVal, uiWearLogDebug = uiWearLogDebugVal, screenPullDownInterval = screenPullDownInterval, mask = mask, selectedAlarmName = selectedAlarmName, selectedAlarmPkg = selectedAlarmPkg, dismissKeyText = dismissKeyText, snoozeKeyText = snoozeKeyText, isAlarmMasterEnabled = isAlarmMasterEnabled), actions = PhoneSyncUIActions(onPullDownIntervalChange = { newValue -> screenPullDownInterval = newValue; sp.edit { putInt("screen_pull_down_interval", newValue) } }, onDndMaskUpdate = { newMaster, newVibrate, newSleep, newPower -> var newMask = 0; if (newMaster) newMask = newMask or 1; if (newVibrate) newMask = newMask or 2; if (newSleep) newMask = newMask or 4; if (newPower) newMask = newMask or 8; mask = newMask; sp.edit { putInt("KEY_MASK", newMask) } }, onVibrationCommand = { action, on, off, repeat -> sendVibrationCommand(action, on, off, repeat) }, onVibrationSave = { on, off, repeat -> val prefs = requireContext().getSharedPreferences("wear_vibration_prefs", Context.MODE_PRIVATE); prefs.edit { putInt("onDuration", on); putInt("offDuration", off); putInt("repeatIndex", repeat) }; sendVibrationCommand("save", on, off, repeat) }, onAlarmSourceSwitch = { PhoneSyncAppPicker.show(requireContext()) { pkg, name -> selectedAlarmName = name; selectedAlarmPkg = pkg; sp.edit { putString("selected_alarm_package", pkg); putString("selected_alarm_name", name) } } }, onAlarmMasterToggle = { isEnabled -> isAlarmMasterEnabled = isEnabled; sp.edit { putBoolean("alarm_proxy_master_switch", isEnabled) } }, onDismissKeyChange = { dismissKeyText = it; sp.edit { putString("alarm_dismiss_key", it) } }, onSnoozeKeyChange = { snoozeKeyText = it; sp.edit { putString("alarm_snooze_key", it) } }, onAlarmTest = { action -> try { PhoneAlarmManager.handleWatchCommand(requireContext(), action) } catch (_: Exception) { } }, onCameraCall = { if (!isCameraAllowedVal) { requestCameraPermissionLauncher.launch(Manifest.permission.CAMERA) } else { val localIntent = Intent(requireContext(), PhoneSyncRemoteCameraActivity::class.java).apply { putExtra(PhoneSyncRemoteCameraActivity.EXTRA_SOURCE, PhoneSyncRemoteCameraActivity.SOURCE_LOCAL); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }; requireContext().startActivity(localIntent); val nodeId = WearSyncState.getNodeId(requireContext()); if (!nodeId.isNullOrEmpty()) { viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) { try { val json = JSONObject().apply { put("sender", "phone"); put("type", "camera_control"); put("action", "open_phone_camera"); put("timestamp", System.currentTimeMillis()) }; Wearable.getMessageClient(requireContext()).sendMessage(nodeId, UNIVERSAL_SYNC_PATH, json.toString().toByteArray(StandardCharsets.UTF_8)).await() } catch (_: Exception) { } } } } }, onCameraForceStop = { requireContext().startService(Intent(requireContext(), PhoneSyncCameraService::class.java).setAction(PhoneSyncCameraService.ACTION_STOP_CAMERA)); val nodeId = WearSyncState.getNodeId(requireContext()); if (!nodeId.isNullOrEmpty()) { viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) { try { val json = JSONObject().apply { put("sender", "phone"); put("type", "camera_control"); put("action", "FORCE_QUIT_CAMERA"); put("timestamp", System.currentTimeMillis()) }; Wearable.getMessageClient(requireContext()).sendMessage(nodeId, UNIVERSAL_SYNC_PATH, json.toString().toByteArray(StandardCharsets.UTF_8)).await() } catch (_: Exception) { } } } }, onPhoneLogToggle = { isEnabled -> uiLogDebugSwitch.value = isEnabled; PhoneLog.DEBUG = isEnabled; sp.edit { putBoolean("phone_log_debug_visible", isEnabled) } }, onWearLogToggle = { isChecked -> uiWearLogDebugSwitch.value = isChecked; sp.edit { putBoolean("wear_log_debug_visible", isChecked) }; val context = requireContext(); val nodeId = WearSyncState.getNodeId(context); if (!nodeId.isNullOrEmpty()) { viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) { try { val msgJson = JSONObject().apply { put("type", "wearlog"); put("wear_log_debug", isChecked); put("timestamp", System.currentTimeMillis()) }; Wearable.getMessageClient(context).sendMessage(nodeId, UNIVERSAL_SYNC_PATH, msgJson.toString().toByteArray(StandardCharsets.UTF_8)).await() } catch (_: Exception) { } } } }, onWatchPreviewToggle = { isEnabled -> isWatchPreviewEnabledState.value = isEnabled; sp.edit { putBoolean("camera_watch_preview_enabled", isEnabled) } }, onHeifFallbackToggle = { isEnabled -> isHeifFallbackEnabledState.value = isEnabled; sp.edit { putBoolean("heif_fallback_enabled", isEnabled) } }, onGpsToggle = { isEnabled -> if (isEnabled) { if (requireContext().checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) { requestLocationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION) } else { isGpsEnabledState.value = true; sp.edit { putBoolean("save_location_enabled", true) } } } else { isGpsEnabledState.value = false; sp.edit { putBoolean("save_location_enabled", false) } } }, onFloatingLogClick = { handleFloatingLogClick() }, onConnectionClick = { Toast.makeText(requireContext(), "手表未连接，请检查蓝牙和WiFi设置", Toast.LENGTH_SHORT).show() }, onNotificationPermissionClick = { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }, onCameraPermissionClick = { requestCameraPermissionLauncher.launch(Manifest.permission.CAMERA) }, onFileTransferClick = { fileTransferLauncher.launch("*/*") }))
+                PhoneSyncMainScreen(state = PhoneSyncUIState(isConnected = isConnectedVal, isNotificationAllowed = isNotificationAllowedVal, isCameraAllowed = isCameraAllowedVal, isServiceRunning = isServiceRunningVal, isWatchPreviewEnabled = isWatchPreviewEnabledVal, isHeifFallbackEnabled = isHeifFallbackEnabledVal, isGpsEnabled = isGpsEnabledVal, fileTransferStatus = fileTransferStatusVal, uiLogDebug = uiLogDebugVal, uiWearLogDebug = uiWearLogDebugVal, screenPullDownInterval = screenPullDownInterval, mask = mask, selectedAlarmName = selectedAlarmName, selectedAlarmPkg = selectedAlarmPkg, dismissKeyText = dismissKeyText, snoozeKeyText = snoozeKeyText, isAlarmMasterEnabled = isAlarmMasterEnabled, isAutoOpenEnabled = isAutoOpenEnabledVal, isTransferConfirmDialogOpen = isTransferConfirmDialogOpenVal, pendingTransferFileName = pendingTransferFileNameVal), actions = PhoneSyncUIActions(onPullDownIntervalChange = { newValue -> screenPullDownInterval = newValue; sp.edit { putInt("screen_pull_down_interval", newValue) } }, onDndMaskUpdate = { newMaster, newVibrate, newSleep, newPower -> var newMask = 0; if (newMaster) newMask = newMask or 1; if (newVibrate) newMask = newMask or 2; if (newSleep) newMask = newMask or 4; if (newPower) newMask = newMask or 8; mask = newMask; sp.edit { putInt("KEY_MASK", newMask) } }, onVibrationCommand = { action, on, off, repeat -> sendVibrationCommand(action, on, off, repeat) }, onVibrationSave = { on, off, repeat -> val prefs = requireContext().getSharedPreferences("wear_vibration_prefs", Context.MODE_PRIVATE); prefs.edit { putInt("onDuration", on); putInt("offDuration", off); putInt("repeatIndex", repeat) }; sendVibrationCommand("save", on, off, repeat) }, onAlarmSourceSwitch = { PhoneSyncAppPicker.show(requireContext()) { pkg, name -> selectedAlarmName = name; selectedAlarmPkg = pkg; sp.edit { putString("selected_alarm_package", pkg); putString("selected_alarm_name", name) } } }, onAlarmMasterToggle = { isEnabled -> isAlarmMasterEnabled = isEnabled; sp.edit { putBoolean("alarm_proxy_master_switch", isEnabled) } }, onDismissKeyChange = { dismissKeyText = it; sp.edit { putString("alarm_dismiss_key", it) } }, onSnoozeKeyChange = { snoozeKeyText = it; sp.edit { putString("alarm_snooze_key", it) } }, onAlarmTest = { action -> try { PhoneAlarmManager.handleWatchCommand(requireContext(), action) } catch (_: Exception) { } }, onCameraCall = { if (!isCameraAllowedVal) { requestCameraPermissionLauncher.launch(Manifest.permission.CAMERA) } else { val localIntent = Intent(requireContext(), PhoneSyncRemoteCameraActivity::class.java).apply { putExtra(PhoneSyncRemoteCameraActivity.EXTRA_SOURCE, PhoneSyncRemoteCameraActivity.SOURCE_LOCAL); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }; requireContext().startActivity(localIntent); val nodeId = WearSyncState.getNodeId(requireContext()); if (!nodeId.isNullOrEmpty()) { viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) { try { val json = JSONObject().apply { put("sender", "phone"); put("type", "camera_control"); put("action", "open_phone_camera"); put("timestamp", System.currentTimeMillis()) }; Wearable.getMessageClient(requireContext()).sendMessage(nodeId, UNIVERSAL_SYNC_PATH, json.toString().toByteArray(StandardCharsets.UTF_8)).await() } catch (_: Exception) { } } } } }, onCameraForceStop = { requireContext().startService(Intent(requireContext(), PhoneSyncCameraService::class.java).setAction(PhoneSyncCameraService.ACTION_STOP_CAMERA)); val nodeId = WearSyncState.getNodeId(requireContext()); if (!nodeId.isNullOrEmpty()) { viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) { try { val json = JSONObject().apply { put("sender", "phone"); put("type", "camera_control"); put("action", "FORCE_QUIT_CAMERA"); put("timestamp", System.currentTimeMillis()) }; Wearable.getMessageClient(requireContext()).sendMessage(nodeId, UNIVERSAL_SYNC_PATH, json.toString().toByteArray(StandardCharsets.UTF_8)).await() } catch (_: Exception) { } } } }, onPhoneLogToggle = { isEnabled -> uiLogDebugSwitch.value = isEnabled; PhoneLog.DEBUG = isEnabled; sp.edit { putBoolean("phone_log_debug_visible", isEnabled) } }, onWearLogToggle = { isChecked -> uiWearLogDebugSwitch.value = isChecked; sp.edit { putBoolean("wear_log_debug_visible", isChecked) }; val context = requireContext(); val nodeId = WearSyncState.getNodeId(context); if (!nodeId.isNullOrEmpty()) { viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) { try { val msgJson = JSONObject().apply { put("type", "wearlog"); put("wear_log_debug", isChecked); put("timestamp", System.currentTimeMillis()) }; Wearable.getMessageClient(context).sendMessage(nodeId, UNIVERSAL_SYNC_PATH, msgJson.toString().toByteArray(StandardCharsets.UTF_8)).await() } catch (_: Exception) { } } } }, onWatchPreviewToggle = { isEnabled -> isWatchPreviewEnabledState.value = isEnabled; sp.edit { putBoolean("camera_watch_preview_enabled", isEnabled) } }, onHeifFallbackToggle = { isEnabled -> isHeifFallbackEnabledState.value = isEnabled; sp.edit { putBoolean("heif_fallback_enabled", isEnabled) } }, onGpsToggle = { isEnabled -> if (isEnabled) { if (requireContext().checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) { requestLocationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION) } else { isGpsEnabledState.value = true; sp.edit { putBoolean("save_location_enabled", true) } } } else { isGpsEnabledState.value = false; sp.edit { putBoolean("save_location_enabled", false) } } }, onFloatingLogClick = { handleFloatingLogClick() }, onConnectionClick = { Toast.makeText(requireContext(), "手表未连接，请检查蓝牙和WiFi设置", Toast.LENGTH_SHORT).show() }, onNotificationPermissionClick = { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }, onCameraPermissionClick = { requestCameraPermissionLauncher.launch(Manifest.permission.CAMERA) }, onFileTransferClick = { fileTransferLauncher.launch("*/*") }, onAutoOpenToggle = { isAutoOpenEnabledState.value = it; sp.edit { putBoolean("file_auto_open_enabled", it) } }, onTransferConfirm = { showTransferConfirmDialog.value = false; pendingFileUri?.let { uri -> executeFileTransfer(uri, pendingTransferFileNameVal, pendingMimeType) } }, onTransferDismiss = { showTransferConfirmDialog.value = false }))
             }
         }
     }

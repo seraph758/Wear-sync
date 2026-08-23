@@ -40,7 +40,7 @@ public class PhoneSyncFileTransferManager {
     /**
      * 发送文件到手表（握手机制）
      */
-    public static void sendFileToWear(@NonNull Context context, @NonNull String nodeId, @NonNull Uri fileUri, @NonNull String fileName, @Nullable TransferCallback callback) {
+    public static void sendFileToWear(@NonNull Context context, @NonNull String nodeId, @NonNull Uri fileUri, @NonNull String fileName, @Nullable String mimeType, boolean autoOpen, @Nullable TransferCallback callback) {
         sAppContext = context.getApplicationContext();
         MessageClient messageClient = Wearable.getMessageClient(context);
 
@@ -69,6 +69,8 @@ public class PhoneSyncFileTransferManager {
             prepareJson.put("action", "PREPARE_RECEIVE");
             prepareJson.put("fileName", fileName);
             prepareJson.put("fileSize", fileSize);
+            prepareJson.put("mimeType", mimeType);
+            prepareJson.put("autoOpen", autoOpen);
         } catch (Exception e) {
             PhoneLog.e(TAG, "构建信令JSON失败", e);
             if (callback != null) callback.onError("信令构建异常");

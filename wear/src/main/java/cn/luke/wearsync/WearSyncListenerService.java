@@ -31,6 +31,8 @@ public class WearSyncListenerService extends WearableListenerService {
     public static final String WEAR_MSG_PATH_CAMERA_LIST = "/camera/info_list";
 
     private ChannelClient.Channel mLogChannel;
+    private String mPendingMimeType;
+    private boolean mPendingAutoOpen;
 
     @Override
     public void onCreate() {
@@ -246,7 +248,9 @@ public class WearSyncListenerService extends WearableListenerService {
         if ("PREPARE_RECEIVE".equalsIgnoreCase(action)) {
             String fileName = json.optString("fileName", "unknown.apk");
             long fileSize = json.optLong("fileSize", 0);
-            WearLog.i(TAG, "【APK-002】准备接收文件: " + fileName + " (" + fileSize + "B)");
+            mPendingMimeType = json.optString("mimeType", "");
+            mPendingAutoOpen = json.optBoolean("autoOpen", false);
+            WearLog.i(TAG, "【APK-002】准备接收文件: " + fileName + " (" + fileSize + "B), MimeType: " + mPendingMimeType + ", AutoOpen: " + mPendingAutoOpen);
             try {
                 JSONObject ack = new JSONObject();
                 ack.put("sender", "wear");
@@ -309,7 +313,10 @@ public class WearSyncListenerService extends WearableListenerService {
     private void receiveFileFromChannel(ChannelClient.Channel channel, String fileName, String nodeId, long expectedSize) {
         WearLog.i(TAG, "【FIL-001】开始接收文件: " + fileName + " (期望大小: " + expectedSize + "B)");
         
-        Uri fileUri = insertFileIntoMediaStore(fileName);
+        String mimeType = mPendingMimeType;
+        boolean autoOpen = mPendingAutoOpen;
+        
+        Uri fileUri = insertFileIntoMediaStore(fileName, mimeType);
         if (fileUri == null) {
             WearLog.e(TAG, "【FIL-ERR】无法创建文件 Uri，返回值为空");
             sendFileTransferStatus(nodeId, "error:" + fileName);
@@ -332,6 +339,10 @@ public class WearSyncListenerService extends WearableListenerService {
 
             // 🚀 发送本地广播，通知 Activity 预览照片
             notifyFileReceived(fileUri);
+            
+            if (autoOpen) {
+                openFile(fileUri, mimeType);
+            }
 
         } catch (Exception e) {
             handleReceiveError(fileUri, fileName, nodeId, e);
@@ -340,9 +351,9 @@ public class WearSyncListenerService extends WearableListenerService {
         }
     }
 
-    private Uri insertFileIntoMediaStore(String fileName) {
+    private Uri insertFileIntoMediaStore(String fileName, String mimeType) {
         Uri collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
-        ContentValues values = createContentValuesForFile(fileName);
+        ContentValues values = createContentValuesForFile(fileName, mimeType);
         try {
             return getContentResolver().insert(collection, values);
         } catch (Exception e) {
@@ -411,20 +422,35 @@ public class WearSyncListenerService extends WearableListenerService {
         }
     }
 
-    private ContentValues createContentValuesForFile(String fileName) {
+    private void openFile(Uri uri, String mimeType) {
+        try {
+            Intent intent = new Intent(Intent.ACTION_VIEW);
+            intent.setDataAndType(uri, mimeType);
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(intent);
+            WearLog.i(TAG, "【FIL-OPEN】已尝试打开文件: " + uri + " (Type: " + mimeType + ")");
+        } catch (Exception e) {
+            WearLog.e(TAG, "【FIL-ERR】打开文件失败", e);
+        }
+    }
+
+    private ContentValues createContentValuesForFile(String fileName, String mimeType) {
         ContentValues values = new ContentValues();
         values.put(MediaStore.Downloads.DISPLAY_NAME, fileName);
         
-        String mimeType = "application/octet-stream";
-        String lowerName = fileName.toLowerCase();
-        if (lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg")) {
-            mimeType = "image/jpeg";
-        } else if (lowerName.endsWith(".heic") || lowerName.endsWith(".heif")) {
-            mimeType = "image/heif";
-        } else if (lowerName.endsWith(".webp")) {
-            mimeType = "image/webp";
-        } else if (lowerName.endsWith(".apk")) {
-            mimeType = "application/vnd.android.package-archive";
+        if (mimeType == null || mimeType.isEmpty() || "application/octet-stream".equals(mimeType)) {
+            mimeType = "application/octet-stream";
+            String lowerName = fileName.toLowerCase();
+            if (lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg")) {
+                mimeType = "image/jpeg";
+            } else if (lowerName.endsWith(".heic") || lowerName.endsWith(".heif")) {
+                mimeType = "image/heif";
+            } else if (lowerName.endsWith(".webp")) {
+                mimeType = "image/webp";
+            } else if (lowerName.endsWith(".apk")) {
+                mimeType = "application/vnd.android.package-archive";
+            }
         }
         values.put(MediaStore.Downloads.MIME_TYPE, mimeType);
         values.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/Received");

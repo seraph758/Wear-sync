@@ -36,6 +36,7 @@ import android.net.Uri;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.ParcelFileDescriptor;
 import android.provider.MediaStore;
 import android.util.Size;
@@ -118,6 +119,17 @@ public class PhoneSyncCameraService extends Service {
     private ChannelClient mChannelClient;
     private DataOutputStream mDataOutputStream;
     private OrientationEventListener mOrientationEventListener;
+    
+    // 🚀 新增：自动释放看门狗，防止在极端情况下镜头被永久占用
+    private final Handler mWatchdogHandler = new Handler(Looper.getMainLooper());
+    private final Runnable mWatchdogRunnable = () -> {
+        if (mIsStreaming.get()) {
+            PhoneLog.w(TAG, "⏰ [看门狗] 检测到相机服务运行时间过长或无交互，执行自动释放...");
+            stopStreamingAndRelease();
+            stopSelf();
+        }
+    };
+    private static final long WATCHDOG_TIMEOUT = 1000 * 60 * 30; // 30 分钟强制断开
 
     private static final Comparator<Size> SIZE_BY_AREA = (lhs, rhs) -> 
             Long.signum((long) lhs.getWidth() * lhs.getHeight() - (long) rhs.getWidth() * rhs.getHeight());
@@ -161,6 +173,10 @@ public class PhoneSyncCameraService extends Service {
         if (intent == null) return START_NOT_STICKY;
         String action = intent.getAction();
         PhoneLog.d(TAG, "🟢 onStartCommand: Action=" + action);
+        
+        // 🚀 每次收到有效指令都重置看门狗
+        resetWatchdog();
+
         if (ACTION_START_CAMERA.equals(action)) {
             mCachedNodeId = intent.getStringExtra("remote_node_id");
             if (mCachedNodeId == null) mCachedNodeId = WearSyncState.getNodeId(this);
@@ -215,8 +231,10 @@ public class PhoneSyncCameraService extends Service {
             format.setInteger(MediaFormat.KEY_BIT_RATE, 450_000); 
             format.setInteger(MediaFormat.KEY_FRAME_RATE, 25); 
             format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
-            int rot = (mCameraFacing == CameraCharacteristics.LENS_FACING_FRONT) ? 270 : 90;
-            format.setInteger(MediaFormat.KEY_ROTATION, rot);
+            
+            // 🎯 修复：不再硬编码旋转，改用传感器原生方向
+            // 对于后置通常是 90，前置通常是 270
+            format.setInteger(MediaFormat.KEY_ROTATION, mSensorOrientation);
             
             mEncoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);
             mEncoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
@@ -376,6 +394,17 @@ public class PhoneSyncCameraService extends Service {
                         mCaptureSession = session; 
                         startPreviewRequest(); 
                         openChannelStream();
+
+                        // 🎯 修复：仅在会话配置成功且正在录像时才启动 MediaRecorder
+                        if (mIsRecording.get() && mVideoRecorder != null) {
+                            try {
+                                mVideoRecorder.start();
+                                PhoneLog.d(TAG, "🔴 MediaRecorder 已正式启动录制");
+                            } catch (Exception e) {
+                                PhoneLog.e(TAG, "❌ MediaRecorder 启动失败", e);
+                                mIsRecording.set(false);
+                            }
+                        }
                     }
                     @Override public void onConfigureFailed(@NonNull CameraCaptureSession session) { 
                         PhoneLog.e(TAG, "❌ 相机捕获会话配置失败. Targets: " + outputs.size());
@@ -498,8 +527,9 @@ public class PhoneSyncCameraService extends Service {
                 mVideoRecorder.setVideoSize(1920, 1080); mVideoRecorder.setVideoFrameRate(30); mVideoRecorder.setVideoEncodingBitRate(8_000_000);
                 mVideoRecorder.prepare(); 
                 mIsRecording.set(true); 
-                createCameraCaptureSession(); // 🎯 添加录像 Surface 必须重建 Session
-                mVideoRecorder.start(); 
+                
+                // 🚀 重写：先重建会话，在 onConfigured 里再 start 录像
+                createCameraCaptureSession(); 
                 notifyWearVideoStatus(true);
             }
         } catch (Exception e) { PhoneLog.e(TAG, "Record Start Failed", e); mIsRecording.set(false); }
@@ -507,10 +537,27 @@ public class PhoneSyncCameraService extends Service {
 
     private void stopVideoRecording() {
         if (!mIsRecording.get()) return;
+        PhoneLog.d(TAG, "🎥 正在停止录像...");
         try {
-            mVideoRecorder.stop(); mVideoRecorder.release(); mVideoRecorder = null; mIsRecording.set(false);
-            createCameraCaptureSession(); notifyWearVideoStatus(false);
-        } catch (Exception ignored) {}
+            if (mVideoRecorder != null) {
+                mVideoRecorder.stop();
+                mVideoRecorder.release();
+                mVideoRecorder = null;
+            }
+            mIsRecording.set(false);
+            
+            // 🎯 修复：仅在流传输仍在继续时才重建 Session。
+            // 如果是由于全局停止触发的，则不要在这里重建，避免资源竞争。
+            if (mIsStreaming.get()) {
+                createCameraCaptureSession();
+            }
+            notifyWearVideoStatus(false);
+            PhoneLog.d(TAG, "✅ 录像已停止并释放资源");
+        } catch (Exception e) {
+            PhoneLog.e(TAG, "❌ 停止录像时出错", e);
+            mIsRecording.set(false);
+            mVideoRecorder = null;
+        }
     }
 
     private void notifyWearVideoStatus(boolean rec) {
@@ -534,6 +581,10 @@ public class PhoneSyncCameraService extends Service {
             try {
                 CameraManager mgr = (CameraManager) getSystemService(Context.CAMERA_SERVICE); JSONArray arr = new JSONArray();
                 String[] idList = mgr.getCameraIdList();
+                
+                // 🎯 修复：增加同类型镜头计数器，防止重复按钮
+                int teleCount = 0, wideCount = 0, mainCount = 0;
+                
                 for (String id : idList) {
                     CameraCharacteristics chars = mgr.getCameraCharacteristics(id);
                     StreamConfigurationMap map = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
@@ -544,7 +595,23 @@ public class PhoneSyncCameraService extends Service {
                     JSONObject o = new JSONObject(); o.put("id", id); 
                     Double mz = (double) Objects.requireNonNullElse(chars.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM), 1.0f);
                     o.put("maxZoom", mz);
-                    String name = (f != null && f == CameraMetadata.LENS_FACING_FRONT) ? "前" : (fl != null && fl[0] < 3.0f ? "广" : (fl != null && fl[0] > 6.0f ? "长" : "主"));
+                    
+                    String name;
+                    if (f != null && f == CameraMetadata.LENS_FACING_FRONT) {
+                        name = "前";
+                    } else {
+                        if (fl != null && fl[0] < 3.0f) {
+                            wideCount++;
+                            name = wideCount > 1 ? "广" + wideCount : "广";
+                        } else if (fl != null && fl[0] > 6.0f) {
+                            teleCount++;
+                            name = teleCount > 1 ? "长" + teleCount : "长";
+                        } else {
+                            mainCount++;
+                            name = mainCount > 1 ? "主" + mainCount : "主";
+                        }
+                    }
+                    
                     o.put("name", name); arr.put(o);
                 }
                 PhoneLog.d(TAG, "✅ 镜头列表构建完成，共 " + arr.length() + " 个，正在发送...");
@@ -635,7 +702,72 @@ public class PhoneSyncCameraService extends Service {
             PhoneLog.e(TAG, "❌ 手动对焦失败", e);
         }
     }
-    private void stopStreamingAndRelease() { mIsStreaming.set(false); mIsCameraOpened.set(false); stopVideoRecording(); if (mCaptureSession != null) { try { mCaptureSession.close(); } catch (Exception ignored) {} mCaptureSession = null; } if (mCameraDevice != null) { try { mCameraDevice.close(); } catch (Exception ignored) {} mCameraDevice = null; } if (mEncoder != null) { try { mEncoder.stop(); mEncoder.release(); } catch (Exception ignored) {} mEncoder = null; } if (mEncoderSurface != null) { mEncoderSurface.release(); mEncoderSurface = null; } if (mPhotoReader != null) { mPhotoReader.close(); mPhotoReader = null; } mDataOutputStream = null; if (mBgThread != null) { mBgThread.quitSafely(); mBgThread = null; } if (mOrientationEventListener != null) { mOrientationEventListener.disable(); mOrientationEventListener = null; } }
+    private synchronized void stopStreamingAndRelease() {
+        PhoneLog.d(TAG, "🏗️ 正在释放相机资源...");
+        mIsStreaming.set(false); 
+        mIsCameraOpened.set(false); 
+        
+        // 1. 停止录像逻辑 (不带重启Session)
+        if (mIsRecording.get()) {
+            try {
+                if (mVideoRecorder != null) {
+                    mVideoRecorder.stop();
+                    mVideoRecorder.release();
+                    mVideoRecorder = null;
+                }
+                mIsRecording.set(false);
+            } catch (Exception ignored) {}
+        }
+
+        // 2. 关闭 CaptureSession
+        if (mCaptureSession != null) {
+            try {
+                mCaptureSession.stopRepeating();
+                mCaptureSession.close();
+            } catch (Exception ignored) {}
+            mCaptureSession = null;
+        }
+
+        // 3. 关闭 CameraDevice (最关键步骤)
+        if (mCameraDevice != null) {
+            try {
+                mCameraDevice.close();
+                PhoneLog.d(TAG, "📸 CameraDevice 已成功关闭");
+            } catch (Exception ignored) {}
+            mCameraDevice = null;
+        }
+
+        // 4. 清理编码器
+        if (mEncoder != null) {
+            try {
+                mEncoder.stop();
+                mEncoder.release();
+            } catch (Exception ignored) {}
+            mEncoder = null;
+        }
+
+        // 5. 释放 Surface 资源
+        if (mEncoderSurface != null) {
+            mEncoderSurface.release();
+            mEncoderSurface = null;
+        }
+        if (mPhotoReader != null) {
+            mPhotoReader.close();
+            mPhotoReader = null;
+        }
+
+        // 6. 清理其他后台组件
+        mDataOutputStream = null;
+        if (mBgThread != null) {
+            mBgThread.quitSafely();
+            mBgThread = null;
+        }
+        if (mOrientationEventListener != null) {
+            mOrientationEventListener.disable();
+            mOrientationEventListener = null;
+        }
+        PhoneLog.d(TAG, "✅ 所有相机资源已彻底释放");
+    }
     private void tryRecoverFromConfigFailure() {
         if (mCameraDevice == null || !mIsStreaming.get()) return;
         PhoneLog.w(TAG, "🔄 触发降级恢复：尝试仅开启预览流...");
@@ -668,6 +800,11 @@ public class PhoneSyncCameraService extends Service {
     }
     private void startBackgroundThread() { if (mBgThread == null) { mBgThread = new HandlerThread("CamBg"); mBgThread.start(); mBgHandler = new Handler(mBgThread.getLooper()); } }
     private void startOrientationListener() { mOrientationEventListener = new OrientationEventListener(this) { @Override public void onOrientationChanged(int o) { if (o != ORIENTATION_UNKNOWN) mDeviceOrientation = o; } }; mOrientationEventListener.enable(); }
+
+    private void resetWatchdog() {
+        mWatchdogHandler.removeCallbacks(mWatchdogRunnable);
+        mWatchdogHandler.postDelayed(mWatchdogRunnable, WATCHDOG_TIMEOUT);
+    }
     private void createNotificationChannel() { ((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).createNotificationChannel(new NotificationChannel("camera_service_channel", "Camera", NotificationManager.IMPORTANCE_LOW)); }
     private Notification buildNotification() { return new NotificationCompat.Builder(this, "camera_service_channel").setContentTitle("WearSync Camera").setSmallIcon(R.drawable.ic_notification).setOngoing(true).build(); }
     @Nullable @Override public IBinder onBind(Intent intent) { return null; }
