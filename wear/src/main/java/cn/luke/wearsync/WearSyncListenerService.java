@@ -31,8 +31,8 @@ public class WearSyncListenerService extends WearableListenerService {
     public static final String WEAR_MSG_PATH_CAMERA_LIST = "/camera/info_list";
 
     private ChannelClient.Channel mLogChannel;
-    private String mPendingMimeType;
-    private boolean mPendingAutoOpen;
+    private static String mPendingMimeType;
+    private static boolean mPendingAutoOpen;
 
     @Override
     public void onCreate() {
@@ -334,6 +334,11 @@ public class WearSyncListenerService extends WearableListenerService {
             
             transferData(inputStream, outputStream, expectedSize);
             
+            // 🎯 传输完成后，解除 PENDING 状态，文件才对系统和其他应用可见
+            ContentValues updateValues = new ContentValues();
+            updateValues.put(MediaStore.Downloads.IS_PENDING, 0);
+            getContentResolver().update(fileUri, updateValues, null, null);
+            
             WearLog.i(TAG, "【FIL-002】文件接收成功! 大小: " + expectedSize + "B");
             sendFileTransferStatus(nodeId, "success:" + fileName);
 
@@ -354,6 +359,8 @@ public class WearSyncListenerService extends WearableListenerService {
     private Uri insertFileIntoMediaStore(String fileName, String mimeType) {
         Uri collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
         ContentValues values = createContentValuesForFile(fileName, mimeType);
+        // 🎯 Android 10+ 建议先设为 PENDING，防止下载一半被其他应用读取
+        values.put(MediaStore.Downloads.IS_PENDING, 1);
         try {
             return getContentResolver().insert(collection, values);
         } catch (Exception e) {
@@ -424,12 +431,28 @@ public class WearSyncListenerService extends WearableListenerService {
 
     private void openFile(Uri uri, String mimeType) {
         try {
+            WearLog.d(TAG, "【FIL-OPEN-START】准备打开文件. Uri: " + uri + ", Mime: " + mimeType);
             Intent intent = new Intent(Intent.ACTION_VIEW);
             intent.setDataAndType(uri, mimeType);
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            startActivity(intent);
-            WearLog.i(TAG, "【FIL-OPEN】已尝试打开文件: " + uri + " (Type: " + mimeType + ")");
+            
+            // 🎯 检查是否有应用可以处理此 Intent
+            if (intent.resolveActivity(getPackageManager()) != null) {
+                startActivity(intent);
+                WearLog.i(TAG, "【FIL-OPEN】Intent 已发送成功");
+            } else {
+                WearLog.w(TAG, "【FIL-OPEN-WARN】未找到可打开此文件类型的应用: " + mimeType);
+                // 尝试通用打开方式
+                Intent genericIntent = new Intent(Intent.ACTION_VIEW);
+                genericIntent.setDataAndType(uri, "*/*");
+                genericIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                genericIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                if (genericIntent.resolveActivity(getPackageManager()) != null) {
+                    startActivity(genericIntent);
+                    WearLog.i(TAG, "【FIL-OPEN】尝试以 */* 通用类型打开");
+                }
+            }
         } catch (Exception e) {
             WearLog.e(TAG, "【FIL-ERR】打开文件失败", e);
         }
