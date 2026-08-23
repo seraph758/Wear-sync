@@ -282,16 +282,38 @@ public class PhoneSyncCameraService extends Service {
     }
 
     private Size chooseBestPreviewSize(Size[] sizes) {
-        // 🚀 优先寻找 250px-350px 左右的低分辨率，以确保传输流畅度
+        // 🎯 核心逻辑：对齐长宽比以修复 CaptureSession 配置失败
+        double targetRatio = (double) mPhotoSize.getWidth() / mPhotoSize.getHeight();
+        Size bestMatch = null;
+        double minDiff = Double.MAX_VALUE;
+
+        // 1. 筛选出宽度在 240px - 450px 之间的“流畅级”候选分辨率
+        List<Size> candidates = new ArrayList<>();
         for (Size s : sizes) {
-            if (s.getWidth() <= 350 && s.getWidth() >= 240) return s;
+            if (s.getWidth() >= 240 && s.getWidth() <= 450) {
+                candidates.add(s);
+            }
         }
-        // 如果没找到，找最小的一个
-        Size smallest = sizes[0];
-        for (Size s : sizes) {
-            if (s.getWidth() * s.getHeight() < smallest.getWidth() * smallest.getHeight()) smallest = s;
+
+        // 2. 如果没有这个范围的，直接找全局最小的以保底
+        if (candidates.isEmpty()) {
+            Size smallest = sizes[0];
+            for (Size s : sizes) {
+                if (s.getWidth() * s.getHeight() < smallest.getWidth() * smallest.getHeight()) smallest = s;
+            }
+            return smallest;
         }
-        return smallest;
+
+        // 3. 在候选者中寻找长宽比与照片（硬件原生比例）最接近的一个
+        for (Size s : candidates) {
+            double ratio = (double) s.getWidth() / s.getHeight();
+            double diff = Math.abs(ratio - targetRatio);
+            if (diff < minDiff) {
+                minDiff = diff;
+                bestMatch = s;
+            }
+        }
+        return bestMatch != null ? bestMatch : candidates.get(0);
     }
 
     @SuppressLint("MissingPermission")
@@ -357,7 +379,7 @@ public class PhoneSyncCameraService extends Service {
                     }
                     @Override public void onConfigureFailed(@NonNull CameraCaptureSession session) { 
                         PhoneLog.e(TAG, "❌ 相机捕获会话配置失败. Targets: " + outputs.size());
-                        stopStreamingAndRelease(); 
+                        tryRecoverFromConfigFailure();
                     }
                 }
             );
@@ -368,8 +390,7 @@ public class PhoneSyncCameraService extends Service {
 
     private void openChannelStream() {
         if (mDataOutputStream != null) {
-            PhoneLog.d(TAG, "ℹ️ 数据通道已存在，仅刷新列表");
-            sendCameraListToWear();
+            PhoneLog.d(TAG, "ℹ️ 数据通道已存在");
             return;
         }
         if (mCachedNodeId == null) {
@@ -384,17 +405,31 @@ public class PhoneSyncCameraService extends Service {
                 mChannelClient.getOutputStream(c).addOnSuccessListener(os -> {
                     PhoneLog.d(TAG, "✅ 数据输出流已就绪");
                     mDataOutputStream = new DataOutputStream(os); 
-                    sendCameraListToWear();
+                    
                     try { 
                         mEncoder.setCallback(new EncoderCallback(), mBgHandler); 
                         mEncoder.start(); 
                         PhoneLog.d(TAG, "🔥 H.264 编码器已启动，流数据开始传输");
+                        
+                        // 🚀 启动顺序优化：先确保预览流发出，再在后台慢慢扫描镜头列表
+                        sendCameraListToWear();
+                        notifyStreamReadyToWear();
                     } catch (Exception e) { 
                         PhoneLog.e(TAG, "❌ 编码器启动失败", e);
                     }
                 }).addOnFailureListener(e -> PhoneLog.e(TAG, "❌ 获取 Channel 输出流失败", e));
             })
             .addOnFailureListener(e -> PhoneLog.e(TAG, "❌ 开启 Channel 通道失败", e));
+    }
+
+    private void notifyStreamReadyToWear() {
+        if (mCachedNodeId == null) return;
+        try {
+            JSONObject j = new JSONObject();
+            j.put("type", "camera_status");
+            j.put("action", "STREAM_READY");
+            Wearable.getMessageClient(this).sendMessage(mCachedNodeId, "/camera/status", j.toString().getBytes(StandardCharsets.UTF_8));
+        } catch (Exception ignored) {}
     }
 
     private void startPreviewRequest() {
@@ -423,7 +458,11 @@ public class PhoneSyncCameraService extends Service {
     }
 
     private void captureHighResPhoto() {
-        if (mCaptureSession == null || !mIsStreaming.get()) return;
+        if (mCaptureSession == null || !mIsStreaming.get()) {
+            PhoneLog.e(TAG, "❌ captureHighResPhoto: 会话未就绪，尝试重新激活流...");
+            initCameraAndStartStreaming();
+            return;
+        }
         try {
             CaptureRequest.Builder b = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
             b.addTarget(mPhotoReader.getSurface()); applyZoom(b);
@@ -432,7 +471,9 @@ public class PhoneSyncCameraService extends Service {
             b.set(CaptureRequest.JPEG_QUALITY, (byte)100);
             mCaptureSession.capture(b.build(), null, mBgHandler);
             PhoneLog.d(TAG, "📸 Photo Capture Triggered");
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            PhoneLog.e(TAG, "❌ 拍照捕获请求失败", e);
+        }
     }
 
     private void toggleVideoRecording() { if (mIsRecording.get()) stopVideoRecording(); else startVideoRecording(); }
@@ -555,8 +596,76 @@ public class PhoneSyncCameraService extends Service {
 
     private void setZoom(float z) { mCurrentZoom = Math.max(1.0f, Math.min(z, mMaxZoom)); startPreviewRequest(); }
     private void switchCamera(String id) { if (id != null) { mCameraId = id; stopStreamingAndRelease(); initCameraAndStartStreaming(); } }
-    private void manualFocus(double x, double y) { try { CameraCharacteristics chars = ((CameraManager) getSystemService(Context.CAMERA_SERVICE)).getCameraCharacteristics(mCameraDevice.getId()); Rect sensor = chars.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE); if (sensor != null) { int cx = (int) (x * sensor.width()), cy = (int) (y * sensor.height()); MeteringRectangle area = new MeteringRectangle(Math.max(0, cx - 100), Math.max(0, cy - 100), Math.min(sensor.width(), 200), Math.min(sensor.height(), 200), MeteringRectangle.METERING_WEIGHT_MAX); CaptureRequest.Builder builder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_RECORD); builder.addTarget(mEncoderSurface); builder.set(CaptureRequest.CONTROL_AF_REGIONS, new MeteringRectangle[]{area}); builder.set(CaptureRequest.CONTROL_AE_REGIONS, new MeteringRectangle[]{area}); builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO); builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_START); mCaptureSession.setRepeatingRequest(builder.build(), null, mBgHandler); } } catch (Exception ignored) {} }
+    private void manualFocus(double x, double y) {
+        if (mCameraDevice == null || mCaptureSession == null) return;
+        try {
+            PhoneLog.d(TAG, "🎯 正在执行手动对焦: x=" + x + ", y=" + y);
+            CameraCharacteristics chars = ((CameraManager) getSystemService(Context.CAMERA_SERVICE)).getCameraCharacteristics(mCameraDevice.getId());
+            Rect sensor = chars.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE);
+            if (sensor != null) {
+                int cx = (int) (x * sensor.width()), cy = (int) (y * sensor.height());
+                MeteringRectangle area = new MeteringRectangle(
+                    Math.max(0, cx - 100), Math.max(0, cy - 100),
+                    Math.min(sensor.width(), 200), Math.min(sensor.height(), 200),
+                    MeteringRectangle.METERING_WEIGHT_MAX);
+                
+                // 🎯 修复：根据当前是否录像选择模板
+                int template = mIsRecording.get() ? CameraDevice.TEMPLATE_RECORD : CameraDevice.TEMPLATE_PREVIEW;
+                CaptureRequest.Builder b = mCameraDevice.createCaptureRequest(template);
+                
+                b.addTarget(mEncoderSurface);
+                if (mIsRecording.get() && mVideoRecorder != null) {
+                    Surface recSurface = mVideoRecorder.getSurface();
+                    if (recSurface != null && recSurface.isValid()) b.addTarget(recSurface);
+                }
+                
+                // 🎯 修复：对焦时必须应用当前的缩放倍率，否则对焦位置会偏移或缩放会被重置
+                applyZoom(b);
+                
+                b.set(CaptureRequest.CONTROL_AF_REGIONS, new MeteringRectangle[]{area});
+                b.set(CaptureRequest.CONTROL_AE_REGIONS, new MeteringRectangle[]{area});
+                b.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO);
+                b.set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_START);
+                
+                // 🎯 修复：更新RepeatingRequest以保持持续对焦
+                mCaptureSession.setRepeatingRequest(b.build(), null, mBgHandler);
+                PhoneLog.d(TAG, "✅ 对焦请求已下达");
+            }
+        } catch (Exception e) {
+            PhoneLog.e(TAG, "❌ 手动对焦失败", e);
+        }
+    }
     private void stopStreamingAndRelease() { mIsStreaming.set(false); mIsCameraOpened.set(false); stopVideoRecording(); if (mCaptureSession != null) { try { mCaptureSession.close(); } catch (Exception ignored) {} mCaptureSession = null; } if (mCameraDevice != null) { try { mCameraDevice.close(); } catch (Exception ignored) {} mCameraDevice = null; } if (mEncoder != null) { try { mEncoder.stop(); mEncoder.release(); } catch (Exception ignored) {} mEncoder = null; } if (mEncoderSurface != null) { mEncoderSurface.release(); mEncoderSurface = null; } if (mPhotoReader != null) { mPhotoReader.close(); mPhotoReader = null; } mDataOutputStream = null; if (mBgThread != null) { mBgThread.quitSafely(); mBgThread = null; } if (mOrientationEventListener != null) { mOrientationEventListener.disable(); mOrientationEventListener = null; } }
+    private void tryRecoverFromConfigFailure() {
+        if (mCameraDevice == null || !mIsStreaming.get()) return;
+        PhoneLog.w(TAG, "🔄 触发降级恢复：尝试仅开启预览流...");
+        try {
+            List<OutputConfiguration> outputs = new ArrayList<>();
+            outputs.add(new OutputConfiguration(mEncoderSurface));
+            
+            SessionConfiguration config = new SessionConfiguration(
+                SessionConfiguration.SESSION_REGULAR,
+                outputs,
+                command -> mBgHandler.post(command),
+                new CameraCaptureSession.StateCallback() {
+                    @Override public void onConfigured(@NonNull CameraCaptureSession session) {
+                        PhoneLog.d(TAG, "✅ 降级 Session 配置成功（仅预览）");
+                        mCaptureSession = session;
+                        startPreviewRequest();
+                        openChannelStream();
+                    }
+                    @Override public void onConfigureFailed(@NonNull CameraCaptureSession session) {
+                        PhoneLog.e(TAG, "❌ 降级 Session 依然配置失败，彻底释放硬件");
+                        stopStreamingAndRelease();
+                    }
+                }
+            );
+            mCameraDevice.createCaptureSession(config);
+        } catch (Exception e) {
+            PhoneLog.e(TAG, "❌ 降级恢复过程异常", e);
+            stopStreamingAndRelease();
+        }
+    }
     private void startBackgroundThread() { if (mBgThread == null) { mBgThread = new HandlerThread("CamBg"); mBgThread.start(); mBgHandler = new Handler(mBgThread.getLooper()); } }
     private void startOrientationListener() { mOrientationEventListener = new OrientationEventListener(this) { @Override public void onOrientationChanged(int o) { if (o != ORIENTATION_UNKNOWN) mDeviceOrientation = o; } }; mOrientationEventListener.enable(); }
     private void createNotificationChannel() { ((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).createNotificationChannel(new NotificationChannel("camera_service_channel", "Camera", NotificationManager.IMPORTANCE_LOW)); }
