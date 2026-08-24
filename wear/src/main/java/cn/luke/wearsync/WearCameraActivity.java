@@ -158,8 +158,16 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
                     JSONObject obj = arr.getJSONObject(i);
                     String id = obj.getString("id"), name = obj.getString("name");
                     float maxZ = (float) obj.optDouble("maxZoom", 1.0);
-                    Button btn = createSmallButton(name.substring(0, 1));
-                    btn.setOnClickListener(v -> { mMaxZoom = maxZ; updateZoomUI(); WearSyncCommManager.getInstance(this).selectCamera(id); });
+                    
+                    // 🎯 优化：保留数字标识，如 "广2" -> "广2"
+                    String btnText = name.length() > 2 ? name.substring(0, 2) : name;
+                    Button btn = createSmallButton(btnText);
+                    
+                    btn.setOnClickListener(v -> { 
+                        mMaxZoom = maxZ; 
+                        updateZoomUI(); 
+                        WearSyncCommManager.getInstance(this).selectCamera(id); 
+                    });
                     // 🎯 顶部角度 225° 开始，间隔 30°
                     if (isRound) positionCircular(btn, 225 + i * 30); else if (layoutCameraList != null) { layoutCameraList.setVisibility(View.VISIBLE); layoutCameraList.addView(btn); }
                     if (i == 0) { mMaxZoom = maxZ; updateZoomUI(); }
@@ -177,7 +185,19 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
             for (float l : lvls) {
                 if (l <= mMaxZoom || l == 1f) {
                     Button btn = createSmallButton(String.format(Locale.US, "%.0f", l));
-                    btn.setOnClickListener(v -> { WearSyncCommManager.getInstance(this).setZoom(l); showCaptureHint(l + "X"); });
+                    btn.setOnClickListener(v -> {
+                        if (isFrozen) {
+                            // FROZEN 模式：仅本地 UI 缩放
+                            mScaleFactor = l;
+                            mPosX = 0; mPosY = 0; // 重置平移，居中缩放
+                            applyTransform();
+                            showCaptureHint("本地 " + l + "X");
+                        } else {
+                            // LIVE 模式：控制手机镜头
+                            WearSyncCommManager.getInstance(this).setZoom(l);
+                            showCaptureHint(l + "X");
+                        }
+                    });
                     // 🎯 右侧角度 45° 开始
                     if (isRound) positionCircular(btn, 45 + count * 30); else if (layoutZoomList != null) { layoutZoomList.setVisibility(View.VISIBLE); layoutZoomList.addView(btn); }
                     count++;
@@ -254,12 +274,7 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
                  DataInputStream dis = new DataInputStream(is)) {
                 
                 while (!isUserExiting) {
-                    // 🎯 修复：增加非阻塞检查。DataInputStream.readInt() 在流切换时可能无限期阻塞
-                    if (is.available() < 4) {
-                        Thread.sleep(10); 
-                        continue;
-                    }
-                    
+                    // 🎯 修复：直接利用 DataInputStream 的阻塞特性，移除不必要的忙等 sleep
                     int len = dis.readInt(); 
                     long time = dis.readLong(); 
                     int flags = dis.readInt();

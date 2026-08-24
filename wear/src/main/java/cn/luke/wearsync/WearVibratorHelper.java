@@ -39,11 +39,6 @@ public final class WearVibratorHelper {
         return sDefaultVibrator;
     }
 
-    /** 兼容老代碼調用 */
-    public static void cancel(Context context) {
-        cancelVibration(context);
-    }
-
     /** 從手機端 SharedPreferences 讀取震動參數 */
     public static void initFromPhone(Context context) {
         SharedPreferences sp = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
@@ -53,14 +48,6 @@ public final class WearVibratorHelper {
         WearLog.d(TAG, "📥 震動參數: on=" + sOnDuration + "ms, off=" + sOffDuration 
                 + "ms, repeat=" + sRepeatIndex);
     }
-
-    public static long[] getPattern() {
-        return new long[]{0, sOnDuration, sOffDuration, sOnDuration};
-    }
-
-    public static int getRepeatIndex() {
-        return sRepeatIndex;
-    }
     
     public static int getOnDuration() {
         return sOnDuration;
@@ -68,30 +55,6 @@ public final class WearVibratorHelper {
     
     public static int getOffDuration() {
         return sOffDuration;
-    }
-
-    /** 🎯 播放自定義波形震動（統一入口） */
-    public static void vibratePattern(Context context) {
-        initFromPhone(context);
-
-        WearLog.d(TAG, "📳 觸發波形震動 length=" + getPattern().length 
-                + ", repeat=" + getRepeatIndex());
-
-        Vibrator v = getDefaultVibrator(context);
-        if (v == null || !v.hasVibrator()) {
-            WearLog.e(TAG, "❌ 震動失敗：Vibrator null 或不支援");
-            return;
-        }
-
-        try {
-            v.cancel();
-            VibrationEffect effect = VibrationEffect.createWaveform(
-                    getPattern(), getRepeatIndex());
-            v.vibrate(effect);
-            WearLog.i(TAG, "✅ 波形震動已觸發");
-        } catch (Exception e) {
-            WearLog.e(TAG, "💥 觸發震動異常: " + e.getMessage(), e);
-        }
     }
 
     /**
@@ -137,45 +100,6 @@ public final class WearVibratorHelper {
             sDefaultVibrator = null;
         }
     }
-
-    /** 預定義觸感震動 */
-     /** 
-     * 預定義觸感震動（Wear OS 6/7 专属版）
-     * 目标环境: Android 16 (API 36) / Android 16 QPR2 (API 36.1)
-     */
-    public static void vibratePredefined(Context context, int effectId) {
-        Vibrator v = getDefaultVibrator(context);
-        if (v == null || !v.hasVibrator()) return;
-        
-        try {
-            v.cancel();
-            // API 36 环境下，预定义震动是原生支持的，直接调用
-            v.vibrate(VibrationEffect.createPredefined(effectId));
-            
-        } catch (IllegalArgumentException | IllegalStateException e) {
-            // 仅捕获预定义效果无效或状态异常的特定错误
-            WearLog.e(TAG, "⚠️ 預定義震動失敗，触发兜底: " + e.getMessage());
-            fallbackTick(v);
-        } catch (Exception e) {
-            // 其他未知异常也走兜底，保证绝对不静默失败
-            WearLog.e(TAG, "⚠️ 預定義震動未知异常，触发兜底", e);
-            fallbackTick(v);
-        }
-    }
-    
-    /**
-     * TICK 效果兜底（API 36 环境）
-     */
-    private static void fallbackTick(Vibrator v) {
-        try {
-            // 在 API 36 下，直接使用 OneShot + EFFECT_TICK 模拟
-            // 15ms 是系统预定义 TICK 的标准时长，手感一致且功耗极低
-            v.vibrate(VibrationEffect.createOneShot(15, VibrationEffect.EFFECT_TICK));
-        } catch (Exception e) {
-            WearLog.e(TAG, "❌ 兜底震动也失败", e);
-        }
-    }
-
 
     /**
      * 僅觸發一次指定時長的震動，不循環

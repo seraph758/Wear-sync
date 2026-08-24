@@ -35,6 +35,7 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import kotlinx.coroutines.delay
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.math.max
 import kotlin.math.min
 
@@ -64,8 +65,7 @@ class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
     private lateinit var windowParams: WindowManager.LayoutParams
     private val controller = SavedStateRegistryController.create(this)
     override val savedStateRegistry: SavedStateRegistry = controller.savedStateRegistry
-    private val lifecycleRegistry = LifecycleRegistry(this)
-    override val lifecycle: Lifecycle get() = lifecycleRegistry
+    override val lifecycle = LifecycleRegistry(this)
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -75,8 +75,8 @@ class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
         controller.performRestore(null)
         super.onCreate()
         AppState.setServiceRunning(true)
-        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
-        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
+        lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
+        lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
 
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         val layoutType = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -115,7 +115,7 @@ class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
                         val newWear = freshLogs.filter { PhoneLog.isWearLog(it) }
                         if (phoneLogs.size != newPhone.size) phoneLogs = newPhone
                         if (wearLogs.size != newWear.size) wearLogs = newWear
-                        delay(400)
+                        delay(400.milliseconds)
                     }
                 }
 
@@ -319,7 +319,7 @@ class PhoneLogFloatingService : Service(), SavedStateRegistryOwner {
     override fun onDestroy() {
         super.onDestroy()
         AppState.setServiceRunning(false)
-        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
+        lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
         floatingView?.let {
             try {
                 windowManager.removeView(it)

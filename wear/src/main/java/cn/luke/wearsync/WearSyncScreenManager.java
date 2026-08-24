@@ -51,17 +51,6 @@ public class WearSyncScreenManager implements DefaultLifecycleObserver {
     }
 
     /**
-     * 仅保持屏幕常亮（不主动唤醒）
-     */
-    public void keepScreenOn() {
-        ComponentActivity activity = getSafeActivity(); // 💡 修改为 ComponentActivity
-        if (activity != null) {
-            activity.getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-            WearLog.i(TAG, "Keep screen on set");
-        }
-    }
-
-    /**
      * 释放屏幕控制，允许系统进入 Ambient Mode
      */
     public void releaseScreen() {

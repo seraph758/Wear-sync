@@ -6,7 +6,6 @@ import android.app.NotificationManager;
 import android.app.Service;
 import android.content.Intent;
 import android.net.Uri;
-import android.os.Build;
 import android.os.IBinder;
 
 import androidx.core.app.NotificationCompat;
@@ -167,14 +166,6 @@ public class PhoneSyncFileTransferService extends Service {
                         // 告知 Manager 进度
                         PhoneSyncFileTransferManager.updateTransferStatus("正在发送: " + finalProgress + "%");
                     }
-
-                    // 限制速度，防止蓝牙缓冲区溢出
-                    try {
-                        Thread.sleep(1);
-                    } catch (InterruptedException ignored) {
-                        Thread.currentThread().interrupt();
-                        break;
-                    }
                 }
                 outputStream.flush();
                 PhoneLog.d(TAG, "🏁 字节流写入完毕，总计: " + totalRead + " bytes");
@@ -257,7 +248,6 @@ public class PhoneSyncFileTransferService extends Service {
         public long getFileSize() { return fileSize; }
         public TransferStatus getStatus() { return status; }
         public void setStatus(TransferStatus status) { this.status = status; }
-        public int getProgress() { return progress; }
         public void setProgress(int progress) { this.progress = progress; }
     }
 

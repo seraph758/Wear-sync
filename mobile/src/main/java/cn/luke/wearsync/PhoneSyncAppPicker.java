@@ -6,14 +6,10 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
 public class PhoneSyncAppPicker {
-
-    private static final String PREF = "wearsync_prefs";
-
 
     public interface Callback {
         void onSelected(String pkg, String name);
@@ -143,8 +139,7 @@ public class PhoneSyncAppPicker {
                 context.getPackageManager();
 
 
-        List<AppItem> result =
-                new ArrayList<>();
+        List<AppItem> result = new ArrayList<>();
 
 
 
@@ -235,25 +230,7 @@ public class PhoneSyncAppPicker {
 
 
 
-        Collections.sort(
-                result,
-                new Comparator<AppItem>() {
-
-
-                    @Override
-                    public int compare(
-                            AppItem a,
-                            AppItem b
-                    ){
-
-                        return a.name.compareToIgnoreCase(
-                                b.name
-                        );
-
-                    }
-
-                }
-        );
+        result.sort((a, b) -> a.name.compareToIgnoreCase(b.name));
 
 
 
@@ -281,8 +258,7 @@ public class PhoneSyncAppPicker {
 
 
 
-        List<AppItem> list =
-                new ArrayList<>();
+        List<AppItem> list = new ArrayList<>();
 
 
 
@@ -308,15 +284,7 @@ public class PhoneSyncAppPicker {
 
 
 
-        Collections.sort(
-                list,
-                (a,b)->
-
-                        a.name.compareToIgnoreCase(
-                                b.name
-                        )
-
-        );
+        list.sort((a, b) -> a.name.compareToIgnoreCase(b.name));
 
 
 
