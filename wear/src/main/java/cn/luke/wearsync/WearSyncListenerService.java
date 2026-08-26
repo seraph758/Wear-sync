@@ -46,25 +46,35 @@ public class WearSyncListenerService extends WearableListenerService {
 
         String path = messageEvent.getPath();
         WearLog.d(TAG, "【MSG-001-1】收到特定路径消息: " + path);
-        
-        if (WEAR_MSG_PATH_CAMERA_LIST.equals(path)) {
-            byte[] data = messageEvent.getData();
-            String json = new String(data, StandardCharsets.UTF_8);
-            WearLog.i(TAG, "📸 收到镜头列表数据，准备广播通知 Activity");
-            
-            Intent intent = new Intent("cn.luke.wearsync.ACTION_CAMERA_LIST_RECEIVED");
-            intent.putExtra("camera_list", json);
-            intent.setPackage(getPackageName()); 
-            sendBroadcast(intent);
-            return;
-        }
 
-        if ("/camera/video_status".equals(path)) {
-            Intent intent = new Intent("cn.luke.wearsync.ACTION_VIDEO_STATUS");
-            intent.putExtra("status", new String(messageEvent.getData(), StandardCharsets.UTF_8));
-            intent.setPackage(getPackageName());
-            sendBroadcast(intent);
-            return;
+        switch (path) {
+            case WEAR_MSG_PATH_CAMERA_LIST: {
+                byte[] data = messageEvent.getData();
+                String json = new String(data, StandardCharsets.UTF_8);
+                WearLog.i(TAG, "📸 收到镜头列表数据，准备广播通知 Activity");
+
+                Intent intent = new Intent("cn.luke.wearsync.ACTION_CAMERA_LIST_RECEIVED");
+                intent.putExtra("camera_list", json);
+                intent.setPackage(getPackageName());
+                sendBroadcast(intent);
+                return;
+            }
+
+            case "/camera/video_status": {
+                Intent intent = new Intent("cn.luke.wearsync.ACTION_VIDEO_STATUS");
+                intent.putExtra("status", new String(messageEvent.getData(), StandardCharsets.UTF_8));
+                intent.setPackage(getPackageName());
+                sendBroadcast(intent);
+                return;
+            }
+
+            case "/camera/status": {
+                Intent intent = new Intent("cn.luke.wearsync.ACTION_CAMERA_STATUS");
+                intent.putExtra("status", new String(messageEvent.getData(), StandardCharsets.UTF_8));
+                intent.setPackage(getPackageName());
+                sendBroadcast(intent);
+                return;
+            }
         }
 
         if (!UNIVERSAL_SYNC_PATH.equalsIgnoreCase(path)) {

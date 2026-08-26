@@ -59,7 +59,6 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.DataOutputStream;
-import java.io.File;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -106,10 +105,10 @@ public class PhoneSyncCameraService extends Service {
     private int mCameraFacing = CameraCharacteristics.LENS_FACING_BACK;
     private int mSensorOrientation = 0;
     private int mDeviceOrientation = OrientationEventListener.ORIENTATION_UNKNOWN;
-    private Size mPhotoSize = new Size(1920, 1080); // 🎯 默认拍照尺寸
-    private Size mPreviewSize = new Size(256, 256); // 🎯 默认低分预览尺寸，优先流畅度
-    private Size mVideoSize = new Size(1920, 1080); // 🎯 默认录像尺寸
-    private int mMaxFps = 30; // 🎯 默认最大帧率
+    private Size mPhotoSize = new Size(1920, 1080); 
+    private Size mPreviewSize = new Size(256, 256); 
+    private Size mVideoSize = new Size(1920, 1080);
+    private int mMaxFps = 30;
 
     private HandlerThread mBgThread;
     private Handler mBgHandler;
@@ -118,14 +117,14 @@ public class PhoneSyncCameraService extends Service {
     private MediaCodec mEncoder;
     private Surface mEncoderSurface;
     private ImageReader mPhotoReader;
+    
+    // 錄像組件 (獨立於預覽)
     private MediaRecorder mVideoRecorder;
-    private File mCurrentVideoFile; // 🎯 修正录像文件变量名
     private String mCachedNodeId;
     private ChannelClient mChannelClient;
     private DataOutputStream mDataOutputStream;
     private OrientationEventListener mOrientationEventListener;
     
-    // 🚀 新增：自动释放看门狗，防止在极端情况下镜头被永久占用
     private final Handler mWatchdogHandler = new Handler(Looper.getMainLooper());
     private final Runnable mWatchdogRunnable = () -> {
         if (mIsStreaming.get()) {
@@ -134,7 +133,7 @@ public class PhoneSyncCameraService extends Service {
             stopSelf();
         }
     };
-    private static final long WATCHDOG_TIMEOUT = 1000 * 60 * 30; // 30 分钟强制断开
+    private static final long WATCHDOG_TIMEOUT = 1000 * 60 * 30; 
 
     private static final Comparator<Size> SIZE_BY_AREA = (lhs, rhs) -> 
             Long.signum((long) lhs.getWidth() * lhs.getHeight() - (long) rhs.getWidth() * rhs.getHeight());
@@ -250,17 +249,16 @@ public class PhoneSyncCameraService extends Service {
             PhoneLog.d(TAG, "🔍 正在选择最佳相机尺寸...");
             chooseOptimalSizes();
             
-            PhoneLog.d(TAG, "🎥 正在配置 H.264 编码器 (流畅优先模式)... 尺寸: " + mPreviewSize);
+            PhoneLog.d(TAG, "🎥 正在配置 H.264 预览编码器... 尺寸: " + mPreviewSize);
             MediaFormat format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, mPreviewSize.getWidth(), mPreviewSize.getHeight());
             format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
             format.setInteger(MediaFormat.KEY_BIT_RATE, 450_000); 
             format.setInteger(MediaFormat.KEY_FRAME_RATE, 25); 
             format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
             
-            // 🚀 动态计算旋转角度，处理前后置差异
-            int rotation = calculateRotation();
+            // 计算预览旋转：预览流不需要像录像那样跟随设备旋转，而是根据传感器方向固定
+            int rotation = mSensorOrientation;
             format.setInteger(MediaFormat.KEY_ROTATION, rotation);
-            PhoneLog.d(TAG, "🔄 预览流旋转角度设定: " + rotation);
             
             mEncoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);
             mEncoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
@@ -278,18 +276,13 @@ public class PhoneSyncCameraService extends Service {
         } catch (Exception e) { PhoneLog.e(TAG, "❌ Streaming Init Failed", e); stopStreamingAndRelease(); stopSelf(); }
     }
 
-    private int calculateRotation() {
-        // 根据传感器方向和设备当前姿态计算最终旋转
-        // 参考 Android 官方推荐算法
+    private int calculateCaptureRotation() {
         int devRot = (mDeviceOrientation != OrientationEventListener.ORIENTATION_UNKNOWN) ? (mDeviceOrientation + 45) / 90 * 90 : 0;
-        int rotation;
         if (mCameraFacing == CameraCharacteristics.LENS_FACING_FRONT) {
-            rotation = (mSensorOrientation + devRot) % 360;
-            // 前置通常需要额外补偿
+            return (mSensorOrientation + devRot) % 360;
         } else {
-            rotation = (mSensorOrientation - devRot + 360) % 360;
+            return (mSensorOrientation - devRot + 360) % 360;
         }
-        return rotation;
     }
 
     private void chooseOptimalSizes() throws CameraAccessException {
@@ -439,12 +432,12 @@ public class PhoneSyncCameraService extends Service {
             if (mEncoderSurface.isValid()) outputs.add(new OutputConfiguration(mEncoderSurface));
             if (mPhotoReader.getSurface().isValid()) outputs.add(new OutputConfiguration(mPhotoReader.getSurface()));
             
+            // 录像 Surface 仅在录像状态下加入
             if (mIsRecording.get() && mVideoRecorder != null) {
                 Surface recSurface = mVideoRecorder.getSurface();
                 if (recSurface != null && recSurface.isValid()) outputs.add(new OutputConfiguration(recSurface));
             }
             
-            // 🚀 采用 Android 15/16+ 推荐的 SessionConfiguration API
             SessionConfiguration sessionConfig = new SessionConfiguration(
                 SessionConfiguration.SESSION_REGULAR,
                 outputs,
@@ -452,27 +445,18 @@ public class PhoneSyncCameraService extends Service {
                 new CameraCaptureSession.StateCallback() {
                     @Override public void onConfigured(@NonNull CameraCaptureSession session) { 
                         PhoneLog.d(TAG, "✅ 相机捕获会话配置成功");
-                        if (!mIsStreaming.get()) { 
-                            session.close(); 
-                            return; 
-                        }
+                        if (!mIsStreaming.get()) { session.close(); return; }
                         mCaptureSession = session; 
                         startPreviewRequest(); 
                         openChannelStream();
 
-                        // 🎯 修复：仅在会话配置成功且正在录像时才启动 MediaRecorder
                         if (mIsRecording.get() && mVideoRecorder != null) {
-                            try {
-                                mVideoRecorder.start();
-                                PhoneLog.d(TAG, "🔴 MediaRecorder 已正式启动录制");
-                            } catch (Exception e) {
-                                PhoneLog.e(TAG, "❌ MediaRecorder 启动失败", e);
-                                mIsRecording.set(false);
-                            }
+                            try { mVideoRecorder.start(); PhoneLog.d(TAG, "🔴 MediaRecorder Started"); } 
+                            catch (Exception e) { PhoneLog.e(TAG, "MediaRecorder start failed", e); mIsRecording.set(false); }
                         }
                     }
                     @Override public void onConfigureFailed(@NonNull CameraCaptureSession session) { 
-                        PhoneLog.e(TAG, "❌ 相机捕获会话配置失败. Targets: " + outputs.size());
+                        PhoneLog.e(TAG, "❌ 相机捕获会话配置失败");
                         tryRecoverFromConfigFailure();
                     }
                 }
@@ -522,120 +506,110 @@ public class PhoneSyncCameraService extends Service {
             JSONObject j = new JSONObject();
             j.put("type", "camera_status");
             j.put("action", "STREAM_READY");
+            j.put("rotation", mSensorOrientation);
+            j.put("facing", mCameraFacing);
             Wearable.getMessageClient(this).sendMessage(mCachedNodeId, "/camera/status", j.toString().getBytes(StandardCharsets.UTF_8));
         } catch (Exception ignored) {}
     }
 
     private void startPreviewRequest() {
-        if (mCaptureSession == null || !mIsStreaming.get()) {
-            PhoneLog.e(TAG, "❌ startPreviewRequest: 会话不可用");
-            return;
-        }
+        if (mCaptureSession == null || !mIsStreaming.get()) return;
         try {
-            PhoneLog.d(TAG, "📡 正在下达重复捕获请求 (RepeatingRequest)...");
-            // 🎯 如果在录像，使用 TEMPLATE_RECORD；否则使用 TEMPLATE_PREVIEW 以获得更好性能
+            // 录像时使用 TEMPLATE_RECORD 以保持稳定性，平时使用 TEMPLATE_PREVIEW
             int template = mIsRecording.get() ? CameraDevice.TEMPLATE_RECORD : CameraDevice.TEMPLATE_PREVIEW;
             CaptureRequest.Builder b = mCameraDevice.createCaptureRequest(template);
             
             b.addTarget(mEncoderSurface); 
             if (mIsRecording.get() && mVideoRecorder != null) {
                 Surface recSurface = mVideoRecorder.getSurface();
-                if (recSurface != null && recSurface.isValid()) {
-                    b.addTarget(recSurface);
-                }
+                if (recSurface != null && recSurface.isValid()) b.addTarget(recSurface);
             }
+            
             applyZoom(b); 
             mCaptureSession.setRepeatingRequest(b.build(), null, mBgHandler);
-        } catch (Exception e) { 
-            PhoneLog.e(TAG, "❌ RepeatingRequest 下达失败", e);
-        }
+        } catch (Exception e) { PhoneLog.e(TAG, "❌ RepeatingRequest 下达失败", e); }
     }
 
     private void captureHighResPhoto() {
         if (mCaptureSession == null || !mIsStreaming.get()) {
-            PhoneLog.e(TAG, "❌ captureHighResPhoto: 会话未就绪，尝试重新激活流...");
-            initCameraAndStartStreaming();
-            return;
+            initCameraAndStartStreaming(); return;
         }
         try {
             CaptureRequest.Builder b = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
-            b.addTarget(mPhotoReader.getSurface()); applyZoom(b);
+            b.addTarget(mPhotoReader.getSurface()); 
+            applyZoom(b);
             
-            // 🎯 使用一致的旋转算法
-            int rotation = calculateRotation();
+            int rotation = calculateCaptureRotation();
             b.set(CaptureRequest.JPEG_ORIENTATION, rotation);
             b.set(CaptureRequest.JPEG_QUALITY, (byte)100);
             
             mCaptureSession.capture(b.build(), null, mBgHandler);
-            PhoneLog.d(TAG, "📸 Photo Capture Triggered with rotation: " + rotation);
-        } catch (Exception e) {
-            PhoneLog.e(TAG, "❌ 拍照捕获请求失败", e);
-        }
+            PhoneLog.d(TAG, "📸 High-Res Photo Triggered. Rot: " + rotation);
+        } catch (Exception e) { PhoneLog.e(TAG, "❌ 拍照失败", e); }
     }
 
     private void toggleVideoRecording() { if (mIsRecording.get()) stopVideoRecording(); else startVideoRecording(); }
 
     private void startVideoRecording() {
-        Uri uri = null;
+        if (mIsRecording.get()) return;
+        Uri videoUri = null;
         try {
-            String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date());
-            String fileName = "VID_" + timeStamp + ".mp4";
+            String fileName = "VID_" + new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date()) + ".mp4";
             ContentValues values = new ContentValues();
             values.put(MediaStore.Video.Media.DISPLAY_NAME, fileName);
             values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
             values.put(MediaStore.Video.Media.RELATIVE_PATH, "DCIM/WearSync");
-            uri = getContentResolver().insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values);
-            if (uri == null) return;
+            videoUri = getContentResolver().insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values);
+            if (videoUri == null) return;
 
-            try (ParcelFileDescriptor pfd = getContentResolver().openFileDescriptor(uri, "rw")) {
+            try (ParcelFileDescriptor pfd = getContentResolver().openFileDescriptor(videoUri, "rw")) {
                 if (pfd == null) return;
+
                 mVideoRecorder = new MediaRecorder(this);
                 mVideoRecorder.setVideoSource(MediaRecorder.VideoSource.SURFACE);
                 mVideoRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
                 mVideoRecorder.setOutputFile(pfd.getFileDescriptor());
-                
-                // 🚀 优先尝试 H.265/HEVC，否则回退 H.264
-                boolean hasHevc = false;
-                try {
-                    MediaCodecList list = new MediaCodecList(MediaCodecList.ALL_CODECS);
-                    for (MediaCodecInfo info : list.getCodecInfos()) {
-                        if (info.isEncoder()) {
-                            for (String type : info.getSupportedTypes()) {
-                                if (type.equalsIgnoreCase(MediaFormat.MIMETYPE_VIDEO_HEVC)) {
-                                    hasHevc = true; break;
-                                }
-                            }
-                        }
-                        if (hasHevc) break;
-                    }
-                } catch (Exception ignored) {}
 
-                if (hasHevc) {
+                if (isHevcSupported()) {
                     mVideoRecorder.setVideoEncoder(MediaRecorder.VideoEncoder.HEVC);
-                    PhoneLog.d(TAG, "🎥 录像使用编码器: HEVC/H.265");
+                    PhoneLog.d(TAG, "录像编码器: HEVC (H.265)");
                 } else {
                     mVideoRecorder.setVideoEncoder(MediaRecorder.VideoEncoder.H264);
-                    PhoneLog.d(TAG, "🎥 录像使用编码器: H.264 (HEVC 不可用)");
+                    PhoneLog.d(TAG, "录像编码器: AVC (H.264)");
                 }
 
                 mVideoRecorder.setVideoSize(mVideoSize.getWidth(), mVideoSize.getHeight());
                 mVideoRecorder.setVideoFrameRate(mMaxFps);
-                // 动态计算码率 (1080p 约 8Mbps, 4K 约 30Mbps)
-                int bitRate = (int) (mVideoSize.getWidth() * mVideoSize.getHeight() * 4L); 
-                mVideoRecorder.setVideoEncodingBitRate(Math.min(bitRate, 50_000_000));
-                
-                mVideoRecorder.prepare(); 
-                mIsRecording.set(true); 
-                
-                // 🚀 重写：仅触发重建会话。真正的 start() 会在 onConfigured 回调中执行
-                createCameraCaptureSession(); 
+                int bitrate = (int) (mVideoSize.getWidth() * mVideoSize.getHeight() * 4L); // 动态码率
+                mVideoRecorder.setVideoEncodingBitRate(Math.min(bitrate, 50_000_000));
+                mVideoRecorder.setOrientationHint(calculateCaptureRotation());
+
+                mVideoRecorder.prepare();
+                mIsRecording.set(true);
+
+                // 重建 Session 以包含录像 Surface
+                createCameraCaptureSession();
                 notifyWearVideoStatus(true);
             }
         } catch (Exception e) { 
             PhoneLog.e(TAG, "❌ 录像启动失败", e); 
-            mIsRecording.set(false); 
-            cleanupEmptyVideo(uri);
+            mIsRecording.set(false);
+            cleanupEmptyVideo(videoUri);
         }
+    }
+
+    private boolean isHevcSupported() {
+        MediaCodecList codecList = new MediaCodecList(MediaCodecList.ALL_CODECS);
+        for (MediaCodecInfo info : codecList.getCodecInfos()) {
+            if (info.isEncoder()) {
+                for (String type : info.getSupportedTypes()) {
+                    if (type.equalsIgnoreCase(MediaFormat.MIMETYPE_VIDEO_HEVC)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     private void cleanupEmptyVideo(Uri uri) {
@@ -708,11 +682,18 @@ public class PhoneSyncCameraService extends Service {
 
                     Integer f = chars.get(CameraCharacteristics.LENS_FACING);
                     float[] fl = chars.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS);
-                    float maxZoom = Objects.requireNonNullElse(chars.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM), 1.0f);
+                    float maxZoom;
+                    Range<Float> zRange = chars.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE);
+                    if (zRange != null) maxZoom = zRange.getUpper();
+                    else maxZoom = Objects.requireNonNullElse(chars.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM), 1.0f);
+
+                    int orientation = Objects.requireNonNullElse(chars.get(CameraCharacteristics.SENSOR_ORIENTATION), 0);
                     
                     JSONObject o = new JSONObject();
                     o.put("id", id); 
                     o.put("maxZoom", (double) maxZoom);
+                    o.put("orientation", orientation);
+                    o.put("facing", f);
                     
                     String name;
                     if (f != null && f == CameraMetadata.LENS_FACING_FRONT) {
@@ -834,67 +815,34 @@ public class PhoneSyncCameraService extends Service {
         mIsStreaming.set(false); 
         mIsCameraOpened.set(false); 
         
-        // 1. 停止录像逻辑 (不带重启Session)
         if (mIsRecording.get()) {
-            try {
-                if (mVideoRecorder != null) {
-                    mVideoRecorder.stop();
-                    mVideoRecorder.release();
-                    mVideoRecorder = null;
-                }
-                mIsRecording.set(false);
-            } catch (Exception ignored) {}
+            stopVideoRecording();
         }
 
-        // 2. 关闭 CaptureSession
         if (mCaptureSession != null) {
-            try {
-                mCaptureSession.stopRepeating();
-                mCaptureSession.close();
-            } catch (Exception ignored) {}
+            try { mCaptureSession.stopRepeating(); mCaptureSession.close(); } catch (Exception ignored) {}
             mCaptureSession = null;
         }
 
-        // 3. 关闭 CameraDevice (最关键步骤)
         if (mCameraDevice != null) {
-            try {
-                mCameraDevice.close();
-                PhoneLog.d(TAG, "📸 CameraDevice 已成功关闭");
-            } catch (Exception ignored) {}
+            try { mCameraDevice.close(); PhoneLog.d(TAG, "📸 CameraDevice closed"); } catch (Exception ignored) {}
             mCameraDevice = null;
         }
 
-        // 4. 清理编码器
         if (mEncoder != null) {
-            try {
-                mEncoder.stop();
-                mEncoder.release();
-            } catch (Exception ignored) {}
+            try { mEncoder.stop(); mEncoder.release(); } catch (Exception ignored) {}
             mEncoder = null;
         }
 
-        // 5. 释放 Surface 资源
-        if (mEncoderSurface != null) {
-            mEncoderSurface.release();
-            mEncoderSurface = null;
-        }
-        if (mPhotoReader != null) {
-            mPhotoReader.close();
-            mPhotoReader = null;
-        }
+        if (mEncoderSurface != null) { mEncoderSurface.release(); mEncoderSurface = null; }
+        if (mPhotoReader != null) { mPhotoReader.close(); mPhotoReader = null; }
 
-        // 6. 清理其他后台组件
         mDataOutputStream = null;
-        if (mBgThread != null) {
-            mBgThread.quitSafely();
-            mBgThread = null;
-        }
-        if (mOrientationEventListener != null) {
-            mOrientationEventListener.disable();
-            mOrientationEventListener = null;
-        }
-        PhoneLog.d(TAG, "✅ 所有相机资源已彻底释放");
+        if (mBgThread != null) { mBgThread.quitSafely(); mBgThread = null; }
+        if (mOrientationEventListener != null) { mOrientationEventListener.disable(); mOrientationEventListener = null; }
+        PhoneLog.d(TAG, "✅ 所有资源已释放");
     }
+
     private void tryRecoverFromConfigFailure() {
         if (mCameraDevice == null || !mIsStreaming.get()) return;
         PhoneLog.w(TAG, "🔄 触发降级恢复：尝试仅开启预览流...");

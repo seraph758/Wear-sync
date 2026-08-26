@@ -6,7 +6,6 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 
 public class PhoneSyncAppPicker {

@@ -57,6 +57,7 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
     private View focusMarker;
     private LinearLayout layoutCameraList, layoutZoomList;
     private MediaCodec mDecoder;
+    private int mCurrentRotation = 90;
     private volatile boolean isUserExiting = false, isFrozen = false;
     private boolean isSurfaceReady = false, isRecording = false;
     
@@ -233,7 +234,7 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
     }
 
     private void registerReceivers() {
-        mFileReceiver = new BroadcastReceiver() { @Override public void onReceive(Context c, Intent i) { showCaptureHint("已拍"); unfreezePreview(); } };
+        mFileReceiver = new BroadcastReceiver() { @Override public void onReceive(Context c, Intent i) { showCaptureHint("已拍"); /* 不再自动 unfreeze，让用户手动操作 */ } };
         registerReceiver(mFileReceiver, new IntentFilter("cn.luke.wearsync.ACTION_FILE_RECEIVED"), Context.RECEIVER_EXPORTED);
         mCameraListReceiver = new BroadcastReceiver() { @Override public void onReceive(Context c, Intent i) { updateCameraList(i.getStringExtra("camera_list")); } };
         registerReceiver(mCameraListReceiver, new IntentFilter("cn.luke.wearsync.ACTION_CAMERA_LIST_RECEIVED"), Context.RECEIVER_EXPORTED);
@@ -247,7 +248,6 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
                     runOnUiThread(() -> {
                         Button rb = findViewById(R.id.btn_record);
                         if (rb != null) { rb.setText(isRecording ? "停" : "录"); rb.setTextColor(isRecording ? 0xFFFF0000 : 0xFFFFFFFF); }
-                        showCaptureHint(isRecording ? "录像中" : "录像停止");
                     });
                 } catch (Exception e) {
                     WearLog.e(TAG, "解析视频状态失败", e);
@@ -255,6 +255,38 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
             }
         };
         registerReceiver(mVideoStatusReceiver, new IntentFilter("cn.luke.wearsync.ACTION_VIDEO_STATUS"), Context.RECEIVER_EXPORTED);
+        
+        registerReceiver(new BroadcastReceiver() {
+            @Override public void onReceive(Context context, Intent intent) {
+                try {
+                    String status = intent.getStringExtra("status");
+                    if (status == null) return;
+                    JSONObject j = new JSONObject(status);
+                    if ("STREAM_READY".equals(j.optString("action"))) {
+                        int rot = j.optInt("rotation", 90);
+                        if (rot != mCurrentRotation) {
+                            mCurrentRotation = rot;
+                            reinitDecoder();
+                        }
+                    }
+                } catch (Exception e) {
+                    WearLog.e(TAG, "解析相机状态异常", e);
+                }
+            }
+        }, new IntentFilter("cn.luke.wearsync.ACTION_CAMERA_STATUS"), Context.RECEIVER_EXPORTED);
+    }
+    
+    private void reinitDecoder() {
+        if (mDecoder != null) {
+            try { 
+                mDecoder.stop(); 
+                mDecoder.release(); 
+            } catch (Exception e) {
+                WearLog.w(TAG, "释放解码器异常: " + e.getMessage());
+            }
+            mDecoder = null;
+        }
+        initDecoder();
     }
 
     private final ChannelClient.ChannelCallback mChannelListener = new ChannelClient.ChannelCallback() {
@@ -320,13 +352,12 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
 
     private void initDecoder() {
         try {
-            // 🎯 将解码器默认尺寸设为 256x256，匹配手机端的流畅优先策略
             MediaFormat f = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, 256, 256);
-            f.setInteger(MediaFormat.KEY_ROTATION, 90);
+            f.setInteger(MediaFormat.KEY_ROTATION, mCurrentRotation);
             mDecoder = MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);
             mDecoder.configure(f, surfaceView.getHolder().getSurface(), null, 0);
             mDecoder.start();
-            WearLog.i(TAG, "Decoder Synchronized (Low-Res Fluid Mode)");
+            WearLog.i(TAG, "Decoder Ready. Rotation: " + mCurrentRotation);
         } catch (Exception e) { WearLog.e(TAG, "Init Decoder err", e); }
     }
 
