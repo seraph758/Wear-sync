@@ -437,122 +437,126 @@ public class PhoneSyncCameraService extends Service {
     }
 
     /**
-     * 成对选择录像分辨率和FPS
-     * 优先最高分辨率，然后确认该分辨率支持的最大FPS
+     * 动态选择最优录像规格（Size + FPS + Codec）
+     * 优先级：最高分辨率 > 该分辨率下的最高合法FPS > HEVC优先，H264兜底
      */
     private void chooseVideoSizeAndFps(StreamConfigurationMap map, CameraCharacteristics chars) {
         Size[] videoSizes = map.getOutputSizes(MediaRecorder.class);
         if (videoSizes == null || videoSizes.length == 0) {
+            PhoneLog.e(TAG, "❌ 当前相机不支持 MediaRecorder 输出");
             mVideoSize = new Size(1920, 1080);
             mVideoFps = 30;
+            mUseHevcForRecording = false;
             return;
         }
 
-        // 按面积降序排列，优先选择最高分辨率
+        // 1. 按像素面积降序排列，确保优先评估最高分辨率
         List<Size> sortedSizes = new ArrayList<>(Arrays.asList(videoSizes));
         Collections.sort(sortedSizes, SIZE_BY_AREA.reversed());
 
-        // 获取所有支持的FPS范围
-        Range<Integer>[] fpsRanges = chars.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES);
+        // 获取相机全局支持的 FPS 范围，用于初步过滤
+        Range<Integer>[] globalFpsRanges = chars.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES);
 
-        // 优先选择 4K，然后 1440p，然后 1080p
-        Size[] preferredSizes = {
-                new Size(3840, 2160),
-                new Size(2560, 1440),
-                new Size(1920, 1080)
-        };
+        Size finalSelectedSize = null;
+        int finalSelectedFps = 0;
+        boolean finalUseHevc = false;
 
-        for (Size preferred : preferredSizes) {
-            for (Size available : sortedSizes) {
-                if (available.getWidth() == preferred.getWidth() && available.getHeight() == preferred.getHeight()) {
-                    mVideoSize = available;
-                    mVideoFps = getMaxFpsForSize(map, available, fpsRanges);
-                    return;
+        PhoneLog.d(TAG, "🔍 [录像规格诊断] 开始为 Camera [" + mCameraId + "] 评估录像能力...");
+
+        // 2. 遍历所有候选分辨率（从大到小）
+        for (Size size : sortedSizes) {
+            PhoneLog.d(TAG, "📊 [候选] 评估分辨率: " + size.getWidth() + "x" + size.getHeight());
+
+            // 寻找该分辨率下支持的最高合法 FPS
+            int bestFpsForSize = 0;
+            if (globalFpsRanges != null) {
+                for (Range<Integer> range : globalFpsRanges) {
+                    // 取该范围的上限，且过滤掉极端低帧率
+                    if (range.getUpper() > bestFpsForSize && range.getUpper() >= 24) {
+                        bestFpsForSize = range.getUpper();
+                    }
                 }
             }
-        }
 
-        // 如果以上都不支持，选择最大的可用尺寸
-        mVideoSize = sortedSizes.get(0);
-        mVideoFps = getMaxFpsForSize(map, mVideoSize, fpsRanges);
-    }
+            // 如果全局没有合法 FPS，跳过该分辨率
+            if (bestFpsForSize == 0) continue;
 
-    /**
-     * 获取指定分辨率支持的最大FPS
-     * 基于 Camera2 的 FPS 范围来判断
-     */
-    private int getMaxFpsForSize(StreamConfigurationMap map, Size size, Range<Integer>[] fpsRanges) {
-        // 默认30fps
-        int maxFps = 30;
+            // 3. 检查编码器能力：HEVC 优先，H.264 兜底
+            boolean hevcSupported = checkEncoderSupport(MediaFormat.MIMETYPE_VIDEO_HEVC, size, bestFpsForSize);
+            boolean h264Supported = checkEncoderSupport(MediaFormat.MIMETYPE_VIDEO_AVC, size, bestFpsForSize);
 
-        if (fpsRanges != null) {
-            // 对于4K分辨率，通常最大只支持30fps
-            long pixels = (long) size.getWidth() * size.getHeight();
-            if (pixels > 2560L * 1440L) {
-                // 4K: 限制为30fps
-                for (Range<Integer> range : fpsRanges) {
-                    if (range.getUpper() >= 30 && range.getLower() <= 30) {
-                        maxFps = 30;
-                        break;
-                    }
-                }
-            } else if (pixels > 1920L * 1080L) {
-                // 1440p: 最大60fps
-                for (Range<Integer> range : fpsRanges) {
-                    if (range.getUpper() > maxFps && range.getUpper() <= 60) {
-                        maxFps = range.getUpper();
-                    }
-                }
+            // 打印详细诊断日志
+            PhoneLog.d(TAG, "   ↳ 最高合法FPS: " + bestFpsForSize + 
+                    " | HEVC支持: " + hevcSupported + " | H264支持: " + h264Supported);
+
+            // 只要有一种编码器支持，该组合即为合法
+            if (hevcSupported || h264Supported) {
+                finalSelectedSize = size;
+                finalSelectedFps = bestFpsForSize;
+                finalUseHevc = hevcSupported; // 优先使用 HEVC
+                PhoneLog.d(TAG, "✅ [选中] 找到合法组合: " + size + " @ " + bestFpsForSize + "fps, Codec=" + (finalUseHevc ? "HEVC" : "H264"));
+                break; // 找到最高分辨率的合法组合，立即退出循环
             } else {
-                // 1080p及以下: 取最大支持FPS
-                for (Range<Integer> range : fpsRanges) {
-                    if (range.getUpper() > maxFps) {
-                        maxFps = range.getUpper();
-                    }
-                }
-                // 限制不超过60，避免极端值
-                maxFps = Math.min(maxFps, 60);
+                PhoneLog.d(TAG, "❌ [淘汰] 无可用编码器支持此规格");
             }
         }
-        return maxFps;
+
+        // 4. 应用最终选择结果
+        if (finalSelectedSize != null) {
+            mVideoSize = finalSelectedSize;
+            mVideoFps = finalSelectedFps;
+            mUseHevcForRecording = finalUseHevc;
+        } else {
+            // 极端情况：所有规格都不支持，降级到默认 1080p 30fps H264
+            PhoneLog.e(TAG, "⚠️ 未找到任何合法录像组合，强制降级为 1080p@30fps H264");
+            mVideoSize = new Size(1920, 1080);
+            mVideoFps = 30;
+            mUseHevcForRecording = false;
+        }
+
+        PhoneLog.d(TAG, "🏆 [最终决定] Camera=" + mCameraId + 
+                ", Resolution=" + mVideoSize + 
+                ", FPS=" + mVideoFps + 
+                ", Codec=" + (mUseHevcForRecording ? "HEVC" : "H264"));
     }
 
     /**
-     * 检查 HEVC 编码器是否支持当前录像分辨率和FPS
+     * 通用编码器能力检查方法
+     * @param mimeType 编码格式 (HEVC 或 AVC)
+     * @param size 目标分辨率
+     * @param fps 目标帧率
      */
-    private boolean checkHevcSupport(Size videoSize, int fps) {
+    private boolean checkEncoderSupport(String mimeType, Size size, int fps) {
         try {
             MediaCodecList list = new MediaCodecList(MediaCodecList.REGULAR_CODECS);
             for (MediaCodecInfo info : list.getCodecInfos()) {
                 if (!info.isEncoder()) continue;
                 for (String type : info.getSupportedTypes()) {
-                    if (!type.equalsIgnoreCase(MediaFormat.MIMETYPE_VIDEO_HEVC)) continue;
+                    if (!type.equalsIgnoreCase(mimeType)) continue;
 
                     MediaCodecInfo.CodecCapabilities caps = info.getCapabilitiesForType(type);
                     MediaCodecInfo.VideoCapabilities videoCaps = caps.getVideoCapabilities();
                     if (videoCaps == null) continue;
 
-                    // 检查分辨率是否支持
-                    if (!videoCaps.isSizeSupported(videoSize.getWidth(), videoSize.getHeight())) {
+                    // 检查分辨率
+                    if (!videoCaps.isSizeSupported(size.getWidth(), size.getHeight())) {
                         continue;
                     }
 
-                    // 检查帧率是否支持
+                    // 检查该分辨率下的帧率
                     Range<Integer> fpsRange = videoCaps.getSupportedFrameRatesFor(
-                            videoSize.getWidth(), videoSize.getHeight());
+                            size.getWidth(), size.getHeight());
                     if (fpsRange != null && fpsRange.contains(fps)) {
-                        PhoneLog.d(TAG, "✅ HEVC 编码器 [" + info.getName() + "] 支持 " +
-                                videoSize + "@" + fps + "fps");
                         return true;
                     }
                 }
             }
         } catch (Exception e) {
-            PhoneLog.w(TAG, "⚠️ HEVC 能力检查异常", e);
+            PhoneLog.w(TAG, "⚠️ 检查 " + mimeType + " 能力时异常", e);
         }
         return false;
     }
-
+    
     private Size chooseBestPreviewSize(Size[] sizes) {
         double targetRatio = (double) mPhotoSize.getWidth() / mPhotoSize.getHeight();
         Size bestMatch = null;
@@ -680,6 +684,23 @@ public class PhoneSyncCameraService extends Service {
         }
     }
 
+    // ==================== Channel 生命周期管理 ====================
+
+    /**
+     * 安全关闭当前的 Wearable Channel 及其 OutputStream
+     */
+    private synchronized void closeCurrentChannel() {
+        if (mDataOutputStream != null) {
+            try {
+                mDataOutputStream.flush();
+                mDataOutputStream.close();
+            } catch (Exception ignored) {
+            }
+            mDataOutputStream = null;
+            PhoneLog.d(TAG, "🔌 DataOutputStream 已关闭");
+        }
+        // 注意：ChannelClient 没有直接的 close 方法，关闭流后通道会由系统回收
+    }
     /**
      * 创建录像 CaptureSession（Encoder Surface + MediaRecorder Surface + PhotoReader）
      */
@@ -1140,33 +1161,34 @@ public class PhoneSyncCameraService extends Service {
 
     // ==================== Camera 切换 ====================
 
-    /**
-     * 切换相机 - 完整重建流程
-     * 1. 停止当前录像（如果在录）
-     * 2. 停止 Preview
-     * 3. 关闭 CaptureSession
-     * 4. 关闭 CameraDevice
-     * 5. 释放 Encoder/Surface/Reader
-     * 6. 更新 CameraId
-     * 7. 重新初始化全部流程
+        /**
+     * 切换相机 - 严格串行重建流程
+     * 1. 同步停止录像（如果在录）
+     * 2. 同步停止流并释放所有硬件资源（包含安全关闭 Channel）
+     * 3. 更新 Camera ID
+     * 4. 重新初始化全部流程
      */
     private void switchCamera(String id) {
         if (id == null || id.equals(mCameraId)) return;
 
         PhoneLog.d(TAG, "🔄 切换相机: " + mCameraId + " → " + id);
 
-        // 如果正在录像，先停止录像
+        // 【关键修复】在同一个线程/同步块中按顺序执行，防止异步并发冲突
+        // 1. 如果正在录像，必须先完整停止录像
         if (mIsRecording.get()) {
+            PhoneLog.d(TAG, "⏹ 切换前：正在停止录像...");
             stopVideoRecording();
         }
 
-        // 停止当前流
+        // 2. 停止当前流并彻底释放资源（包含 Channel 和 Camera 硬件）
+        PhoneLog.d(TAG, "🧹 切换前：释放旧资源...");
         stopStreamingAndRelease();
 
-        // 更新 Camera ID
+        // 3. 更新 Camera ID
         mCameraId = id;
 
-        // 重新初始化
+        // 4. 重新初始化（会重新计算该相机的最优录像规格）
+        PhoneLog.d(TAG, "🚀 切换后：重新初始化相机...");
         initCameraAndStartStreaming();
     }
 
@@ -1391,7 +1413,7 @@ public class PhoneSyncCameraService extends Service {
 
     // ==================== 资源释放 ====================
 
-    private synchronized void stopStreamingAndRelease() {
+        private synchronized void stopStreamingAndRelease() {
         PhoneLog.d(TAG, "🛑 开始释放所有资源...");
         mIsStreaming.set(false);
         mIsCameraOpened.set(false);
@@ -1446,8 +1468,10 @@ public class PhoneSyncCameraService extends Service {
             mPhotoReader = null;
         }
 
-        // 6. 清理通信和后台线程
-        mDataOutputStream = null;
+        // 【关键修复】6. 安全关闭 Channel 及其 OutputStream
+        closeCurrentChannel();
+
+        // 7. 清理后台线程和传感器监听
         if (mBgThread != null) {
             mBgThread.quitSafely();
             mBgThread = null;
@@ -1458,7 +1482,6 @@ public class PhoneSyncCameraService extends Service {
         }
         PhoneLog.d(TAG, "✅ 所有资源已释放");
     }
-
     // ==================== 恢复和辅助 ====================
 
     private void tryRecoverFromConfigFailure() {
