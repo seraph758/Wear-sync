@@ -470,7 +470,7 @@ public class PhoneSyncCameraService extends Service {
             mIsHighSpeedRecording = selectedHighSpeed;
 
             PhoneLog.d(TAG, "═══════════════════════════════════════════════════");
-            PhoneLog.dTAG, "[VideoSelection]");
+            PhoneLog.d(TAG, "[VideoSelection]");
             PhoneLog.d(TAG, "  Camera=" + mCameraId);
             PhoneLog.d(TAG, "  Resolution=" + mVideoSize.getWidth() + "x" + mVideoSize.getHeight());
             PhoneLog.d(TAG, "  FPS=" + mVideoFps);
