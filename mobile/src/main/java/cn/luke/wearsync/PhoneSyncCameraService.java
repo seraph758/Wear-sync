@@ -16,7 +16,6 @@ import android.graphics.Rect;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraCharacteristics;
-import android.hardware.camera2.CameraConstrainedHighSpeedCaptureSession;
 import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.CameraMetadata;
@@ -347,7 +346,7 @@ public class PhoneSyncCameraService extends Service {
 
         PhoneLog.d(TAG, "═══════════════════════════════════════");
         PhoneLog.d(TAG, "[VideoCapability] Camera=" + mCameraId + " 开始评估");
-        PhoneLog.d(TAG, "═══════════════════════════════════════");
+        PhoneLog.dTAG, "═══════════════════════════════════════");
 
         for (Size size : sortedSizes) {
             List<Integer> fpsList = getSupportedFpsForSize(map, size, hsSizeList);
@@ -372,6 +371,7 @@ public class PhoneSyncCameraService extends Service {
                 if (h264Ok) {
                     selectedSize = size;
                     selectedFps = fps;
+                    selectedHevc = false;
                     selectedHighSpeed = isHighSpeedSize(size, hsSizeList);
                     sizeResolved = true;
                     PhoneLog.d(TAG, "[VideoCapability] Size=" + size + " FPS=" + fps
@@ -638,28 +638,23 @@ public class PhoneSyncCameraService extends Service {
 
     /**
      * High Speed 专用 request 提交。
-     * High Speed Session 要求使用 createHighSpeedRequestList 和 setRepeatingBurst。
+     * 【修复】正确 API 是 createCaptureRequestBuilder()，不是 createHighSpeedRequestBuilder()。
+     * High Speed Session 要求使用 setRepeatingBurst。
      */
     private void startHighSpeedRecordingRequest(CameraCaptureSession session) {
         try {
-            if (!(session instanceof CameraConstrainedHighSpeedCaptureSession hsSession)) {
-                PhoneLog.e(TAG, "❌ Session 不是 HighSpeed 类型，回退普通模式");
-                startRecordingRequest();
-                return;
-            }
-
-            // Builder 通过 CameraDevice 创建
-            CaptureRequest.Builder b = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
+            // 【修复】使用正确的 API 名称
+            CaptureRequest.Builder b = session.createCaptureRequestBuilder(CameraDevice.TEMPLATE_RECORD);
             b.addTarget(mEncoderSurface);
             Surface recSurface = mVideoRecorder.getSurface();
             if (recSurface != null && recSurface.isValid()) b.addTarget(recSurface);
             applyZoom(b);
             applyCommonControls(b);
             b.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, new Range<>(mVideoFps, mVideoFps));
-
-            // High Speed Session 必须使用 createHighSpeedRequestList
-            List<CaptureRequest> burst = hsSession.createHighSpeedRequestList(b.build());
-            hsSession.setRepeatingBurst(burst, null, mBgHandler);
+            // High Speed Session 必须使用 burst
+            List<CaptureRequest> burst = session.createCaptureRequestBuilder(CameraDevice.TEMPLATE_RECORD)
+                    .build() instanceof CaptureRequest ? Collections.singletonList(b.build()) : Collections.singletonList(b.build());
+            session.setRepeatingBurst(burst, null, mBgHandler);
             PhoneLog.d(TAG, "✅ HighSpeed RepeatingBurst 已提交");
         } catch (Exception e) {
             PhoneLog.e(TAG, "❌ HighSpeed Request 提交失败，回退普通模式", e);
