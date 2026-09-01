@@ -385,7 +385,7 @@ aeFpsValues.sort(Collections.reverseOrder());
         // High Speed 能力
         Size[] hsSizes = map.getHighSpeedVideoSizes();
         List<Size> hsSizeList = (hsSizes != null) ? Arrays.asList(hsSizes) : Collections.emptyList();
-        Integer[] capabilities = chars.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES);
+        int[] capabilities = chars.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES);
         boolean hasHsCapability = capabilities != null
                 && Arrays.asList(capabilities).contains(
                         CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_CONSTRAINED_HIGH_SPEED_VIDEO);
