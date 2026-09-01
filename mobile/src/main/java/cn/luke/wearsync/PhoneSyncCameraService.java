@@ -61,6 +61,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.DataOutputStream;
+import java.io.File;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -320,7 +321,7 @@ public class PhoneSyncCameraService extends Service {
             if (previewSizes != null && previewSizes.length > 0) {
                 mPreviewSize = chooseBestPreviewSize(previewSizes);
             }
-            chooseVideoSizeAndFps(map);
+            chooseVideoSizeAndFps(map, chars);
         }
     }
 
@@ -347,7 +348,13 @@ public class PhoneSyncCameraService extends Service {
     // ==================================================================
     // 【核心修改1】录像规格选择：Size→FPS→HEVC→H264→下一FPS→下一Size
     // ==================================================================
-    private void chooseVideoSizeAndFps(StreamConfigurationMap map) {
+    /**
+     * 录像规格选择：Resolution(大→小) → FPS(高→低) → HEVC → H264
+     * 普通录像 FPS 来源：CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES
+     * High Speed FPS 来源：StreamConfigurationMap.getHighSpeedVideoFpsRangesFor(size)
+     * 最终验证：MediaRecorder.prepare()
+     */
+    private void chooseVideoSizeAndFps(StreamConfigurationMap map, CameraCharacteristics chars) {
         Size[] videoSizes = map.getOutputSizes(MediaRecorder.class);
         if (videoSizes == null || videoSizes.length == 0) {
             PhoneLog.e(TAG, "❌ [VideoSelection] Camera=" + mCameraId + " 不支持 MediaRecorder");
@@ -359,20 +366,47 @@ public class PhoneSyncCameraService extends Service {
         }
         List<Size> sortedSizes = new ArrayList<>(Arrays.asList(videoSizes));
         sortedSizes.sort(SIZE_BY_AREA.reversed());
+
+        // 普通录像 FPS：来自 CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES
+        Range<Integer>[] aeFpsRanges = chars.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES);
+        List<Integer> aeFpsValues = new ArrayList<>();
+        if (aeFpsRanges != null) {
+            for (Range<Integer> r : aeFpsRanges) {
+                Integer upper = r.getUpper();
+                Integer lower = r.getLower();
+                if (upper != null && upper > 0) aeFpsValues.add(upper);
+                if (lower != null && lower > 0) aeFpsValues.add(lower);
+            }
+        }
+        // 补充常用 FPS 值
+        for (int fps : new int[]{240, 120, 60, 30, 24}) {
+            if (!aeFpsValues.contains(fps)) aeFpsValues.add(fps);
+        }
+        aeFpsValues.sort(Collections.reverseOrder());
+
+        // High Speed 能力
         Size[] hsSizes = map.getHighSpeedVideoSizes();
         List<Size> hsSizeList = (hsSizes != null) ? Arrays.asList(hsSizes) : Collections.emptyList();
+        Integer[] capabilities = chars.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES);
+        boolean hasHsCapability = capabilities != null
+                && Arrays.asList(capabilities).contains(
+                        CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_CONSTRAINED_HIGH_SPEED_VIDEO);
+
+        PhoneLog.d(TAG, "═══════════════════════════════════════");
+        PhoneLog.d(TAG, "[VideoCapability] Camera=" + mCameraId + " 开始评估");
+        PhoneLog.d(TAG, "[VideoCapability] AE FPS Ranges=" + Arrays.toString(aeFpsRanges));
+        PhoneLog.d(TAG, "[VideoCapability] Has HS Capability=" + hasHsCapability);
+        PhoneLog.d(TAG, "[VideoCapability] HS Sizes=" + hsSizeList);
+        PhoneLog.d(TAG, "═══════════════════════════════════════");
 
         Size selectedSize = null;
         int selectedFps = 0;
         boolean selectedHevc = false;
         boolean selectedHighSpeed = false;
 
-        PhoneLog.d(TAG, "═══════════════════════════════════════");
-        PhoneLog.d(TAG, "[VideoCapability] Camera=" + mCameraId + " 开始评估");
-        PhoneLog.d(TAG, "═══════════════════════════════════════");
-
         for (Size size : sortedSizes) {
-            List<Integer> fpsList = getSupportedFpsForSize(map, size, hsSizeList);
+            // 获取当前 Size 的 FPS 列表
+            List<Integer> fpsList = getSupportedFpsForSize(map, size, hsSizeList, aeFpsRanges, hasHsCapability);
             if (fpsList.isEmpty()) {
                 PhoneLog.d(TAG, "[VideoCapability] Size=" + size + " FPS=UNKNOWN → 跳过");
                 continue;
@@ -384,7 +418,7 @@ public class PhoneSyncCameraService extends Service {
                     selectedSize = size;
                     selectedFps = fps;
                     selectedHevc = true;
-                    selectedHighSpeed = shouldUseHighSpeedSession(size, fps, hsSizeList);
+                    selectedHighSpeed = shouldUseHighSpeedSession(map, size, fps, hsSizeList, hasHsCapability);
                     sizeResolved = true;
                     PhoneLog.d(TAG, "[VideoCapability] Size=" + size + " FPS=" + fps
                             + " HEVC=true HighSpeed=" + selectedHighSpeed + " → ✅ SELECTED");
@@ -395,7 +429,7 @@ public class PhoneSyncCameraService extends Service {
                     selectedSize = size;
                     selectedFps = fps;
                     selectedHevc = false;
-                    selectedHighSpeed = shouldUseHighSpeedSession(size, fps, hsSizeList);
+                    selectedHighSpeed = shouldUseHighSpeedSession(map, size, fps, hsSizeList, hasHsCapability);
                     sizeResolved = true;
                     PhoneLog.d(TAG, "[VideoCapability] Size=" + size + " FPS=" + fps
                             + " H264=true HighSpeed=" + selectedHighSpeed + " → ✅ SELECTED");
@@ -417,7 +451,7 @@ public class PhoneSyncCameraService extends Service {
             PhoneLog.d(TAG, "[VideoSelection] Camera=" + mCameraId
                     + " Resolution=" + mVideoSize + " FPS=" + mVideoFps
                     + " Codec=" + (mUseHevcForRecording ? "HEVC" : "H264")
-                    + " HighSpeed=" + mIsHighSpeedRecording);
+                    + " Session=" + (mIsHighSpeedRecording ? "HIGH_SPEED" : "REGULAR"));
             PhoneLog.d(TAG, "═══════════════════════════════════════");
         } else {
             PhoneLog.e(TAG, "⚠️ [VideoSelection] 无合法组合，降级 1920x1080@30 H264");
@@ -441,48 +475,87 @@ public class PhoneSyncCameraService extends Service {
      * 4K60 / 1080p60 等应该优先使用普通 SESSION_REGULAR + CONTROL_AE_TARGET_FPS_RANGE。
      * 只有真正的高帧率（>=120fps）才使用 SESSION_HIGH_SPEED。
      */
-    private boolean shouldUseHighSpeedSession(Size size, int fps, List<Size> hsSizeList) {
-        // 如果当前尺寸不在 High Speed 尺寸列表中，使用普通 Session
-        if (!isHighSpeedSize(size, hsSizeList)) {
+    /**
+     * 判断是否应该使用 High Speed Session。
+     * 必须同时满足：
+     * 1. 设备具有 REQUEST_AVAILABLE_CAPABILITIES_CONSTRAINED_HIGH_SPEED_VIDEO
+     * 2. 当前 size 出现在 StreamConfigurationMap.getHighSpeedVideoSizes()
+     * 3. 当前 FPS 是该 size 对应的 getHighSpeedVideoFpsRangesFor(size) 中合法的 FPS Range
+     * 4. 当前录像确实需要 High Speed Session（如 FPS >= 120）
+     */
+    private boolean shouldUseHighSpeedSession(StreamConfigurationMap map, Size size, int fps,
+                                               List<Size> hsSizeList, boolean hasHsCapability) {
+        if (!hasHsCapability) {
+            PhoneLog.d(TAG, "[HS] Device does not support CONSTRAINED_HIGH_SPEED_VIDEO → Regular");
             return false;
         }
-        // 真正的高帧率（>=120fps）才使用 High Speed Session
-        // 4K60 / 1080p60 等优先使用普通 Session，保持 H.264 Preview 连续
-        if (fps >= 120) {
-            return true;
+        if (!isHighSpeedSize(size, hsSizeList)) {
+            PhoneLog.d(TAG, "[HS] Size=" + size + " not in HS sizes → Regular");
+            return false;
         }
-        // 其他情况（如 4K60、1080p60）使用普通 Session
-        return false;
+        // 检查 FPS 是否在该 size 的 High Speed FPS Range 中
+        boolean fpsInHsRange = false;
+        Range<Integer>[] hsRanges = map.getHighSpeedVideoFpsRangesFor(size);
+        if (hsRanges != null) {
+            for (Range<Integer> r : hsRanges) {
+                int lower = r.getLower();
+                int upper = r.getUpper();
+                if (fps >= lower && fps <= upper) {
+                    fpsInHsRange = true;
+                    break;
+                }
+            }
+        }
+        if (!fpsInHsRange) {
+            PhoneLog.d(TAG, "[HS] Size=" + size + " FPS=" + fps + " not in HS FPS range → Regular");
+            return false;
+        }
+        if (fps < 120) {
+            PhoneLog.d(TAG, "[HS] Size=" + size + " FPS=" + fps + " < 120 → Regular");
+            return false;
+        }
+        PhoneLog.d(TAG, "[HS] Size=" + size + " FPS=" + fps + " → HIGH_SPEED Session");
+        return true;
     }
 
     /**
      * 获取指定 Size 下 Camera2 实际支持的所有合法 FPS（降序）。
      * High Speed → getHighSpeedVideoFpsRangesFor(size)
-     * 普通       → getOutputMinFrameDuration(MediaRecorder.class, size)
+     * 普通       → CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES
      */
-    private List<Integer> getSupportedFpsForSize(StreamConfigurationMap map, Size size, List<Size> hsSizeList) {
+    /**
+     * 获取指定 Size 下 Camera2 实际支持的所有合法 FPS（降序）。
+     * 普通录像：来自 CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES
+     * High Speed：来自 StreamConfigurationMap.getHighSpeedVideoFpsRangesFor(size)
+     */
+    private List<Integer> getSupportedFpsForSize(StreamConfigurationMap map, Size size,
+                                                  List<Size> hsSizeList,
+                                                  Range<Integer>[] aeFpsRanges,
+                                                  boolean isHsSize) {
         List<Integer> fpsList = new ArrayList<>();
-        if (isHighSpeedSize(size, hsSizeList)) {
-            Range<Integer>[] ranges = map.getHighSpeedVideoFpsRangesFor(size);
-            if (ranges != null) {
-                for (Range<Integer> r : ranges) {
+
+        if (isHsSize) {
+            // High Speed：使用 getHighSpeedVideoFpsRangesFor
+            Range<Integer>[] hsRanges = map.getHighSpeedVideoFpsRangesFor(size);
+            if (hsRanges != null) {
+                for (Range<Integer> r : hsRanges) {
                     int upper = r.getUpper();
                     if (upper > 0 && !fpsList.contains(upper)) fpsList.add(upper);
                     int lower = r.getLower();
                     if (lower > 0 && lower != upper && !fpsList.contains(lower)) fpsList.add(lower);
                 }
             }
-        } else {
-            try {
-                long minDur = map.getOutputMinFrameDuration(MediaRecorder.class, size);
-                if (minDur > 0) {
-                    int maxFps = (int) (1_000_000_000L / minDur);
-                    if (maxFps > 0) fpsList.add(maxFps);
-                }
-            } catch (Exception e) {
-                PhoneLog.w(TAG, "minFrameDuration 查询异常: " + e.getMessage());
+        }
+        // 普通录像：使用 CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES
+        if (aeFpsRanges != null) {
+            for (Range<Integer> r : aeFpsRanges) {
+                int upper = r.getUpper();
+                int lower = r.getLower();
+                if (upper > 0 && !fpsList.contains(upper)) fpsList.add(upper);
+                if (lower > 0 && lower != upper && !fpsList.contains(lower)) fpsList.add(lower);
             }
         }
+
         fpsList.sort(Collections.reverseOrder());
         return fpsList;
     }
@@ -492,7 +565,14 @@ public class PhoneSyncCameraService extends Service {
      * 【修复】VideoCapabilities.getSupportedFrameRatesFor 返回 Range<Double>，
      * 需要用 double 比较而非 Range<Integer>。
      */
+    /**
+     * 检查编码器是否支持给定 Size + FPS。
+     * 先使用 MediaCodecList 做预检查，再使用 MediaRecorder.prepare() 做最终验证。
+     * 【修复】VideoCapabilities.getSupportedFrameRatesFor 返回 Range<Double>，需要用 double 比较。
+     */
     private boolean checkEncoderSupport(String mimeType, Size size, int fps) {
+        // 1. MediaCodecList 预检查
+        boolean codecOk = false;
         try {
             MediaCodecList codecList = new MediaCodecList(MediaCodecList.REGULAR_CODECS);
             for (MediaCodecInfo info : codecList.getCodecInfos()) {
@@ -503,16 +583,54 @@ public class PhoneSyncCameraService extends Service {
                         MediaCodecInfo.VideoCapabilities vc = info.getCapabilitiesForType(type).getVideoCapabilities();
                         if (vc == null) continue;
                         if (!vc.isSizeSupported(size.getWidth(), size.getHeight())) continue;
-                        // 【修复】返回类型是 Range<Double>
                         Range<Double> fpsRange = vc.getSupportedFrameRatesFor(size.getWidth(), size.getHeight());
-                        if (fpsRange != null && fpsRange.contains((double) fps)) return true;
+                        if (fpsRange != null && fpsRange.contains((double) fps)) {
+                            codecOk = true;
+                            break;
+                        }
                     } catch (Exception ignored) {}
                 }
+                if (codecOk) break;
             }
         } catch (Exception e) {
-            PhoneLog.w(TAG, "checkEncoderSupport 异常: " + e.getMessage());
+            PhoneLog.w(TAG, "checkEncoderSupport MediaCodecList 异常: " + e.getMessage());
+            return false;
         }
-        return false;
+        if (!codecOk) return false;
+
+        // 2. MediaRecorder.prepare() 最终验证
+        return verifyRecordingCombo(size, fps, mimeType.equalsIgnoreCase(MediaFormat.MIMETYPE_VIDEO_HEVC));
+    }
+
+    /**
+     * 实际验证 MediaRecorder 是否能够接受给定的 Size + FPS + Encoder 组合。
+     */
+    private boolean verifyRecordingCombo(Size size, int fps, boolean hevc) {
+        MediaRecorder mr = null;
+        File tempFile = null;
+        try {
+            tempFile = File.createTempFile("video_verify_", ".mp4");
+            mr = new MediaRecorder(this);
+            mr.setVideoSource(MediaRecorder.VideoSource.SURFACE);
+            mr.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
+            mr.setOutputFile(tempFile.getAbsolutePath());
+            mr.setVideoEncoder(hevc ? MediaRecorder.VideoEncoder.HEVC : MediaRecorder.VideoEncoder.H264);
+            mr.setVideoSize(size.getWidth(), size.getHeight());
+            mr.setVideoFrameRate(fps);
+            mr.prepare();
+            return true;
+        } catch (Exception e) {
+            PhoneLog.d(TAG, "[VideoVerify] " + size + "@" + fps + " "
+                    + (hevc ? "HEVC" : "H264") + " prepare failed: " + e.getMessage());
+            return false;
+        } finally {
+            if (mr != null) {
+                try { mr.release(); } catch (Exception ignored) {}
+            }
+            if (tempFile != null) {
+                try { tempFile.delete(); } catch (Exception ignored) {}
+            }
+        }
     }
 
     private Size chooseBestPreviewSize(Size[] sizes) {
@@ -702,9 +820,13 @@ public class PhoneSyncCameraService extends Service {
      * 必须使用 CameraConstrainedHighSpeedCaptureSession.createHighSpeedRequestList() + setRepeatingBurst()。
      * 失败时：销毁当前 High Speed Session，重建普通 SESSION_REGULAR。
      */
+    /**
+     * High Speed 专用 request 提交。
+     * 必须使用 CameraConstrainedHighSpeedCaptureSession.createHighSpeedRequestList() + setRepeatingBurst()。
+     * 失败时：销毁当前 High Speed Session，重新执行完整录像规格选择（Regular），而非简单设置 mIsHighSpeedRecording=false。
+     */
     private void startHighSpeedRecordingRequest(CameraCaptureSession session) {
         try {
-            // 【修复】必须将 CameraCaptureSession 转为 CameraConstrainedHighSpeedCaptureSession
             CameraConstrainedHighSpeedCaptureSession hsSession =
                     (CameraConstrainedHighSpeedCaptureSession) session;
 
@@ -716,63 +838,178 @@ public class PhoneSyncCameraService extends Service {
             applyCommonControls(b);
             b.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, new Range<>(mVideoFps, mVideoFps));
 
-            // 【修复】使用 createHighSpeedRequestList() 生成合法的 High Speed Request List
             List<CaptureRequest> burst = hsSession.createHighSpeedRequestList(b.build());
             hsSession.setRepeatingBurst(burst, null, mBgHandler);
 
             PhoneLog.d(TAG, "✅ [HighSpeed] RepeatingBurst 已提交, requestListSize=" + burst.size());
         } catch (Exception e) {
-            PhoneLog.e(TAG, "❌ HighSpeed Request 提交失败，销毁 HighSpeed Session 并重建普通 Session", e);
+            PhoneLog.e(TAG, "❌ HighSpeed Request 提交失败，销毁 HighSpeed Session 并重新选择 Regular 配置", e);
             // 1. 关闭失败的 High Speed Session
             closeCurrentSession();
-            // 2. 标记不再使用 High Speed，强制降级为普通 Session
-            mIsHighSpeedRecording = false;
-            // 3. 结束当前录像准备状态
+            // 2. 清理录像资源
             mIsRecording.set(false);
             mRecorderPrepared.set(false);
             mRecorderStarted.set(false);
-            // 4. 清理录像资源
             cleanupFailedRecording();
-            // 5. 重新创建 MediaRecorder 并尝试普通 SESSION_REGULAR
-            PhoneLog.d(TAG, "🔄 HighSpeed 回退：重建普通 SESSION_REGULAR 录像");
+            // 3. 重新执行完整录像规格选择（Regular）
+            PhoneLog.d(TAG, "🔄 HighSpeed 回退：重新选择 Regular 录像配置");
+            reselectRegularRecording();
+        }
+    }
+
+    /**
+     * High Speed 失败后，重新选择合法的 Regular 录像配置。
+     * 重新从 MediaRecorder.getSupportedSizes() 开始，查询 Regular FPS，验证 HEVC/H264。
+     */
+    private void reselectRegularRecording() {
+        if (mCameraDevice == null) {
+            createPreviewSession();
+            return;
+        }
+        try {
+            CameraManager mgr = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
+            CameraCharacteristics chars = mgr.getCameraCharacteristics(mCameraId);
+            StreamConfigurationMap map = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+            if (map == null) {
+                PhoneLog.e(TAG, "❌ [HS Fallback] StreamConfigurationMap is null");
+                createPreviewSession();
+                return;
+            }
+            // 重新选择录像规格（Regular）
+            Size origSize = mVideoSize;
+            int origFps = mVideoFps;
+            boolean origHevc = mUseHevcForRecording;
+            boolean origHs = mIsHighSpeedRecording;
+
+            // 临时选择 Regular 配置
+            chooseVideoSizeAndFpsRegularOnly(map, chars);
+
+            PhoneLog.d(TAG, "🔄 [HS Fallback] 原配置=" + origSize + "@" + origFps + " HS=" + origHs
+                    + " → 新配置=" + mVideoSize + "@" + mVideoFps + " HS=" + mIsHighSpeedRecording);
+
+            // 重新创建 MediaRecorder
             Uri fallbackUri = null;
             try {
-                fallbackUri = getContentResolver().insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, new ContentValues());
-                if (fallbackUri != null) {
-                    // 【修复】ParcelFileDescriptor 保存为成员变量，不用 try-with-resources
-                    ParcelFileDescriptor pfd = getContentResolver().openFileDescriptor(fallbackUri, "rw");
-                    if (pfd != null) {
-                        mVideoPfd = pfd;  // 复用成员变量
-                        mVideoRecorder = new MediaRecorder(PhoneSyncCameraService.this);
-                        mVideoRecorder.setVideoSource(MediaRecorder.VideoSource.SURFACE);
-                        mVideoRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
-                        mVideoRecorder.setOutputFile(mVideoPfd.getFileDescriptor());
-                        mVideoRecorder.setVideoEncoder(mUseHevcForRecording ? MediaRecorder.VideoEncoder.HEVC : MediaRecorder.VideoEncoder.H264);
-                        mVideoRecorder.setVideoSize(mVideoSize.getWidth(), mVideoSize.getHeight());
-                        mVideoRecorder.setVideoFrameRate(mVideoFps);
-                        int bitRate = (int) ((long) mVideoSize.getWidth() * mVideoSize.getHeight() * 4L);
-                        mVideoRecorder.setVideoEncodingBitRate(Math.min(bitRate, 100_000_000));
-                        mVideoRecorder.prepare();
-                        mRecorderPrepared.set(true);
-                        createRecordingSession();
-                    } else {
-                        PhoneLog.e(TAG, "❌ 降级失败：无法打开文件描述符");
-                        getContentResolver().delete(fallbackUri, null, null);
-                        createPreviewSession();
-                    }
-                }
+                String ts = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date());
+                ContentValues values = new ContentValues();
+                values.put(MediaStore.Video.Media.DISPLAY_NAME, "VIDfallback_" + ts + ".mp4");
+                values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
+                values.put(MediaStore.Video.Media.RELATIVE_PATH, "DCIM/WearSync");
+                fallbackUri = getContentResolver().insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values);
+                if (fallbackUri == null) throw new IllegalStateException("fallback URI is null");
+
+                mVideoPfd = getContentResolver().openFileDescriptor(fallbackUri, "rw");
+                if (mVideoPfd == null) throw new IllegalStateException("fallback PFD is null");
+
+                mVideoRecorder = new MediaRecorder(PhoneSyncCameraService.this);
+                mVideoRecorder.setVideoSource(MediaRecorder.VideoSource.SURFACE);
+                mVideoRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
+                mVideoRecorder.setOutputFile(mVideoPfd.getFileDescriptor());
+                mVideoRecorder.setVideoEncoder(mUseHevcForRecording ? MediaRecorder.VideoEncoder.HEVC : MediaRecorder.VideoEncoder.H264);
+                mVideoRecorder.setVideoSize(mVideoSize.getWidth(), mVideoSize.getHeight());
+                mVideoRecorder.setVideoFrameRate(mVideoFps);
+                int bitRate = (int) ((long) mVideoSize.getWidth() * mVideoSize.getHeight() * 4L);
+                mVideoRecorder.setVideoEncodingBitRate(Math.min(bitRate, 100_000_000));
+                mVideoRecorder.prepare();
+                mRecorderPrepared.set(true);
+
+                // 创建普通录像 Session
+                createRecordingSession();
             } catch (Exception retryEx) {
-                PhoneLog.e(TAG, "❌ 降级普通 Session 也失败，取消录像", retryEx);
-                if (fallbackUri != null) {
-                    cleanupEmptyVideo(fallbackUri);
-                }
-                // 【修复】降级失败时也清理 mVideoPfd
+                PhoneLog.e(TAG, "❌ [HS Fallback] 重新选择 Regular 配置也失败", retryEx);
                 if (mVideoPfd != null) {
                     try { mVideoPfd.close(); } catch (Exception ignored) {}
                     mVideoPfd = null;
                 }
+                if (fallbackUri != null) {
+                    try { getContentResolver().delete(fallbackUri, null, null); } catch (Exception ignored) {}
+                }
+                cleanupFailedRecording();
+                mIsRecording.set(false);
+                mRecorderPrepared.set(false);
+                mRecorderStarted.set(false);
                 createPreviewSession();
             }
+        } catch (Exception e) {
+            PhoneLog.e(TAG, "❌ [HS Fallback] 重新选择异常", e);
+            createPreviewSession();
+        }
+    }
+
+    /**
+     * 仅选择 Regular 录像配置（不使用 High Speed Session）。
+     * 类似于 chooseVideoSizeAndFps 但强制 mIsHighSpeedRecording=false。
+     */
+    private void chooseVideoSizeAndFpsRegularOnly(StreamConfigurationMap map, CameraCharacteristics chars) {
+        Size[] videoSizes = map.getOutputSizes(MediaRecorder.class);
+        if (videoSizes == null || videoSizes.length == 0) {
+            mVideoSize = new Size(1920, 1080);
+            mVideoFps = 30;
+            mUseHevcForRecording = false;
+            mIsHighSpeedRecording = false;
+            return;
+        }
+        List<Size> sortedSizes = new ArrayList<>(Arrays.asList(videoSizes));
+        sortedSizes.sort(SIZE_BY_AREA.reversed());
+
+        Range<Integer>[] aeFpsRanges = chars.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES);
+        List<Integer> aeFpsValues = new ArrayList<>();
+        if (aeFpsRanges != null) {
+            for (Range<Integer> r : aeFpsRanges) {
+                Integer upper = r.getUpper();
+                Integer lower = r.getLower();
+                if (upper != null && upper > 0) aeFpsValues.add(upper);
+                if (lower != null && lower > 0) aeFpsValues.add(lower);
+            }
+        }
+        for (int fps : new int[]{120, 60, 30, 24}) {
+            if (!aeFpsValues.contains(fps)) aeFpsValues.add(fps);
+        }
+        aeFpsValues.sort(Collections.reverseOrder());
+
+        // 不使用 High Speed
+        List<Size> emptyHsList = Collections.emptyList();
+        boolean hasHsCap = false;
+
+        Size selectedSize = null;
+        int selectedFps = 0;
+        boolean selectedHevc = false;
+
+        for (Size size : sortedSizes) {
+            List<Integer> fpsList = getSupportedFpsForSize(map, size, emptyHsList, aeFpsRanges, false);
+            if (fpsList.isEmpty()) continue;
+            boolean sizeResolved = false;
+            for (int fps : fpsList) {
+                boolean hevcOk = checkEncoderSupport(MediaFormat.MIMETYPE_VIDEO_HEVC, size, fps);
+                if (hevcOk) {
+                    selectedSize = size;
+                    selectedFps = fps;
+                    selectedHevc = true;
+                    sizeResolved = true;
+                    break;
+                }
+                boolean h264Ok = checkEncoderSupport(MediaFormat.MIMETYPE_VIDEO_AVC, size, fps);
+                if (h264Ok) {
+                    selectedSize = size;
+                    selectedFps = fps;
+                    selectedHevc = false;
+                    sizeResolved = true;
+                    break;
+                }
+            }
+            if (sizeResolved) break;
+        }
+
+        if (selectedSize != null) {
+            mVideoSize = selectedSize;
+            mVideoFps = selectedFps;
+            mUseHevcForRecording = selectedHevc;
+            mIsHighSpeedRecording = false;
+        } else {
+            mVideoSize = new Size(1920, 1080);
+            mVideoFps = 30;
+            mUseHevcForRecording = false;
+            mIsHighSpeedRecording = false;
         }
     }
 
@@ -804,8 +1041,13 @@ public class PhoneSyncCameraService extends Service {
      * 普通录像 Request。
      * 使用 SESSION_REGULAR + TEMPLATE_RECORD，同时输出到 mEncoderSurface 和 MediaRecorder。
      */
-    private void startRecordingRequest() {
-        if (mCaptureSession == null || mCameraDevice == null || mVideoRecorder == null || !mIsStreaming.get()) return;
+    /**
+     * 普通录像 Request。
+     * 使用 SESSION_REGULAR + TEMPLATE_RECORD，同时输出到 mEncoderSurface 和 MediaRecorder。
+     * @return true 如果 Request 提交成功
+     */
+    private boolean startRecordingRequest() {
+        if (mCaptureSession == null || mCameraDevice == null || mVideoRecorder == null || !mIsStreaming.get()) return false;
         try {
             CaptureRequest.Builder b = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
             b.addTarget(mEncoderSurface);
@@ -816,8 +1058,10 @@ public class PhoneSyncCameraService extends Service {
             b.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, new Range<>(mVideoFps, mVideoFps));
             mCaptureSession.setRepeatingRequest(b.build(), null, mBgHandler);
             PhoneLog.d(TAG, "✅ 普通录像 Request 已提交（mEncoderSurface + MediaRecorder）");
+            return true;
         } catch (Exception e) {
             PhoneLog.e(TAG, "❌ Recording Request 失败", e);
+            return false;
         }
     }
 
@@ -845,6 +1089,10 @@ public class PhoneSyncCameraService extends Service {
      * 开始录像。
      * 不操作 mEncoder / mEncoderSurface / mDataOutputStream，它们由 Preview Session 保持运行。
      */
+    /**
+     * 开始录像。
+     * 不操作 mEncoder / mEncoderSurface / mDataOutputStream，它们由 Preview Session 保持运行。
+     */
     private void startVideoRecording() {
         if (mIsRecording.get() || !mIsStreaming.get() || mCameraDevice == null) return;
         PhoneLog.d(TAG, "🎬 开始录像: " + mVideoSize + "@" + mVideoFps + "fps "
@@ -859,9 +1107,7 @@ public class PhoneSyncCameraService extends Service {
             uri = getContentResolver().insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values);
             if (uri == null) return;
             mCurrentVideoUri = uri;
-            // 【修复】ParcelFileDescriptor 保存为成员变量，不在 try-with-resources 中关闭
-            // 因为 createRecordingSession() 是异步的，MediaRecorder.start() 在 onConfigured 回调中才执行
-            // 如果这里用 try-with-resources，pfd 会在 MediaRecorder.start() 之前被关闭
+            // ParcelFileDescriptor 保存为成员变量，不在 try-with-resources 中关闭
             mVideoPfd = getContentResolver().openFileDescriptor(uri, "rw");
             if (mVideoPfd == null) { cleanupEmptyVideo(uri); return; }
             mVideoRecorder = new MediaRecorder(this);
@@ -882,7 +1128,6 @@ public class PhoneSyncCameraService extends Service {
             mRecorderPrepared.set(false);
             mRecorderStarted.set(false);
             mIsRecording.set(false);
-            // 【修复】异常路径也关闭 ParcelFileDescriptor
             if (mVideoPfd != null) {
                 try { mVideoPfd.close(); } catch (Exception ignored) {}
                 mVideoPfd = null;
