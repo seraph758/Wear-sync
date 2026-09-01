@@ -404,7 +404,8 @@ aeFpsValues.sort(Collections.reverseOrder());
 
         for (Size size : sortedSizes) {
             // 获取当前 Size 的 FPS 列表
-            List<Integer> fpsList = getSupportedFpsForSize(map, size, hsSizeList, aeFpsRanges, hasHsCapability);
+            boolean isHsSize = isHighSpeedSize(size, hsSizeList);
+            List<Integer> fpsList = getSupportedFpsForSize(map, size, hsSizeList, aeFpsRanges, isHsSize);
             if (fpsList.isEmpty()) {
                 PhoneLog.d(TAG, "[VideoCapability] Size=" + size + " FPS=UNKNOWN → 跳过");
                 continue;
@@ -422,6 +423,10 @@ aeFpsValues.sort(Collections.reverseOrder());
                         mVideoFpsRange = findFpsRange(map.getHighSpeedVideoFpsRangesFor(size), fps);
                     } else {
                         mVideoFpsRange = findFpsRange(aeFpsRanges, fps);
+                        if (mVideoFpsRange == null) {
+                            PhoneLog.d(TAG, "[VideoCapability] Size=" + size + " FPS=" + fps + " REGULAR AE Range not found → 跳过此FPS");
+                            continue;
+                        }
                     }
                     sizeResolved = true;
                     PhoneLog.d(TAG, "[VideoCapability] Size=" + size + " FPS=" + fps
@@ -439,6 +444,10 @@ aeFpsValues.sort(Collections.reverseOrder());
                         mVideoFpsRange = findFpsRange(map.getHighSpeedVideoFpsRangesFor(size), fps);
                     } else {
                         mVideoFpsRange = findFpsRange(aeFpsRanges, fps);
+                        if (mVideoFpsRange == null) {
+                            PhoneLog.d(TAG, "[VideoCapability] Size=" + size + " FPS=" + fps + " REGULAR AE Range not found → 跳过此FPS");
+                            continue;
+                        }
                     }
                     sizeResolved = true;
                     PhoneLog.d(TAG, "[VideoCapability] Size=" + size + " FPS=" + fps
