@@ -34,6 +34,7 @@ import android.media.MediaCodecList;
 import android.media.MediaFormat;
 import android.media.MediaRecorder;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
@@ -77,6 +78,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * PhoneSyncCameraService - 手机端远程相机服务
  * 录像规格选择：Size(大→小) → FPS(高→低) → HEVC → H264 → 下一FPS → 下一Size
  * High Speed Video：若选中组合属于 HighSpeed，自动使用 SESSION_HIGH_SPEED
+ *
+ * 核心设计：
+ * - 录像期间 mEncoderSurface 继续作为 Camera CaptureRequest 的输出目标，手表 H.264 预览不中断
+ * - 录像 Session 不加入 mPhotoReader（JPEG 拍照用）
+ * - 普通录像使用 SESSION_REGULAR + TEMPLATE_RECORD，同时输出到 mEncoderSurface 和 MediaRecorder
+ * - High Speed 录像严格使用 SESSION_HIGH_SPEED，失败时销毁重建普通 Session
+ * - 录像开始/停止不操作 mEncoder 和 mDataOutputStream
  */
 public class PhoneSyncCameraService extends Service {
 
@@ -148,6 +156,18 @@ public class PhoneSyncCameraService extends Service {
     private static final long WATCHDOG_TIMEOUT = 1000L * 60 * 30;
     private static final Comparator<Size> SIZE_BY_AREA = (lhs, rhs) ->
             Long.signum((long) lhs.getWidth() * lhs.getHeight() - (long) rhs.getWidth() * rhs.getHeight());
+
+    // ==================== 录像期间 H.264 状态确认日志 ====================
+    private final Handler mLogHandler = new Handler(Looper.getMainLooper());
+    private final Runnable mLogRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (mIsRecording.get() && mEncoder != null) {
+                PhoneLog.d(TAG, "[VideoPreview] H264 encoder still running");
+                mLogHandler.postDelayed(this, 5000); // 每5秒打印一次
+            }
+        }
+    };
 
     // ==================== 消息监听 ====================
     private final MessageClient.OnMessageReceivedListener mMessageListener = event -> {
@@ -346,7 +366,7 @@ public class PhoneSyncCameraService extends Service {
 
         PhoneLog.d(TAG, "═══════════════════════════════════════");
         PhoneLog.d(TAG, "[VideoCapability] Camera=" + mCameraId + " 开始评估");
-        PhoneLog.dTAG, "═══════════════════════════════════════");
+        PhoneLog.d(TAG, "═══════════════════════════════════════");
 
         for (Size size : sortedSizes) {
             List<Integer> fpsList = getSupportedFpsForSize(map, size, hsSizeList);
@@ -523,6 +543,11 @@ public class PhoneSyncCameraService extends Service {
         }
     }
 
+    // ==================== Preview Session ====================
+    /**
+     * 创建预览 CaptureSession。
+     * 输出：mEncoderSurface + mPhotoReader（拍照用）
+     */
     private void createPreviewSession() {
         if (mCameraDevice == null || mEncoderSurface == null || mPhotoReader == null || !mIsStreaming.get()) return;
         closeCurrentSession();
@@ -555,20 +580,26 @@ public class PhoneSyncCameraService extends Service {
     }
 
     // ==================================================================
-    // 【核心修改2】录像 Session：High Speed 使用 SESSION_HIGH_SPEED
+    // 【核心修改2】录像 Session：与 Preview 并行，不加入 PhotoReader
     // ==================================================================
 
     /**
      * 创建录像 CaptureSession。
-     * High Speed → SessionConfiguration(SESSION_HIGH_SPEED) + createCaptureRequestBuilder
-     * 普通       → SessionConfiguration(SESSION_REGULAR) + TEMPLATE_RECORD
+     * 普通录像 → SessionConfiguration(SESSION_REGULAR) + TEMPLATE_RECORD
+     *   输出：mEncoderSurface + MediaRecorder Surface（不含 PhotoReader）
+     * High Speed → SessionConfiguration(SESSION_HIGH_SPEED)
+     *   输出：mEncoderSurface + MediaRecorder Surface（不含 PhotoReader）
+     *
+     * 录像期间 mEncoder 和 mDataOutputStream 不得停止/关闭。
      */
     private void createRecordingSession() {
         if (mCameraDevice == null || mEncoderSurface == null || mVideoRecorder == null || !mIsStreaming.get()) return;
         closeCurrentSession();
         try {
             List<OutputConfiguration> outputs = new ArrayList<>();
+            // 1. mEncoderSurface —— 手表 H.264 Preview（录像期间必须继续工作）
             if (mEncoderSurface.isValid()) outputs.add(new OutputConfiguration(mEncoderSurface));
+            // 2. MediaRecorder Surface —— 手机录像
             Surface recSurface = mVideoRecorder.getSurface();
             if (recSurface != null && recSurface.isValid()) {
                 outputs.add(new OutputConfiguration(recSurface));
@@ -576,17 +607,18 @@ public class PhoneSyncCameraService extends Service {
                 PhoneLog.e(TAG, "❌ MediaRecorder Surface 无效");
                 return;
             }
-            if (mPhotoReader != null && mPhotoReader.getSurface().isValid()) {
-                outputs.add(new OutputConfiguration(mPhotoReader.getSurface()));
-            }
+            // 3. 不加入 mPhotoReader（JPEG 拍照用，录像 Session 不需要）
 
-            // 【修复】统一使用 SessionConfiguration，通过 sessionType 区分普通/高速
+            // 统一使用 SessionConfiguration，通过 sessionType 区分普通/高速
             int sessionType = mIsHighSpeedRecording
                     ? SessionConfiguration.SESSION_HIGH_SPEED
                     : SessionConfiguration.SESSION_REGULAR;
 
-            PhoneLog.d(TAG, "🔧 创建录像 Session type=" + sessionType
-                    + " (" + mVideoSize + "@" + mVideoFps + "fps)");
+            PhoneLog.d(TAG, "🔧 [VideoSession] START");
+            PhoneLog.d(TAG, "Resolution=" + mVideoSize + " FPS=" + mVideoFps);
+            PhoneLog.d(TAG, "Codec=" + (mUseHevcForRecording ? "HEVC" : "H264"));
+            PhoneLog.d(TAG, "SessionType=" + (sessionType == SessionConfiguration.SESSION_HIGH_SPEED ? "HIGH_SPEED" : "REGULAR"));
+            PhoneLog.d(TAG, "PreviewSurface=true RecorderSurface=true PhotoReader=false");
 
             SessionConfiguration config = new SessionConfiguration(
                     sessionType, outputs,
@@ -609,6 +641,9 @@ public class PhoneSyncCameraService extends Service {
                                     mIsRecording.set(true);
                                     PhoneLog.d(TAG, "🎬 MediaRecorder 已启动");
                                     notifyWearVideoStatus(true);
+                                    // 启动 H.264 状态确认日志（每5秒打印一次）
+                                    mLogHandler.removeCallbacks(mLogRunnable);
+                                    mLogHandler.post(mLogRunnable);
                                 } catch (Exception e) {
                                     PhoneLog.e(TAG, "❌ MediaRecorder 启动失败", e);
                                     mIsRecording.set(false);
@@ -640,10 +675,10 @@ public class PhoneSyncCameraService extends Service {
      * High Speed 专用 request 提交。
      * 【修复】正确 API 是 createCaptureRequestBuilder()，不是 createHighSpeedRequestBuilder()。
      * High Speed Session 要求使用 setRepeatingBurst。
+     * 失败时：销毁当前 High Speed Session，重建普通 SESSION_REGULAR。
      */
     private void startHighSpeedRecordingRequest(CameraCaptureSession session) {
         try {
-            // 【修复】使用正确的 API 名称
             CaptureRequest.Builder b = session.createCaptureRequestBuilder(CameraDevice.TEMPLATE_RECORD);
             b.addTarget(mEncoderSurface);
             Surface recSurface = mVideoRecorder.getSurface();
@@ -651,14 +686,21 @@ public class PhoneSyncCameraService extends Service {
             applyZoom(b);
             applyCommonControls(b);
             b.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, new Range<>(mVideoFps, mVideoFps));
-            // High Speed Session 必须使用 burst
-            List<CaptureRequest> burst = session.createCaptureRequestBuilder(CameraDevice.TEMPLATE_RECORD)
-                    .build() instanceof CaptureRequest ? Collections.singletonList(b.build()) : Collections.singletonList(b.build());
+            List<CaptureRequest> burst = Collections.singletonList(b.build());
             session.setRepeatingBurst(burst, null, mBgHandler);
             PhoneLog.d(TAG, "✅ HighSpeed RepeatingBurst 已提交");
         } catch (Exception e) {
-            PhoneLog.e(TAG, "❌ HighSpeed Request 提交失败，回退普通模式", e);
-            startRecordingRequest();
+            PhoneLog.e(TAG, "❌ HighSpeed Request 提交失败，销毁 HighSpeed Session 并重建普通 Session", e);
+            // 1. 关闭失败的 High Speed Session
+            closeCurrentSession();
+            // 2. 结束当前录像准备状态
+            mIsRecording.set(false);
+            mRecorderPrepared.set(false);
+            mRecorderStarted.set(false);
+            cleanupFailedRecording();
+            // 3. 重新创建 SESSION_REGULAR 普通录像
+            PhoneLog.d(TAG, "🔄 HighSpeed 回退：重建普通 SESSION_REGULAR 录像");
+            createRecordingSession();
         }
     }
 
@@ -686,6 +728,10 @@ public class PhoneSyncCameraService extends Service {
         }
     }
 
+    /**
+     * 普通录像 Request。
+     * 使用 SESSION_REGULAR + TEMPLATE_RECORD，同时输出到 mEncoderSurface 和 MediaRecorder。
+     */
     private void startRecordingRequest() {
         if (mCaptureSession == null || mCameraDevice == null || mVideoRecorder == null || !mIsStreaming.get()) return;
         try {
@@ -697,6 +743,7 @@ public class PhoneSyncCameraService extends Service {
             applyCommonControls(b);
             b.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, new Range<>(mVideoFps, mVideoFps));
             mCaptureSession.setRepeatingRequest(b.build(), null, mBgHandler);
+            PhoneLog.d(TAG, "✅ 普通录像 Request 已提交（mEncoderSurface + MediaRecorder）");
         } catch (Exception e) {
             PhoneLog.e(TAG, "❌ Recording Request 失败", e);
         }
@@ -722,6 +769,10 @@ public class PhoneSyncCameraService extends Service {
         else startVideoRecording();
     }
 
+    /**
+     * 开始录像。
+     * 不操作 mEncoder / mEncoderSurface / mDataOutputStream，它们由 Preview Session 保持运行。
+     */
     private void startVideoRecording() {
         if (mIsRecording.get() || !mIsStreaming.get() || mCameraDevice == null) return;
         PhoneLog.d(TAG, "🎬 开始录像: " + mVideoSize + "@" + mVideoFps + "fps "
@@ -749,6 +800,7 @@ public class PhoneSyncCameraService extends Service {
                 mVideoRecorder.setVideoEncodingBitRate(Math.min(bitRate, 100_000_000));
                 mVideoRecorder.prepare();
                 mRecorderPrepared.set(true);
+                // 创建录像 Session（包含 mEncoderSurface + MediaRecorder Surface，不含 PhotoReader）
                 createRecordingSession();
             }
         } catch (Exception e) {
@@ -762,10 +814,21 @@ public class PhoneSyncCameraService extends Service {
         }
     }
 
+    /**
+     * 停止录像。
+     * 1. 停止 MediaRecorder
+     * 2. 释放 MediaRecorder
+     * 3. 关闭录像 CaptureSession
+     * 4. 重新建立普通 Preview Session
+     * 5. 继续使用原来的 mEncoder（不重新创建 H.264 Encoder）
+     * 6. Channel 不关闭
+     */
     private void stopVideoRecording() {
         if (!mIsRecording.get() && !mRecorderStarted.get()) return;
         try {
             closeCurrentSession();
+            // 停止 H.264 状态确认日志
+            mLogHandler.removeCallbacks(mLogRunnable);
             if (mVideoRecorder != null) {
                 if (mRecorderStarted.get()) {
                     try { mVideoRecorder.stop(); } catch (Exception e) {
@@ -781,6 +844,11 @@ public class PhoneSyncCameraService extends Service {
             mCurrentVideoUri = null;
             if (mIsStreaming.get()) createPreviewSession();
             notifyWearVideoStatus(false);
+            PhoneLog.d(TAG, "🛑 [VideoSession] STOP");
+            PhoneLog.d(TAG, "MediaRecorder released");
+            PhoneLog.d(TAG, "Preview session restoring");
+            PhoneLog.d(TAG, "H264 encoder preserved=true");
+            PhoneLog.d(TAG, "Channel preserved=" + (mDataOutputStream != null));
         } catch (Exception e) {
             PhoneLog.e(TAG, "❌ 停止录像异常", e);
             mIsRecording.set(false);
@@ -968,6 +1036,11 @@ public class PhoneSyncCameraService extends Service {
     }
 
     // ==================== 数据通道 ====================
+    /**
+     * 打开 Wear 数据通道。
+     * 仅在 Preview Session 配置完成后调用一次。
+     * 录像期间不关闭、不重新创建。
+     */
     private void openChannelStream() {
         if (mDataOutputStream != null || mCachedNodeId == null) return;
         mChannelClient.openChannel(mCachedNodeId, WEAR_CHANNEL_PATH)
@@ -1003,9 +1076,16 @@ public class PhoneSyncCameraService extends Service {
     }
 
     // ==================== 资源释放 ====================
+    /**
+     * 释放所有资源。
+     * 仅在 Service 销毁 / 看门狗超时 / 切换相机时调用。
+     * 录像开始/停止不得调用此方法中的 mEncoder 释放逻辑。
+     */
     private synchronized void stopStreamingAndRelease() {
         mIsStreaming.set(false);
         mIsCameraOpened.set(false);
+        // 停止录像日志
+        mLogHandler.removeCallbacks(mLogRunnable);
         if (mIsRecording.get() || mRecorderStarted.get()) {
             try {
                 if (mVideoRecorder != null) {
@@ -1020,6 +1100,7 @@ public class PhoneSyncCameraService extends Service {
         }
         closeCurrentSession();
         if (mCameraDevice != null) { try { mCameraDevice.close(); } catch (Exception ignored) {} mCameraDevice = null; }
+        // 仅在彻底释放时停止和释放 Encoder
         if (mEncoder != null) { try { mEncoder.stop(); mEncoder.release(); } catch (Exception ignored) {} mEncoder = null; }
         if (mEncoderSurface != null) { mEncoderSurface.release(); mEncoderSurface = null; }
         if (mPhotoReader != null) { mPhotoReader.close(); mPhotoReader = null; }
