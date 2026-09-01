@@ -679,7 +679,7 @@ public class PhoneSyncCameraService extends Service {
      */
     private void startHighSpeedRecordingRequest(CameraCaptureSession session) {
         try {
-            CaptureRequest.Builder b = session.createCaptureRequestBuilder(CameraDevice.TEMPLATE_RECORD);
+            CaptureRequest.Builder b = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
             b.addTarget(mEncoderSurface);
             Surface recSurface = mVideoRecorder.getSurface();
             if (recSurface != null && recSurface.isValid()) b.addTarget(recSurface);
@@ -693,14 +693,48 @@ public class PhoneSyncCameraService extends Service {
             PhoneLog.e(TAG, "❌ HighSpeed Request 提交失败，销毁 HighSpeed Session 并重建普通 Session", e);
             // 1. 关闭失败的 High Speed Session
             closeCurrentSession();
-            // 2. 结束当前录像准备状态
+            // 2. 标记不再使用 High Speed，强制降级为普通 Session
+            mIsHighSpeedRecording = false;
+            // 3. 结束当前录像准备状态
             mIsRecording.set(false);
             mRecorderPrepared.set(false);
             mRecorderStarted.set(false);
+            // 4. 清理录像资源
             cleanupFailedRecording();
-            // 3. 重新创建 SESSION_REGULAR 普通录像
+            // 5. 重新创建 MediaRecorder 并尝试普通 SESSION_REGULAR
             PhoneLog.d(TAG, "🔄 HighSpeed 回退：重建普通 SESSION_REGULAR 录像");
-            createRecordingSession();
+            Uri fallbackUri = null;
+            try {
+                fallbackUri = getContentResolver().insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, new ContentValues());
+                if (fallbackUri != null) {
+                    try (ParcelFileDescriptor pfd = getContentResolver().openFileDescriptor(fallbackUri, "rw")) {
+                        if (pfd != null) {
+                            mVideoRecorder = new MediaRecorder(PhoneSyncCameraService.this);
+                            mVideoRecorder.setVideoSource(MediaRecorder.VideoSource.SURFACE);
+                            mVideoRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
+                            mVideoRecorder.setOutputFile(pfd.getFileDescriptor());
+                            mVideoRecorder.setVideoEncoder(mUseHevcForRecording ? MediaRecorder.VideoEncoder.HEVC : MediaRecorder.VideoEncoder.H264);
+                            mVideoRecorder.setVideoSize(mVideoSize.getWidth(), mVideoSize.getHeight());
+                            mVideoRecorder.setVideoFrameRate(mVideoFps);
+                            int bitRate = (int) ((long) mVideoSize.getWidth() * mVideoSize.getHeight() * 4L);
+                            mVideoRecorder.setVideoEncodingBitRate(Math.min(bitRate, 100_000_000));
+                            mVideoRecorder.prepare();
+                            mRecorderPrepared.set(true);
+                            createRecordingSession();
+                        } else {
+                            PhoneLog.e(TAG, "❌ 降级失败：无法打开文件描述符");
+                            getContentResolver().delete(fallbackUri, null, null);
+                            createPreviewSession();
+                        }
+                    }
+                }
+            } catch (Exception retryEx) {
+                PhoneLog.e(TAG, "❌ 降级普通 Session 也失败，取消录像", retryEx);
+                if (fallbackUri != null) {
+                    cleanupEmptyVideo(fallbackUri);
+                }
+                createPreviewSession();
+            }
         }
     }
 
