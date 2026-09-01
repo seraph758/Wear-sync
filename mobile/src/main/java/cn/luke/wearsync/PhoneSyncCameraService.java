@@ -15,6 +15,7 @@ import android.graphics.ImageFormat;
 import android.graphics.Rect;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
+import android.hardware.camera2.CameraConstrainedHighSpeedCaptureSession;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
@@ -137,6 +138,8 @@ public class PhoneSyncCameraService extends Service {
     private ImageReader mPhotoReader;
     private MediaRecorder mVideoRecorder;
     private Uri mCurrentVideoUri;
+    /** ParcelFileDescriptor for MediaRecorder output — must stay open until MediaRecorder.stop()/release() */
+    private ParcelFileDescriptor mVideoPfd;
 
     // ==================== 通信相关 ====================
     private String mCachedNodeId;
@@ -381,7 +384,7 @@ public class PhoneSyncCameraService extends Service {
                     selectedSize = size;
                     selectedFps = fps;
                     selectedHevc = true;
-                    selectedHighSpeed = isHighSpeedSize(size, hsSizeList);
+                    selectedHighSpeed = shouldUseHighSpeedSession(size, fps, hsSizeList);
                     sizeResolved = true;
                     PhoneLog.d(TAG, "[VideoCapability] Size=" + size + " FPS=" + fps
                             + " HEVC=true HighSpeed=" + selectedHighSpeed + " → ✅ SELECTED");
@@ -392,7 +395,7 @@ public class PhoneSyncCameraService extends Service {
                     selectedSize = size;
                     selectedFps = fps;
                     selectedHevc = false;
-                    selectedHighSpeed = isHighSpeedSize(size, hsSizeList);
+                    selectedHighSpeed = shouldUseHighSpeedSession(size, fps, hsSizeList);
                     sizeResolved = true;
                     PhoneLog.d(TAG, "[VideoCapability] Size=" + size + " FPS=" + fps
                             + " H264=true HighSpeed=" + selectedHighSpeed + " → ✅ SELECTED");
@@ -429,6 +432,26 @@ public class PhoneSyncCameraService extends Service {
         for (Size hs : hsSizeList) {
             if (hs.getWidth() == size.getWidth() && hs.getHeight() == size.getHeight()) return true;
         }
+        return false;
+    }
+
+    /**
+     * 判断是否应该使用 High Speed Session。
+     * 【修复】不能仅因为 Size 出现在 getHighSpeedVideoSizes() 中就使用 High Speed Session。
+     * 4K60 / 1080p60 等应该优先使用普通 SESSION_REGULAR + CONTROL_AE_TARGET_FPS_RANGE。
+     * 只有真正的高帧率（>=120fps）才使用 SESSION_HIGH_SPEED。
+     */
+    private boolean shouldUseHighSpeedSession(Size size, int fps, List<Size> hsSizeList) {
+        // 如果当前尺寸不在 High Speed 尺寸列表中，使用普通 Session
+        if (!isHighSpeedSize(size, hsSizeList)) {
+            return false;
+        }
+        // 真正的高帧率（>=120fps）才使用 High Speed Session
+        // 4K60 / 1080p60 等优先使用普通 Session，保持 H.264 Preview 连续
+        if (fps >= 120) {
+            return true;
+        }
+        // 其他情况（如 4K60、1080p60）使用普通 Session
         return false;
     }
 
@@ -619,6 +642,9 @@ public class PhoneSyncCameraService extends Service {
             PhoneLog.d(TAG, "Codec=" + (mUseHevcForRecording ? "HEVC" : "H264"));
             PhoneLog.d(TAG, "SessionType=" + (sessionType == SessionConfiguration.SESSION_HIGH_SPEED ? "HIGH_SPEED" : "REGULAR"));
             PhoneLog.d(TAG, "PreviewSurface=true RecorderSurface=true PhotoReader=false");
+            if (sessionType == SessionConfiguration.SESSION_HIGH_SPEED) {
+                PhoneLog.d(TAG, "[HighSpeed] Size=" + mVideoSize + " FPS=" + mVideoFps + " HighSpeedSession=true");
+            }
 
             SessionConfiguration config = new SessionConfiguration(
                     sessionType, outputs,
@@ -639,7 +665,7 @@ public class PhoneSyncCameraService extends Service {
                                     mVideoRecorder.start();
                                     mRecorderStarted.set(true);
                                     mIsRecording.set(true);
-                                    PhoneLog.d(TAG, "🎬 MediaRecorder 已启动");
+                                    PhoneLog.d(TAG, "🎬 [VideoRecording] MediaRecorder.start() success");
                                     notifyWearVideoStatus(true);
                                     // 启动 H.264 状态确认日志（每5秒打印一次）
                                     mLogHandler.removeCallbacks(mLogRunnable);
@@ -673,12 +699,15 @@ public class PhoneSyncCameraService extends Service {
 
     /**
      * High Speed 专用 request 提交。
-     * 【修复】正确 API 是 createCaptureRequestBuilder()，不是 createHighSpeedRequestBuilder()。
-     * High Speed Session 要求使用 setRepeatingBurst。
+     * 必须使用 CameraConstrainedHighSpeedCaptureSession.createHighSpeedRequestList() + setRepeatingBurst()。
      * 失败时：销毁当前 High Speed Session，重建普通 SESSION_REGULAR。
      */
     private void startHighSpeedRecordingRequest(CameraCaptureSession session) {
         try {
+            // 【修复】必须将 CameraCaptureSession 转为 CameraConstrainedHighSpeedCaptureSession
+            CameraConstrainedHighSpeedCaptureSession hsSession =
+                    (CameraConstrainedHighSpeedCaptureSession) session;
+
             CaptureRequest.Builder b = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
             b.addTarget(mEncoderSurface);
             Surface recSurface = mVideoRecorder.getSurface();
@@ -686,9 +715,12 @@ public class PhoneSyncCameraService extends Service {
             applyZoom(b);
             applyCommonControls(b);
             b.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, new Range<>(mVideoFps, mVideoFps));
-            List<CaptureRequest> burst = Collections.singletonList(b.build());
-            session.setRepeatingBurst(burst, null, mBgHandler);
-            PhoneLog.d(TAG, "✅ HighSpeed RepeatingBurst 已提交");
+
+            // 【修复】使用 createHighSpeedRequestList() 生成合法的 High Speed Request List
+            List<CaptureRequest> burst = hsSession.createHighSpeedRequestList(b.build());
+            hsSession.setRepeatingBurst(burst, null, mBgHandler);
+
+            PhoneLog.d(TAG, "✅ [HighSpeed] RepeatingBurst 已提交, requestListSize=" + burst.size());
         } catch (Exception e) {
             PhoneLog.e(TAG, "❌ HighSpeed Request 提交失败，销毁 HighSpeed Session 并重建普通 Session", e);
             // 1. 关闭失败的 High Speed Session
@@ -707,31 +739,37 @@ public class PhoneSyncCameraService extends Service {
             try {
                 fallbackUri = getContentResolver().insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, new ContentValues());
                 if (fallbackUri != null) {
-                    try (ParcelFileDescriptor pfd = getContentResolver().openFileDescriptor(fallbackUri, "rw")) {
-                        if (pfd != null) {
-                            mVideoRecorder = new MediaRecorder(PhoneSyncCameraService.this);
-                            mVideoRecorder.setVideoSource(MediaRecorder.VideoSource.SURFACE);
-                            mVideoRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
-                            mVideoRecorder.setOutputFile(pfd.getFileDescriptor());
-                            mVideoRecorder.setVideoEncoder(mUseHevcForRecording ? MediaRecorder.VideoEncoder.HEVC : MediaRecorder.VideoEncoder.H264);
-                            mVideoRecorder.setVideoSize(mVideoSize.getWidth(), mVideoSize.getHeight());
-                            mVideoRecorder.setVideoFrameRate(mVideoFps);
-                            int bitRate = (int) ((long) mVideoSize.getWidth() * mVideoSize.getHeight() * 4L);
-                            mVideoRecorder.setVideoEncodingBitRate(Math.min(bitRate, 100_000_000));
-                            mVideoRecorder.prepare();
-                            mRecorderPrepared.set(true);
-                            createRecordingSession();
-                        } else {
-                            PhoneLog.e(TAG, "❌ 降级失败：无法打开文件描述符");
-                            getContentResolver().delete(fallbackUri, null, null);
-                            createPreviewSession();
-                        }
+                    // 【修复】ParcelFileDescriptor 保存为成员变量，不用 try-with-resources
+                    ParcelFileDescriptor pfd = getContentResolver().openFileDescriptor(fallbackUri, "rw");
+                    if (pfd != null) {
+                        mVideoPfd = pfd;  // 复用成员变量
+                        mVideoRecorder = new MediaRecorder(PhoneSyncCameraService.this);
+                        mVideoRecorder.setVideoSource(MediaRecorder.VideoSource.SURFACE);
+                        mVideoRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
+                        mVideoRecorder.setOutputFile(mVideoPfd.getFileDescriptor());
+                        mVideoRecorder.setVideoEncoder(mUseHevcForRecording ? MediaRecorder.VideoEncoder.HEVC : MediaRecorder.VideoEncoder.H264);
+                        mVideoRecorder.setVideoSize(mVideoSize.getWidth(), mVideoSize.getHeight());
+                        mVideoRecorder.setVideoFrameRate(mVideoFps);
+                        int bitRate = (int) ((long) mVideoSize.getWidth() * mVideoSize.getHeight() * 4L);
+                        mVideoRecorder.setVideoEncodingBitRate(Math.min(bitRate, 100_000_000));
+                        mVideoRecorder.prepare();
+                        mRecorderPrepared.set(true);
+                        createRecordingSession();
+                    } else {
+                        PhoneLog.e(TAG, "❌ 降级失败：无法打开文件描述符");
+                        getContentResolver().delete(fallbackUri, null, null);
+                        createPreviewSession();
                     }
                 }
             } catch (Exception retryEx) {
                 PhoneLog.e(TAG, "❌ 降级普通 Session 也失败，取消录像", retryEx);
                 if (fallbackUri != null) {
                     cleanupEmptyVideo(fallbackUri);
+                }
+                // 【修复】降级失败时也清理 mVideoPfd
+                if (mVideoPfd != null) {
+                    try { mVideoPfd.close(); } catch (Exception ignored) {}
+                    mVideoPfd = null;
                 }
                 createPreviewSession();
             }
@@ -821,27 +859,34 @@ public class PhoneSyncCameraService extends Service {
             uri = getContentResolver().insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values);
             if (uri == null) return;
             mCurrentVideoUri = uri;
-            try (ParcelFileDescriptor pfd = getContentResolver().openFileDescriptor(uri, "rw")) {
-                if (pfd == null) { cleanupEmptyVideo(uri); return; }
-                mVideoRecorder = new MediaRecorder(this);
-                mVideoRecorder.setVideoSource(MediaRecorder.VideoSource.SURFACE);
-                mVideoRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
-                mVideoRecorder.setOutputFile(pfd.getFileDescriptor());
-                mVideoRecorder.setVideoEncoder(mUseHevcForRecording ? MediaRecorder.VideoEncoder.HEVC : MediaRecorder.VideoEncoder.H264);
-                mVideoRecorder.setVideoSize(mVideoSize.getWidth(), mVideoSize.getHeight());
-                mVideoRecorder.setVideoFrameRate(mVideoFps);
-                int bitRate = (int) ((long) mVideoSize.getWidth() * mVideoSize.getHeight() * 4L);
-                mVideoRecorder.setVideoEncodingBitRate(Math.min(bitRate, 100_000_000));
-                mVideoRecorder.prepare();
-                mRecorderPrepared.set(true);
-                // 创建录像 Session（包含 mEncoderSurface + MediaRecorder Surface，不含 PhotoReader）
-                createRecordingSession();
-            }
+            // 【修复】ParcelFileDescriptor 保存为成员变量，不在 try-with-resources 中关闭
+            // 因为 createRecordingSession() 是异步的，MediaRecorder.start() 在 onConfigured 回调中才执行
+            // 如果这里用 try-with-resources，pfd 会在 MediaRecorder.start() 之前被关闭
+            mVideoPfd = getContentResolver().openFileDescriptor(uri, "rw");
+            if (mVideoPfd == null) { cleanupEmptyVideo(uri); return; }
+            mVideoRecorder = new MediaRecorder(this);
+            mVideoRecorder.setVideoSource(MediaRecorder.VideoSource.SURFACE);
+            mVideoRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
+            mVideoRecorder.setOutputFile(mVideoPfd.getFileDescriptor());
+            mVideoRecorder.setVideoEncoder(mUseHevcForRecording ? MediaRecorder.VideoEncoder.HEVC : MediaRecorder.VideoEncoder.H264);
+            mVideoRecorder.setVideoSize(mVideoSize.getWidth(), mVideoSize.getHeight());
+            mVideoRecorder.setVideoFrameRate(mVideoFps);
+            int bitRate = (int) ((long) mVideoSize.getWidth() * mVideoSize.getHeight() * 4L);
+            mVideoRecorder.setVideoEncodingBitRate(Math.min(bitRate, 100_000_000));
+            mVideoRecorder.prepare();
+            mRecorderPrepared.set(true);
+            // 创建录像 Session（包含 mEncoderSurface + MediaRecorder Surface，不含 PhotoReader）
+            createRecordingSession();
         } catch (Exception e) {
             PhoneLog.e(TAG, "❌ 录像启动失败", e);
             mRecorderPrepared.set(false);
             mRecorderStarted.set(false);
             mIsRecording.set(false);
+            // 【修复】异常路径也关闭 ParcelFileDescriptor
+            if (mVideoPfd != null) {
+                try { mVideoPfd.close(); } catch (Exception ignored) {}
+                mVideoPfd = null;
+            }
             cleanupFailedRecording();
             if (uri != null) cleanupEmptyVideo(uri);
             createPreviewSession();
@@ -875,10 +920,16 @@ public class PhoneSyncCameraService extends Service {
             mIsRecording.set(false);
             mRecorderPrepared.set(false);
             mRecorderStarted.set(false);
+            // 【修复】MediaRecorder.stop()/release() 完成后才关闭 ParcelFileDescriptor
+            if (mVideoPfd != null) {
+                try { mVideoPfd.close(); } catch (Exception ignored) {}
+                mVideoPfd = null;
+            }
             mCurrentVideoUri = null;
             if (mIsStreaming.get()) createPreviewSession();
             notifyWearVideoStatus(false);
-            PhoneLog.d(TAG, "🛑 [VideoSession] STOP");
+            PhoneLog.d(TAG, "🛑 [VideoRecording] MediaRecorder.stop() success");
+            PhoneLog.d(TAG, "🛑 [VideoSession] RESTORE_PREVIEW");
             PhoneLog.d(TAG, "MediaRecorder released");
             PhoneLog.d(TAG, "Preview session restoring");
             PhoneLog.d(TAG, "H264 encoder preserved=true");
@@ -888,6 +939,11 @@ public class PhoneSyncCameraService extends Service {
             mIsRecording.set(false);
             mRecorderPrepared.set(false);
             mRecorderStarted.set(false);
+            // 【修复】异常路径也关闭 ParcelFileDescriptor
+            if (mVideoPfd != null) {
+                try { mVideoPfd.close(); } catch (Exception ignored) {}
+                mVideoPfd = null;
+            }
             if (mVideoRecorder != null) { try { mVideoRecorder.release(); } catch (Exception ignored) {} mVideoRecorder = null; }
             if (mIsStreaming.get()) createPreviewSession();
         }
@@ -898,6 +954,11 @@ public class PhoneSyncCameraService extends Service {
             try { if (mRecorderStarted.get()) mVideoRecorder.stop(); } catch (Exception ignored) {}
             try { mVideoRecorder.release(); } catch (Exception ignored) {}
             mVideoRecorder = null;
+        }
+        // 【修复】清理时关闭 ParcelFileDescriptor
+        if (mVideoPfd != null) {
+            try { mVideoPfd.close(); } catch (Exception ignored) {}
+            mVideoPfd = null;
         }
         mRecorderPrepared.set(false);
         mRecorderStarted.set(false);
@@ -986,8 +1047,17 @@ public class PhoneSyncCameraService extends Service {
     // ==================== Zoom / Focus ====================
     private void setZoom(float z) {
         mCurrentZoom = Math.max(1.0f, Math.min(z, mMaxZoom));
-        if (mIsRecording.get()) startRecordingRequest();
-        else startPreviewRequest();
+        if (mIsRecording.get()) {
+            if (mIsHighSpeedRecording) {
+                // High Speed Session 不能调用普通 setRepeatingRequest
+                // 暂时保持当前 Zoom，避免 IllegalStateException
+                PhoneLog.w(TAG, "⚠️ High Speed 录像期间 Zoom 调整暂不生效（需重建 High Speed Request List）");
+            } else {
+                startRecordingRequest();
+            }
+        } else {
+            startPreviewRequest();
+        }
     }
 
     private void manualFocus(double x, double y) {
@@ -998,6 +1068,11 @@ public class PhoneSyncCameraService extends Service {
             if (sensor == null) return;
             int cx = (int) (x * sensor.width()), cy = (int) (y * sensor.height());
             MeteringRectangle area = new MeteringRectangle(Math.max(0, cx - 100), Math.max(0, cy - 100), Math.min(sensor.width(), 200), Math.min(sensor.height(), 200), MeteringRectangle.METERING_WEIGHT_MAX);
+            // 【修复】High Speed 录像期间不能调用普通 setRepeatingRequest
+            if (mIsRecording.get() && mIsHighSpeedRecording) {
+                PhoneLog.w(TAG, "⚠️ High Speed 录像期间手动对焦暂不支持（需重建 High Speed Request List）");
+                return;
+            }
             int tpl = mIsRecording.get() ? CameraDevice.TEMPLATE_RECORD : CameraDevice.TEMPLATE_PREVIEW;
             CaptureRequest.Builder b = mCameraDevice.createCaptureRequest(tpl);
             b.addTarget(mEncoderSurface);
@@ -1141,6 +1216,11 @@ public class PhoneSyncCameraService extends Service {
         closeCurrentChannel();
         if (mBgThread != null) { mBgThread.quitSafely(); mBgThread = null; }
         if (mOrientationEventListener != null) { mOrientationEventListener.disable(); mOrientationEventListener = null; }
+        // 【修复】彻底释放时关闭 ParcelFileDescriptor
+        if (mVideoPfd != null) {
+            try { mVideoPfd.close(); } catch (Exception ignored) {}
+            mVideoPfd = null;
+        }
     }
 
     // ==================== 辅助 ====================
