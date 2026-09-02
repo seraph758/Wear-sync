@@ -175,6 +175,14 @@ public class PhoneSyncCameraService extends Service {
         }
     };
 
+    // ==================== H.264 预览链路诊断统计 ====================
+    private long mPreviewOutputFrameCount = 0;
+    private long mPreviewChannelWriteFrameCount = 0;
+    private long mPreviewOutputBytes = 0;
+    private long mPreviewLastLogTime = 0;
+    private long mPreviewStartOutputFrames = 0;
+    private long mPreviewStartChannelFrames = 0;
+
     // ==================== 消息监听 ====================
     private final MessageClient.OnMessageReceivedListener mMessageListener = event -> {
         String path = event.getPath();
@@ -288,7 +296,7 @@ public class PhoneSyncCameraService extends Service {
     private int calculatePreviewRotation() {
         int devRot = (mDeviceOrientation != OrientationEventListener.ORIENTATION_UNKNOWN) ? (mDeviceOrientation + 45) / 90 * 90 : 0;
         if (mCameraFacing == CameraCharacteristics.LENS_FACING_FRONT) {
-            return (360 - (mSensorOrientation + devRot) % 360) % 360;
+            return (mSensorOrientation + devRot) % 360;
         }
         return (mSensorOrientation - devRot + 360) % 360;
     }
@@ -296,7 +304,7 @@ public class PhoneSyncCameraService extends Service {
     private int calculateJpegRotation() {
         int devRot = (mDeviceOrientation != OrientationEventListener.ORIENTATION_UNKNOWN) ? (mDeviceOrientation + 45) / 90 * 90 : 0;
         if (mCameraFacing == CameraCharacteristics.LENS_FACING_FRONT) {
-            return (360 - (mSensorOrientation + devRot) % 360) % 360;
+            return (mSensorOrientation + devRot) % 360;
         }
         return (mSensorOrientation - devRot + 360) % 360;
     }
@@ -1167,6 +1175,12 @@ aeFpsValues.sort(Collections.reverseOrder());
         if (mIsRecording.get() || !mIsStreaming.get() || mCameraDevice == null) return;
         PhoneLog.d(TAG, "🎬 开始录像: " + mVideoSize + "@" + mVideoFps + "fps "
                 + (mUseHevcForRecording ? "HEVC" : "H264") + " HighSpeed=" + mIsHighSpeedRecording);
+
+        // ===== H.264 预览链路诊断：录像开始基线 =====
+        mPreviewStartOutputFrames = mPreviewOutputFrameCount;
+        mPreviewStartChannelFrames = mPreviewChannelWriteFrameCount;
+        PhoneLog.d(TAG, "[VideoPreview] ===== RECORDING START FRAME BASELINE =====");
+        PhoneLog.d(TAG, "[VideoPreview] outputFrames=" + mPreviewOutputFrameCount + ", channelFrames=" + mPreviewChannelWriteFrameCount);
         Uri uri = null;
         try {
             String ts = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date());
@@ -1248,6 +1262,13 @@ aeFpsValues.sort(Collections.reverseOrder());
             PhoneLog.d(TAG, "MediaRecorder released");
             PhoneLog.d(TAG, "Preview session restoring");
             PhoneLog.d(TAG, "H264 encoder preserved=true");
+
+            // ===== H.264 预览链路诊断：录像停止结果 =====
+            long deltaOutput = mPreviewOutputFrameCount - mPreviewStartOutputFrames;
+            long deltaChannel = mPreviewChannelWriteFrameCount - mPreviewStartChannelFrames;
+            PhoneLog.d(TAG, "[VideoPreview] ===== RECORDING STOP FRAME RESULT =====");
+            PhoneLog.d(TAG, "[VideoPreview] outputFrames=" + mPreviewOutputFrameCount + ", channelFrames=" + mPreviewChannelWriteFrameCount);
+            PhoneLog.d(TAG, "[VideoPreview] Recording delta: outputFrames=" + deltaOutput + ", channelFrames=" + deltaChannel);
             PhoneLog.d(TAG, "Channel preserved=" + (mDataOutputStream != null));
         } catch (Exception e) {
             PhoneLog.e(TAG, "❌ 停止录像异常", e);
@@ -1485,11 +1506,16 @@ aeFpsValues.sort(Collections.reverseOrder());
     private void notifyStreamReadyToWear() {
         if (mCachedNodeId == null) return;
         try {
+            int rotation = calculatePreviewRotation();
             JSONObject j = new JSONObject();
             j.put("type", "camera_status");
             j.put("action", "STREAM_READY");
+            j.put("previewRotation", rotation);
             Wearable.getMessageClient(this).sendMessage(mCachedNodeId, "/camera/status", j.toString().getBytes(StandardCharsets.UTF_8));
-        } catch (Exception ignored) {}
+            PhoneLog.d(TAG, "[VideoPreview] Notifying Wear: STREAM_READY rotation=" + rotation);
+        } catch (Exception e) {
+            PhoneLog.e(TAG, "[VideoPreview] notifyStreamReadyToWear failed", e);
+        }
     }
 
     private synchronized void closeCurrentChannel() {
@@ -1596,12 +1622,16 @@ aeFpsValues.sort(Collections.reverseOrder());
         @Override
         public void onInputBufferAvailable(@NonNull MediaCodec c, int i) {}
         @Override
+        @Override
         public void onOutputBufferAvailable(@NonNull MediaCodec c, int i, @NonNull MediaCodec.BufferInfo info) {
             try {
                 ByteBuffer b = c.getOutputBuffer(i);
                 if (b != null && info.size > 0) {
+                    mPreviewOutputFrameCount++;
+                    mPreviewOutputBytes += info.size;
                     byte[] d = new byte[info.size];
                     b.get(d);
+                    boolean channelOk = false;
                     synchronized (this) {
                         if (mDataOutputStream != null) {
                             mDataOutputStream.writeInt(info.size);
@@ -1609,11 +1639,28 @@ aeFpsValues.sort(Collections.reverseOrder());
                             mDataOutputStream.writeInt(info.flags);
                             mDataOutputStream.write(d);
                             mDataOutputStream.flush();
+                            channelOk = true;
                         }
+                    }
+                    if (channelOk) {
+                        mPreviewChannelWriteFrameCount++;
+                    }
+                    // 每30帧打印一次 H.264 输出链路诊断日志
+                    if (mPreviewOutputFrameCount - mPreviewLastLogTime >= 30) {
+                        mPreviewLastLogTime = mPreviewOutputFrameCount;
+                        PhoneLog.d(TAG, "[VideoPreview] H264 output frame=" + mPreviewOutputFrameCount
+                                + ", size=" + info.size + ", flags=" + info.flags
+                                + ", recording=" + mIsRecording.get()
+                                + ", streaming=" + mIsStreaming.get()
+                                + ", channel=" + mPreviewChannelWriteFrameCount);
+                        PhoneLog.d(TAG, "[VideoPreview] Channel write frame=" + mPreviewChannelWriteFrameCount
+                                + ", totalBytes=" + mPreviewOutputBytes);
                     }
                 }
                 c.releaseOutputBuffer(i, false);
-            } catch (Exception ignored) {}
+            } catch (Exception e) {
+                PhoneLog.e(TAG, "[VideoPreview] H264 output/channel write failed", e);
+            }
         }
         @Override
         public void onError(@NonNull MediaCodec c, @NonNull MediaCodec.CodecException e) { PhoneLog.e(TAG, "❌ Encoder: " + e.getMessage()); }

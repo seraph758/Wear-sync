@@ -36,6 +36,8 @@ import org.json.JSONObject;
 
 import java.io.DataInputStream;
 import java.io.InputStream;
+import java.io.EOFException;
+import java.io.IOException;
 import java.lang.ref.WeakReference;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -60,6 +62,12 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
     private int mCurrentRotation = 90;
     private volatile boolean isUserExiting = false, isFrozen = false;
     private boolean isSurfaceReady = false, isRecording = false;
+    private long mReceivedFrameCount = 0;
+    private long mDecoderInputFrameCount = 0;
+    private long mReceivedBytes = 0;
+    private long mRecordingStartReceivedFrames = 0;
+    private long mRecordingStartDecoderInputFrames = 0;
+    private volatile boolean mPreviousRecordingState = false;
     
     private static class VideoFrame {
         byte[] data; long timestamp; int flags;
@@ -244,7 +252,26 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
                 if (status == null) return;
                 try {
                     JSONObject j = new JSONObject(status);
-                    isRecording = j.optBoolean("isRecording");
+                    boolean newRecording = j.optBoolean("isRecording");
+                    // 录像状态变化诊断：记录录像开始/结束前后的帧数量
+                    if (newRecording && !mPreviousRecordingState) {
+                        // 录像刚开始 - 记录基线
+                        mRecordingStartReceivedFrames = mReceivedFrameCount;
+                        mRecordingStartDecoderInputFrames = mDecoderInputFrameCount;
+                        WearLog.d(TAG, "===== RECORDING START BASELINE =====");
+                        WearLog.d(TAG, "[CameraPreview] receivedFrames=" + mReceivedFrameCount);
+                        WearLog.d(TAG, "[CameraPreview] decoderInputFrames=" + mDecoderInputFrameCount);
+                    } else if (!newRecording && mPreviousRecordingState) {
+                        // 录像刚停止 - 打印结果
+                        long deltaReceived = mReceivedFrameCount - mRecordingStartReceivedFrames;
+                        long deltaDecoder = mDecoderInputFrameCount - mRecordingStartDecoderInputFrames;
+                        WearLog.d(TAG, "===== RECORDING STOP RESULT =====");
+                        WearLog.d(TAG, "[CameraPreview] receivedFrames=" + mReceivedFrameCount);
+                        WearLog.d(TAG, "[CameraPreview] decoderInputFrames=" + mDecoderInputFrameCount);
+                        WearLog.d(TAG, "[CameraPreview] Recording delta: received=" + deltaReceived + ", decoder=" + deltaDecoder);
+                    }
+                    mPreviousRecordingState = newRecording;
+                    isRecording = newRecording;
                     runOnUiThread(() -> {
                         Button rb = findViewById(R.id.btn_record);
                         if (rb != null) { rb.setText(isRecording ? "停" : "录"); rb.setTextColor(isRecording ? 0xFFFF0000 : 0xFFFFFFFF); }
@@ -264,6 +291,7 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
                     JSONObject j = new JSONObject(status);
                     if ("STREAM_READY".equals(j.optString("action"))) {
                         int rot = j.optInt("rotation", 90);
+                        WearLog.d(TAG, "[CameraPreview] STREAM_READY rotation=" + rot + ", previous=" + mCurrentRotation);
                         if (rot != mCurrentRotation) {
                             mCurrentRotation = rot;
                             reinitDecoder();
@@ -287,6 +315,7 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
             mDecoder = null;
         }
         initDecoder();
+        WearLog.d(TAG, "[CameraPreview] Decoder reinitialized. Rotation: " + mCurrentRotation);
     }
 
     private final ChannelClient.ChannelCallback mChannelListener = new ChannelClient.ChannelCallback() {
@@ -306,19 +335,61 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
                  DataInputStream dis = new DataInputStream(is)) {
                 
                 while (!isUserExiting) {
-                    // 🎯 修复：直接利用 DataInputStream 的阻塞特性，移除不必要的忙等 sleep
-                    int len = dis.readInt(); 
-                    long time = dis.readLong(); 
-                    int flags = dis.readInt();
+                    int len;
+                    long time;
+                    int flags;
+                    byte[] d;
                     
-                    if (len > 0 && len < 1000000) {
-                        byte[] d = new byte[len]; 
-                        dis.readFully(d);
-                        if (!isFrozen) frameQueue.offer(new VideoFrame(d, time, flags));
+                    try {
+                        len = dis.readInt();
+                        time = dis.readLong();
+                        flags = dis.readInt();
+                        
+                        if (len > 0 && len < 1000000) {
+                            d = new byte[len]; 
+                            dis.readFully(d);
+                            
+                            // 帧统计：必须在 length + timestamp + flags + readFully(data) 全部成功之后才算一帧
+                            mReceivedFrameCount++;
+                            mReceivedBytes += d.length;
+                            
+                            if (!isFrozen) {
+                                frameQueue.offer(new VideoFrame(d, time, flags));
+                            }
+                            
+                            // 每约 30 帧打印一次诊断日志
+                            if (mReceivedFrameCount % 30 == 0) {
+                                WearLog.d(TAG, "[CameraPreview] H264 received frame=" + mReceivedFrameCount
+                                    + ", size=" + d.length
+                                    + ", timestamp=" + time
+                                    + ", flags=" + flags
+                                    + ", queue=" + frameQueue.size()
+                                    + ", frozen=" + isFrozen
+                                    + ", recording=" + isRecording
+                                    + ", totalBytes=" + mReceivedBytes);
+                            }
+                        }
+                    } catch (EOFException e) {
+                        WearLog.e(TAG, "[CameraPreview] Channel EOF", e);
+                        WearLog.e(TAG, "[CameraPreview] receivedFrames=" + mReceivedFrameCount
+                            + ", decoderInputFrames=" + mDecoderInputFrameCount
+                            + ", recording=" + isRecording
+                            + ", frozen=" + isFrozen);
+                        break;
+                    } catch (IOException e) {
+                        WearLog.e(TAG, "[CameraPreview] Channel IOException", e);
+                    } catch (InterruptedException e) {
+                        WearLog.e(TAG, "[CameraPreview] Channel InterruptedException", e);
+                        Thread.currentThread().interrupt();
+                        break;
+                    } catch (IllegalStateException e) {
+                        WearLog.e(TAG, "[CameraPreview] Channel IllegalStateException", e);
+                    } catch (Exception e) {
+                        WearLog.e(TAG, "[CameraPreview] Channel read failed", e);
                     }
                 }
-            } catch (Exception e) { 
-                WearLog.e(TAG, "读取流异常 (可能是流重建中断)", e); 
+            } catch (Exception e) {
+                WearLog.e(TAG, "读取流异常 (可能是流重建中断)", e);
             }
         }).start();
     }
@@ -332,7 +403,20 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
                         int id = mDecoder.dequeueInputBuffer(10000);
                         if (id >= 0) {
                             ByteBuffer b = mDecoder.getInputBuffer(id);
-                            if (b != null) { b.clear(); b.put(f.data); mDecoder.queueInputBuffer(id, 0, f.data.length, f.timestamp, f.flags); }
+                            if (b != null) {
+                            b.clear();
+                            b.put(f.data);
+                            mDecoder.queueInputBuffer(id, 0, f.data.length, f.timestamp, f.flags);
+                            // Decoder 输入帧统计
+                            mDecoderInputFrameCount++;
+                            // 每约 30 帧打印一次诊断日志
+                            if (mDecoderInputFrameCount % 30 == 0) {
+                                WearLog.d(TAG, "[CameraPreview] H264 decoder input frame=" + mDecoderInputFrameCount
+                                    + ", queue=" + frameQueue.size()
+                                    + ", frozen=" + isFrozen
+                                    + ", recording=" + isRecording);
+                            }
+                        }
                         }
                         MediaCodec.BufferInfo bi = new MediaCodec.BufferInfo();
                         int outId = mDecoder.dequeueOutputBuffer(bi, 10000);
@@ -357,7 +441,7 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
             mDecoder = MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);
             mDecoder.configure(f, surfaceView.getHolder().getSurface(), null, 0);
             mDecoder.start();
-            WearLog.i(TAG, "Decoder Ready. Rotation: " + mCurrentRotation);
+            WearLog.d(TAG, "[CameraPreview] Decoder Ready. Rotation: " + mCurrentRotation);
         } catch (Exception e) { WearLog.e(TAG, "Init Decoder err", e); }
     }
 
