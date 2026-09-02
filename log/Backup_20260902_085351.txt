@@ -1,0 +1,157 @@
+2026-09-02 08:52:42.828 I/PhoneLog_Core: 日志已清空
+2026-09-02 08:52:45.694 D/WearSync_State: 💾 [节点读取] 内存无缓存，从 SP 容器加载到的手表节点 ID ➔ ac036e1d
+2026-09-02 08:52:45.973 D/WearSync_PhoneListener: 🛰️ [手機雷達] 偵測到 Channel 管道握手! Path: /wear_data_channel/log
+2026-09-02 08:52:45.974 D/WearSync_PhoneListener: 🎯 [暗號吻合] 正在建立手錶日誌接收流...
+2026-09-02 08:52:45.977 D/PhoneLog_Trace: 🟢 [日誌流就緒] 啟動背景讀取執行緒...
+2026-09-02 08:52:56.678 D/WearSync_PhoneListener: 📥 [信令] type=camera_control action=open_phone_camera
+2026-09-02 08:52:56.679 D/WearSync_PhoneListener: P-080 收到相机指令，Action=open_phone_camera
+2026-09-02 08:52:56.679 D/WearSync_PhoneListener: 📸 准备启动手机端相机流程...
+2026-09-02 08:52:56.680 D/WearSync_PhoneListener: 🚀 Local Launch -> PhoneSyncRemoteCameraActivity for node: ac036e1d
+2026-09-02 08:52:56.723 D/WearSync_RemoteActivity: 🟢 PhoneSyncRemoteCameraActivity onCreate
+2026-09-02 08:52:56.724 D/WearSync_RemoteActivity: ✅ 相机权限已获得，直接启动服务
+2026-09-02 08:52:56.724 D/WearSync_RemoteActivity: 🚀 [RemoteCameraActivity] 启动 PhoneSyncCameraService. Source=source_remote, NodeID=ac036e1d
+2026-09-02 08:52:56.726 D/WearSync_RemoteActivity: ✅ startForegroundService 调用成功，等待 FGS 就绪信号...
+2026-09-02 08:52:56.732 D/PhoneSync_CameraSvc: 🟢 onCreate
+2026-09-02 08:52:56.769 D/PhoneSync_CameraSvc: ═══════════════════════════════════════
+2026-09-02 08:52:56.770 D/PhoneSync_CameraSvc: [VideoCapability] Camera=0 开始评估
+2026-09-02 08:52:56.770 D/PhoneSync_CameraSvc: [VideoCapability] AE FPS Ranges=[[10, 10], [10, 15], [15, 15], [10, 24], [24, 24], [10, 30], [30, 30]]
+2026-09-02 08:52:56.770 D/PhoneSync_CameraSvc: [VideoCapability] Has HS Capability=false
+2026-09-02 08:52:56.770 D/PhoneSync_CameraSvc: [VideoCapability] HS Sizes=[1280x720, 720x480, 640x480, 1920x1080]
+2026-09-02 08:52:56.770 D/PhoneSync_CameraSvc: ═══════════════════════════════════════
+2026-09-02 08:52:56.955 D/PhoneSync_CameraSvc: [HS] Device does not support CONSTRAINED_HIGH_SPEED_VIDEO → Regular
+2026-09-02 08:52:56.956 D/PhoneSync_CameraSvc: [VideoCapability] Size=4096x3072 FPS=30 HEVC=true HighSpeed=false Range=[10, 30] → ✅ SELECTED
+2026-09-02 08:52:56.956 D/PhoneSync_CameraSvc: ═══════════════════════════════════════
+2026-09-02 08:52:56.956 D/PhoneSync_CameraSvc: [VideoSelection] ===== 最终选择结果 =====
+2026-09-02 08:52:56.956 D/PhoneSync_CameraSvc: [VideoSelection] Camera=0
+2026-09-02 08:52:56.956 D/PhoneSync_CameraSvc: [VideoSelection] Resolution=4096x3072
+2026-09-02 08:52:56.956 D/PhoneSync_CameraSvc: [VideoSelection] FPS=30
+2026-09-02 08:52:56.956 D/PhoneSync_CameraSvc: [VideoSelection] FPS Range=[10, 30]
+2026-09-02 08:52:56.956 D/PhoneSync_CameraSvc: [VideoSelection] Codec=HEVC
+2026-09-02 08:52:56.956 D/PhoneSync_CameraSvc: [VideoSelection] Session=REGULAR
+2026-09-02 08:52:56.956 D/PhoneSync_CameraSvc: [VideoSelection] MediaCodec check=passed (in checkEncoderSupport)
+2026-09-02 08:52:56.957 D/PhoneSync_CameraSvc: [VideoSelection] MediaRecorder.prepare check=passed (in verifyRecordingCombo)
+2026-09-02 08:52:56.957 D/PhoneSync_CameraSvc: [VideoSelection] Priority: Resolution(大→小) > FPS(高→低) > HEVC > H264
+2026-09-02 08:52:56.957 D/PhoneSync_CameraSvc: ═══════════════════════════════════════
+2026-09-02 08:52:57.064 D/WearSync_RemoteActivity: 🟢 [RemoteCameraActivity] 收到 CAMERA_FGS_READY
+2026-09-02 08:52:57.064 D/WearSync_RemoteActivity: 🟢 [RemoteCameraActivity] FGS 已就绪，finish Activity
+2026-09-02 08:53:07.003 D/WearSync_PhoneListener: 📥 [信令] type=camera_control action=TOGGLE_VIDEO
+2026-09-02 08:53:07.004 D/WearSync_PhoneListener: P-080 收到相机指令，Action=TOGGLE_VIDEO
+2026-09-02 08:53:07.004 D/WearSync_PhoneListener: 🎥 收到切换录像指令
+2026-09-02 08:53:07.008 D/PhoneSync_CameraSvc: 🎬 开始录像: 4096x3072@30fps HEVC HighSpeed=false
+2026-09-02 08:53:07.278 D/PhoneSync_CameraSvc: 🔧 [VideoSession] START
+2026-09-02 08:53:07.278 D/PhoneSync_CameraSvc: Resolution=4096x3072 FPS=30
+2026-09-02 08:53:07.278 D/PhoneSync_CameraSvc: Codec=HEVC
+2026-09-02 08:53:07.279 D/PhoneSync_CameraSvc: SessionType=REGULAR
+2026-09-02 08:53:07.279 D/PhoneSync_CameraSvc: PreviewSurface=true RecorderSurface=true PhotoReader=false
+2026-09-02 08:53:07.458 D/PhoneSync_CameraSvc: ✅ 普通录像 Request 已提交（mEncoderSurface + MediaRecorder）
+2026-09-02 08:53:07.482 D/PhoneSync_CameraSvc: 🎬 [VideoRecording] MediaRecorder.start() success
+2026-09-02 08:53:07.482 D/PhoneSync_CameraSvc: [VideoPreview] H264 encoder still running
+2026-09-02 08:53:12.485 D/PhoneSync_CameraSvc: [VideoPreview] H264 encoder still running
+2026-09-02 08:53:17.485 D/PhoneSync_CameraSvc: [VideoPreview] H264 encoder still running
+2026-09-02 08:53:18.877 D/WearSync_PhoneListener: 📥 [信令] type=camera_control action=SET_ZOOM
+2026-09-02 08:53:18.877 D/WearSync_PhoneListener: P-080 收到相机指令，Action=SET_ZOOM
+2026-09-02 08:53:18.883 D/PhoneSync_CameraSvc: ✅ 普通录像 Request 已提交（mEncoderSurface + MediaRecorder）
+2026-09-02 08:53:22.237 D/WearSync_PhoneListener: 📥 [信令] type=camera_control action=SET_ZOOM
+2026-09-02 08:53:22.237 D/WearSync_PhoneListener: P-080 收到相机指令，Action=SET_ZOOM
+2026-09-02 08:53:22.246 D/PhoneSync_CameraSvc: ✅ 普通录像 Request 已提交（mEncoderSurface + MediaRecorder）
+2026-09-02 08:53:22.487 D/PhoneSync_CameraSvc: [VideoPreview] H264 encoder still running
+2026-09-02 08:53:26.084 D/WearSync_PhoneListener: 📥 [信令] type=camera_control action=TOGGLE_VIDEO
+2026-09-02 08:53:26.085 D/WearSync_PhoneListener: P-080 收到相机指令，Action=TOGGLE_VIDEO
+2026-09-02 08:53:26.085 D/WearSync_PhoneListener: 🎥 收到切换录像指令
+2026-09-02 08:53:27.237 D/PhoneSync_CameraSvc: 🛑 [VideoRecording] MediaRecorder.stop() success
+2026-09-02 08:53:27.238 D/PhoneSync_CameraSvc: 🛑 [VideoSession] RESTORE_PREVIEW
+2026-09-02 08:53:27.238 D/PhoneSync_CameraSvc: MediaRecorder released
+2026-09-02 08:53:27.238 D/PhoneSync_CameraSvc: Preview session restoring
+2026-09-02 08:53:27.238 D/PhoneSync_CameraSvc: H264 encoder preserved=true
+2026-09-02 08:53:27.239 D/PhoneSync_CameraSvc: Channel preserved=true
+2026-09-02 08:53:35.591 D/WearSync_PhoneListener: 📥 [信令] type=camera_control action=SELECT_CAMERA
+2026-09-02 08:53:35.591 D/WearSync_PhoneListener: P-080 收到相机指令，Action=SELECT_CAMERA
+2026-09-02 08:53:35.591 D/WearSync_PhoneListener: 🔄 收到切换摄像头指令: 0
+2026-09-02 08:53:37.514 D/WearSync_PhoneListener: 📥 [信令] type=camera_control action=SELECT_CAMERA
+2026-09-02 08:53:37.514 D/WearSync_PhoneListener: P-080 收到相机指令，Action=SELECT_CAMERA
+2026-09-02 08:53:37.514 D/WearSync_PhoneListener: 🔄 收到切换摄像头指令: 0
+2026-09-02 08:53:38.612 D/WearSync_PhoneListener: 📥 [信令] type=camera_control action=SELECT_CAMERA
+2026-09-02 08:53:38.612 D/WearSync_PhoneListener: P-080 收到相机指令，Action=SELECT_CAMERA
+2026-09-02 08:53:38.613 D/WearSync_PhoneListener: 🔄 收到切换摄像头指令: 1
+2026-09-02 08:53:38.766 D/PhoneSync_CameraSvc: ═══════════════════════════════════════
+2026-09-02 08:53:38.766 D/PhoneSync_CameraSvc: [VideoCapability] Camera=1 开始评估
+2026-09-02 08:53:38.766 D/PhoneSync_CameraSvc: [VideoCapability] AE FPS Ranges=[[10, 10], [10, 15], [15, 15], [24, 24], [10, 30], [30, 30]]
+2026-09-02 08:53:38.767 D/PhoneSync_CameraSvc: [VideoCapability] Has HS Capability=false
+2026-09-02 08:53:38.767 D/PhoneSync_CameraSvc: [VideoCapability] HS Sizes=[1280x720, 720x480, 640x480, 1920x1080]
+2026-09-02 08:53:38.767 D/PhoneSync_CameraSvc: ═══════════════════════════════════════
+2026-09-02 08:53:38.861 D/PhoneSync_CameraSvc: [HS] Device does not support CONSTRAINED_HIGH_SPEED_VIDEO → Regular
+2026-09-02 08:53:38.862 D/PhoneSync_CameraSvc: [VideoCapability] Size=3280x2464 FPS=30 HEVC=true HighSpeed=false Range=[10, 30] → ✅ SELECTED
+2026-09-02 08:53:38.862 D/PhoneSync_CameraSvc: ═══════════════════════════════════════
+2026-09-02 08:53:38.862 D/PhoneSync_CameraSvc: [VideoSelection] ===== 最终选择结果 =====
+2026-09-02 08:53:38.862 D/PhoneSync_CameraSvc: [VideoSelection] Camera=1
+2026-09-02 08:53:38.862 D/PhoneSync_CameraSvc: [VideoSelection] Resolution=3280x2464
+2026-09-02 08:53:38.862 D/PhoneSync_CameraSvc: [VideoSelection] FPS=30
+2026-09-02 08:53:38.862 D/PhoneSync_CameraSvc: [VideoSelection] FPS Range=[10, 30]
+2026-09-02 08:53:38.862 D/PhoneSync_CameraSvc: [VideoSelection] Codec=HEVC
+2026-09-02 08:53:38.862 D/PhoneSync_CameraSvc: [VideoSelection] Session=REGULAR
+2026-09-02 08:53:38.863 D/PhoneSync_CameraSvc: [VideoSelection] MediaCodec check=passed (in checkEncoderSupport)
+2026-09-02 08:53:38.863 D/PhoneSync_CameraSvc: [VideoSelection] MediaRecorder.prepare check=passed (in verifyRecordingCombo)
+2026-09-02 08:53:38.863 D/PhoneSync_CameraSvc: [VideoSelection] Priority: Resolution(大→小) > FPS(高→低) > HEVC > H264
+2026-09-02 08:53:38.863 D/PhoneSync_CameraSvc: ═══════════════════════════════════════
+2026-09-02 08:53:45.598 D/WearSync_PhoneListener: 📥 [信令] type=camera_action action=FOCUS_CAMERA
+2026-09-02 08:53:45.599 D/WearSync_PhoneListener: P-080 收到相机指令，Action=FOCUS_CAMERA
+2026-09-02 08:53:46.233 D/WearSync_PhoneListener: 📥 [信令] type=camera_control action=SET_ZOOM
+2026-09-02 08:53:46.234 D/WearSync_PhoneListener: P-080 收到相机指令，Action=SET_ZOOM
+
+
+2026-09-02 08:52:46.014 [WEAR] D/WearSync_WearListener: 【LOG-005】日志输出通道就绪
+2026-09-02 08:52:52.202 [WEAR] D/WearSync_MainActivity: ① [生命周期] onCreate 启动 ━━━ 手表端主框架大厅加载开门 ━━━
+2026-09-02 08:52:52.354 [WEAR] D/WearSync_MainFragment: ① [生命周期] onCreatePreferences ─── 构建 Preference 树阵 ───
+2026-09-02 08:52:52.355 [WEAR] D/WearSync_MainActivity: ⚙️ [UI挂载] 正在解析并注入物理布局 R.layout.activity_main...
+2026-09-02 08:52:52.355 [WEAR] W/WearSync_MainActivity: ⚠️ [堆栈判定] 检测到系统【热启动/配置变更/实例重建】！savedInstanceState 不为 null
+2026-09-02 08:52:52.356 [WEAR] W/WearSync_MainActivity: ⚠️ [防震荡熔断] 触发实例防震荡保护机制，跳过重复注入 Fragment 逻辑，防止多层 UI 叠加
+2026-09-02 08:52:52.356 [WEAR] D/WearSync_MainActivity: ① [生命周期] onCreate 流程执行完毕
+2026-09-02 08:52:52.357 [WEAR] D/WearSync_MainFragment: ② [生命周期] onViewCreated ─── 注入交互逻辑 ───
+2026-09-02 08:52:52.358 [WEAR] D/WearSync_MainActivity: ⏱️ [生命周期] onResume 触发 ➔ 手表主界面重新夺回屏幕物理焦点
+2026-09-02 08:52:56.572 [WEAR] W/WearSync_MainFragment: 📸 [交互] 用户点击【远端相机控制】
+2026-09-02 08:52:56.650 [WEAR] W/WearSync_MainActivity: ⏸️ [生命周期] onPause 触发 ➔ 手表主界面暂时失去屏幕焦点
+2026-09-02 08:52:56.651 [WEAR] I/WearSyncScreenMgr: Bound to lifecycle
+2026-09-02 08:52:56.722 [WEAR] D/WearSync_WearCameraUI: 🟢 UI Started
+2026-09-02 08:52:57.194 [WEAR] I/WearSync_WearCameraUI: Decoder Ready. Rotation: 90
+2026-09-02 08:52:57.240 [WEAR] D/WearSyncCommManager: ✅ 信令已发送 [camera_control/open_phone_camera]
+2026-09-02 08:52:57.240 [WEAR] D/WearSync_WearListener: 【SYS-001】WearSyncListenerService 已创建
+2026-09-02 08:52:57.241 [WEAR] D/WearSync_WearListener: 【MSG-001】收到消息. Path: /wear-universal-sync | Source: a8ebc761
+2026-09-02 08:52:57.241 [WEAR] D/WearSync_WearListener: 【MSG-001-1】收到特定路径消息: /wear-universal-sync
+2026-09-02 08:52:57.242 [WEAR] D/WearSync_WearListener: 【MSG-005】解析指令成功. Type: [camera_control], Action: [CAMERA_HANDSHAKE]
+2026-09-02 08:52:57.242 [WEAR] D/WearSync_WearListener: 【CAM-001】开始处理相机指令
+2026-09-02 08:52:57.311 [WEAR] D/WearSync_WearListener: 【CHN-001】通道已打开. Path: /wear_data_channel/camera
+2026-09-02 08:52:57.312 [WEAR] D/WearSync_WearListener: 【CHN-004】忽略未知通道: /wear_data_channel/camera
+2026-09-02 08:52:57.376 [WEAR] D/WearSync_WearListener: 【MSG-001】收到消息. Path: /camera/status | Source: a8ebc761
+2026-09-02 08:52:57.376 [WEAR] D/WearSync_WearListener: 【MSG-001-1】收到特定路径消息: /camera/status
+2026-09-02 08:52:57.428 [WEAR] D/WearSync_WearListener: 【MSG-001】收到消息. Path: /camera/info_list | Source: a8ebc761
+2026-09-02 08:52:57.428 [WEAR] D/WearSync_WearListener: 【MSG-001-1】收到特定路径消息: /camera/info_list
+2026-09-02 08:52:57.428 [WEAR] I/WearSync_WearListener: 📸 收到镜头列表数据，准备广播通知 Activity
+2026-09-02 08:53:07.000 [WEAR] D/WearSyncCommManager: ✅ 信令已发送 [camera_control/TOGGLE_VIDEO]
+2026-09-02 08:53:07.572 [WEAR] D/WearSync_WearListener: 【SYS-001】WearSyncListenerService 已创建
+2026-09-02 08:53:07.633 [WEAR] D/WearSync_WearListener: 【MSG-001】收到消息. Path: /camera/video_status | Source: a8ebc761
+2026-09-02 08:53:07.634 [WEAR] D/WearSync_WearListener: 【MSG-001-1】收到特定路径消息: /camera/video_status
+2026-09-02 08:53:18.867 [WEAR] D/WearSyncCommManager: ✅ 信令已发送 [camera_control/SET_ZOOM]
+2026-09-02 08:53:22.225 [WEAR] D/WearSyncCommManager: ✅ 信令已发送 [camera_control/SET_ZOOM]
+2026-09-02 08:53:26.066 [WEAR] D/WearSyncCommManager: ✅ 信令已发送 [camera_control/TOGGLE_VIDEO]
+2026-09-02 08:53:27.323 [WEAR] D/WearSync_WearListener: 【SYS-001】WearSyncListenerService 已创建
+2026-09-02 08:53:27.375 [WEAR] D/WearSync_WearListener: 【MSG-001】收到消息. Path: /camera/video_status | Source: a8ebc761
+2026-09-02 08:53:27.375 [WEAR] D/WearSync_WearListener: 【MSG-001-1】收到特定路径消息: /camera/video_status
+2026-09-02 08:53:35.604 [WEAR] D/WearSyncCommManager: ✅ 信令已发送 [camera_control/SELECT_CAMERA]
+2026-09-02 08:53:37.519 [WEAR] D/WearSyncCommManager: ✅ 信令已发送 [camera_control/SELECT_CAMERA]
+2026-09-02 08:53:38.615 [WEAR] D/WearSyncCommManager: ✅ 信令已发送 [camera_control/SELECT_CAMERA]
+2026-09-02 08:53:38.844 [WEAR] E/WearSync_WearCameraUI: 读取流异常 (可能是流重建中断)
+2026-09-02 08:53:38.845 [WEAR] java.io.EOFException
+2026-09-02 08:53:38.845 [WEAR] at java.io.DataInputStream.readFully(DataInputStream.java:205)
+2026-09-02 08:53:38.845 [WEAR] at java.io.DataInputStream.readInt(DataInputStream.java:394)
+2026-09-02 08:53:38.846 [WEAR] at t2.run(r8-map-id-24999f22fea31f20661c4dd6fd5531de9c316d332a1c3890142e667a73d10b48:87)
+2026-09-02 08:53:38.846 [WEAR] at java.lang.Thread.run(Thread.java:1119)
+2026-09-02 08:53:38.877 [WEAR] D/WearSync_WearListener: 【SYS-001】WearSyncListenerService 已创建
+2026-09-02 08:53:39.091 [WEAR] D/WearSync_WearListener: 【CHN-001】通道已打开. Path: /wear_data_channel/camera
+2026-09-02 08:53:39.177 [WEAR] D/WearSync_WearListener: 【CHN-004】忽略未知通道: /wear_data_channel/camera
+2026-09-02 08:53:39.261 [WEAR] D/WearSync_WearListener: 【MSG-001】收到消息. Path: /camera/status | Source: a8ebc761
+2026-09-02 08:53:39.262 [WEAR] D/WearSync_WearListener: 【MSG-001-1】收到特定路径消息: /camera/status
+2026-09-02 08:53:39.262 [WEAR] D/WearSync_WearListener: 【MSG-001】收到消息. Path: /camera/info_list | Source: a8ebc761
+2026-09-02 08:53:39.262 [WEAR] D/WearSync_WearListener: 【MSG-001-1】收到特定路径消息: /camera/info_list
+2026-09-02 08:53:39.262 [WEAR] I/WearSync_WearListener: 📸 收到镜头列表数据，准备广播通知 Activity
+2026-09-02 08:53:45.577 [WEAR] D/WearSyncCommManager: ✅ 信令已发送 [camera_action/FOCUS_CAMERA]
+2026-09-02 08:53:46.246 [WEAR] D/WearSyncCommManager: ✅ 信令已发送 [camera_control/SET_ZOOM]
