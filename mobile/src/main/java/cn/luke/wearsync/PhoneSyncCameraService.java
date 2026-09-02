@@ -1622,7 +1622,6 @@ aeFpsValues.sort(Collections.reverseOrder());
         @Override
         public void onInputBufferAvailable(@NonNull MediaCodec c, int i) {}
         @Override
-        @Override
         public void onOutputBufferAvailable(@NonNull MediaCodec c, int i, @NonNull MediaCodec.BufferInfo info) {
             try {
                 ByteBuffer b = c.getOutputBuffer(i);

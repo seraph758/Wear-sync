@@ -290,7 +290,7 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
                     if (status == null) return;
                     JSONObject j = new JSONObject(status);
                     if ("STREAM_READY".equals(j.optString("action"))) {
-                        int rot = j.optInt("rotation", 90);
+                        int rot = j.optInt("previewRotation", 90);
                         WearLog.d(TAG, "[CameraPreview] STREAM_READY rotation=" + rot + ", previous=" + mCurrentRotation);
                         if (rot != mCurrentRotation) {
                             mCurrentRotation = rot;
@@ -378,10 +378,6 @@ public class WearCameraActivity extends ComponentActivity implements SurfaceHold
                         break;
                     } catch (IOException e) {
                         WearLog.e(TAG, "[CameraPreview] Channel IOException", e);
-                    } catch (InterruptedException e) {
-                        WearLog.e(TAG, "[CameraPreview] Channel InterruptedException", e);
-                        Thread.currentThread().interrupt();
-                        break;
                     } catch (IllegalStateException e) {
                         WearLog.e(TAG, "[CameraPreview] Channel IllegalStateException", e);
                     } catch (Exception e) {
